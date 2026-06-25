@@ -1,0 +1,26 @@
+# Dependencies & build output
+node_modules/
+/dist/
+/coverage/
+*.tsbuildinfo
+.turbo/
+
+# Packing
+*.tgz
+
+# Sync provenance (written by the upstream sync; local-only, never committed)
+.sync-source.json
+
+# Logs
+*.log
+
+# OS / editor junk
+.DS_Store
+._*
+.idea/
+.vscode/launch.json
+
+# Secrets & local config
+.env
+.env.*
+!.env.example

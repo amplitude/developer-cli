@@ -1,0 +1,15 @@
+# Default maintainers for the published amp CLI distribution.
+#
+# This repo is a published mirror; changes land via the maintainer sync flow and
+# release-please, not community PRs. CODEOWNERS + branch protection (require
+# review from owners) gate the sync PR and the Release PR.
+* @amplitude/mcp-maintainers
+
+# Release automation and CI entrypoints should get explicit maintainer review.
+.github/workflows/* @amplitude/mcp-maintainers
+release-please-config.json @amplitude/mcp-maintainers
+.release-please-manifest.json @amplitude/mcp-maintainers
+
+# CLI source and sync/build tooling.
+src/** @amplitude/mcp-maintainers
+scripts/** @amplitude/mcp-maintainers
