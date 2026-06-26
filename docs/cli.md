@@ -12,8 +12,9 @@ Creating a profile is force-explicit — name it and pick its environment:
 amp auth login --profile prod --env prod
 ```
 
-That runs the device flow against the chosen env's api-server, saves the token
-to `~/.amplitude/amp/credentials.json` (0600), and activates the profile. A
+That runs the device flow against the chosen environment's Developer API, saves
+the token to `~/.amplitude/amp/credentials.json` (0600), and activates the
+profile. A
 profile binds a credential to an environment (`base_url`), so a staging token
 can never be sent to prod.
 
@@ -126,11 +127,10 @@ Manual checklist:
 5. **Flags write** — create → get → update description → archive dry-run → archive
 6. **Events** — list → create → update → (optional delete with `--yes`)
 
-Known upstream issue: `flags update --enabled false` fails for deployment-less
-flags ([MCP-414](https://linear.app/amplitude/issue/MCP-414)). Avoid that path
-in smoke tests until fixed.
+Known issue: `flags update --enabled false` fails for deployment-less flags.
+Avoid that path in smoke tests until it is fixed.
 
-## Local api-server
+## Local server
 
 Point at a running local server:
 
@@ -142,7 +142,7 @@ amp --base-url http://localhost:3036 context
 
 Do not edit by hand:
 
-- `src/generated/cli-manifest.ts` — from `api-server/scripts/generate-cli-manifest.ts`
-- `openapi/bundled/*` — copied from `api-server/openapi/bundled/`
+- `src/generated/cli-manifest.ts` — generated from the Developer API OpenAPI spec
+- `openapi/bundled/*` — the bundled Developer API OpenAPI spec
 
-Regenerate via `pnpm build:openapi` in the parent `api-server` package.
+These artifacts are generated and kept in sync upstream.

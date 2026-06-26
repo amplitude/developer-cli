@@ -84,6 +84,17 @@ describe('deleteGateDecision', () => {
       }),
     ).toBe('block');
   });
+
+  it('does not let --yes bypass the gate when --dry-run is unsupported', () => {
+    expect(
+      deleteGateDecision({
+        ...base,
+        dryRunRequested: true,
+        dryRunSupported: false,
+        yes: true,
+      }),
+    ).toBe('block');
+  });
 });
 
 describe('runOperation', () => {
@@ -281,6 +292,18 @@ describe('runOperation', () => {
         token: 'amp_test',
         id: 'w_1',
         'dry-run': true,
+      }),
+    ).rejects.toThrow('does not support --dry-run');
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('refuses --dry-run --yes on unsupported DELETE instead of silently deleting', async () => {
+    await expect(
+      runOperation(deleteWithoutDryRun, {
+        token: 'amp_test',
+        id: 'w_1',
+        'dry-run': true,
+        yes: true,
       }),
     ).rejects.toThrow('does not support --dry-run');
     expect(fetchMock).not.toHaveBeenCalled();

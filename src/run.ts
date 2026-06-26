@@ -41,6 +41,9 @@ export function deleteGateDecision(options: {
   if (options.dryRunRequested && options.dryRunSupported) {
     return 'proceed';
   }
+  if (options.dryRunRequested && !options.dryRunSupported) {
+    return 'block';
+  }
   if (options.yes) {
     return 'proceed';
   }
@@ -70,7 +73,7 @@ async function ensureDeleteAllowed(
   if (decision === 'block') {
     if (dryRunRequested && !dryRunSupported) {
       throw new Error(
-        `\`amp ${operation.command.join(' ')}\` does not support --dry-run. Pass --yes to confirm, or run it in an interactive terminal.`,
+        `\`amp ${operation.command.join(' ')}\` does not support --dry-run. Drop --dry-run and pass --yes to confirm a real delete, or run it in an interactive terminal.`,
       );
     }
     throw new Error(

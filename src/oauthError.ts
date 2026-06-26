@@ -1,11 +1,11 @@
 import { z } from 'zod';
 
 /**
- * RFC 6749 §5.2 OAuth error, plus Ory fosite's `error_hint` extension. The CLI
- * parses upstream error bodies through this strict schema so internal fields
- * (fosite's `error_debug`, `status_code`) are dropped and only the actionable
- * message survives. Mirrors api-server's oauthError; duplicated here so this
- * package stays standalone for distribution.
+ * RFC 6749 §5.2 OAuth error, plus the OAuth server's `error_hint` extension.
+ * The CLI parses upstream error bodies through this strict schema so debug-only
+ * fields (`error_debug`, `status_code`) are dropped and only the actionable
+ * message survives. Duplicated here so this package stays standalone for
+ * distribution.
  */
 export const oauthErrorSchema = z.object({
   error: z.string(),

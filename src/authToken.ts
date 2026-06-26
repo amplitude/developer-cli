@@ -13,7 +13,7 @@ import {
 import { DEVICE_CODE_GRANT_TYPE } from './schemas';
 
 // Best readable message from an OAuth error body: prefer the human description,
-// then fosite's hint, then the bare error code. Reuses toOAuthError so the
+// then the server's hint, then the bare error code. Reuses toOAuthError so the
 // parse-and-fallback logic lives in one place.
 function oauthErrorMessage(body: unknown): string {
   const error = toOAuthError(body);
@@ -147,7 +147,7 @@ export type AnonymousRequest = (
   body?: unknown,
 ) => Promise<ExchangeResult>;
 
-// The OAuth endpoints are anonymous (api-server injects the confidential
+// The OAuth endpoints are anonymous (the service injects the confidential
 // client) and signal flow state via non-2xx OAuth errors the caller must
 // inspect. So this sends no Authorization header and, unlike the CLI's
 // getJson/requestJson, never throws on a non-2xx — it returns the status and
@@ -187,7 +187,7 @@ export function createAnonymousRequest(baseUrl: string): AnonymousRequest {
 export interface DeviceFlowOptions {
   flow: string | undefined;
   scope?: string;
-  // Token-optional, non-throwing HTTP call against api-server's own endpoints.
+  // Token-optional, non-throwing HTTP call against the Developer API endpoints.
   request: AnonymousRequest;
   sleep?: (seconds: number) => Promise<void>;
   now?: () => number;
