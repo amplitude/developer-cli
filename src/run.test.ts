@@ -198,6 +198,67 @@ describe('runOperation', () => {
 
     expect(fetchMock).toHaveBeenCalledOnce();
     expect(fetchMock.mock.calls[0][1]).toMatchObject({ method: 'DELETE' });
+    expect(logSpy).toHaveBeenCalledWith('null');
+  });
+
+  it('pretty-prints null for a 204 when --json is used at a real terminal', async () => {
+    Object.defineProperty(process.stdout, 'isTTY', {
+      configurable: true,
+      value: true,
+    });
+    fetchMock.mockResolvedValue(jsonResponse(204, ''));
+
+    await runOperation(operation(['events', 'delete']), {
+      token: 'amp_test',
+      project: '187520',
+      event: 'signup',
+      yes: true,
+      json: true,
+    });
+
+    expect(logSpy).toHaveBeenCalledWith(JSON.stringify(null, null, 2));
+  });
+
+  it('prints a short message for a 204 DELETE at an interactive terminal', async () => {
+    Object.defineProperty(process.stdout, 'isTTY', {
+      configurable: true,
+      value: true,
+    });
+    Object.defineProperty(process.stdin, 'isTTY', {
+      configurable: true,
+      value: true,
+    });
+    fetchMock.mockResolvedValue(jsonResponse(204, ''));
+
+    await runOperation(operation(['events', 'delete']), {
+      token: 'amp_test',
+      project: '187520',
+      event: 'signup',
+      yes: true,
+    });
+
+    expect(logSpy).toHaveBeenCalledWith('Deleted.');
+  });
+
+  it('prints a short message for a 204 archive at an interactive terminal', async () => {
+    Object.defineProperty(process.stdout, 'isTTY', {
+      configurable: true,
+      value: true,
+    });
+    Object.defineProperty(process.stdin, 'isTTY', {
+      configurable: true,
+      value: true,
+    });
+    fetchMock.mockResolvedValue(jsonResponse(204, ''));
+
+    await runOperation(operation(['flags', 'archive']), {
+      token: 'amp_test',
+      project: '187520',
+      flag: 'my-flag',
+      yes: true,
+    });
+
+    expect(logSpy).toHaveBeenCalledWith('Archived.');
   });
 
   it('passes --dry-run through to the server when supported', async () => {

@@ -205,6 +205,23 @@ export function shouldUseJsonOutput(options: {
   return !options.isTTY;
 }
 
+export function isNoContentSuccess(status: number, parsed: unknown): boolean {
+  return parsed === null && status === 204;
+}
+
+export function formatNoContentSuccess(operation: CliOperation): string {
+  const verb = operation.command.at(-1);
+  if (verb === 'archive') {
+    return 'Archived.';
+  }
+
+  return 'Deleted.';
+}
+
+export function formatJsonOutput(payload: unknown, isTTY: boolean): string {
+  return isTTY ? JSON.stringify(payload, null, 2) : JSON.stringify(payload);
+}
+
 export function formatSuccessOutput(
   body: unknown,
   operation: CliOperation,

@@ -7,7 +7,8 @@ import { z } from 'zod';
  */
 export const jsonRecordSchema = z.record(z.string(), z.unknown());
 
-// RFC 8628 device-code grant type. The URN, not the bare `device_code` — the
-// Developer API's token endpoint expects the URN form.
+// RFC 8628 device-code grant type. The URN, not the bare `device_code` —
+// api-server's public token endpoint accepts the URN and forwards it to Hydra
+// unchanged.
 export const DEVICE_CODE_GRANT_TYPE =
   'urn:ietf:params:oauth:grant-type:device_code';

@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
 import type { CliOperation } from './generated/cli-manifest';
-import { formatSuccessOutput, shouldUseJsonOutput } from './output';
+import {
+  formatNoContentSuccess,
+  formatSuccessOutput,
+  isNoContentSuccess,
+  shouldUseJsonOutput,
+} from './output';
 
 const listProjects: CliOperation = {
   command: ['projects', 'list'],
@@ -33,7 +38,39 @@ const getContext: CliOperation = {
   body: [],
 };
 
+const deleteEvent: CliOperation = {
+  command: ['events', 'delete'],
+  method: 'DELETE',
+  operationId: 'deleteEvent',
+  path: '/v1/projects/{project_id}/events/{event_id}',
+  requiredScopes: ['write:taxonomy'],
+  successStatus: 204,
+  parameters: [],
+  body: [],
+};
+
+const archiveFlag: CliOperation = {
+  command: ['flags', 'archive'],
+  method: 'DELETE',
+  operationId: 'archiveFeatureFlag',
+  path: '/v1/projects/{project_id}/flags/{flag_id}',
+  requiredScopes: ['write:flags'],
+  successStatus: 204,
+  parameters: [],
+  body: [],
+};
+
 describe('output formatting', () => {
+  it('detects empty 204 success responses', () => {
+    expect(isNoContentSuccess(204, null)).toBe(true);
+    expect(isNoContentSuccess(200, null)).toBe(false);
+    expect(isNoContentSuccess(204, { data: {} })).toBe(false);
+  });
+
+  it('formats no-content success for humans', () => {
+    expect(formatNoContentSuccess(deleteEvent)).toBe('Deleted.');
+    expect(formatNoContentSuccess(archiveFlag)).toBe('Archived.');
+  });
   it('uses JSON when stdout is not a TTY unless --json is forced', () => {
     expect(shouldUseJsonOutput({ isTTY: false })).toBe(true);
     expect(shouldUseJsonOutput({ isTTY: true })).toBe(false);

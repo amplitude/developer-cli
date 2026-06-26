@@ -6,7 +6,13 @@ import {
 } from './credential-resolver';
 import { formatApiError } from './errors';
 import type { CliOperation } from './generated/cli-manifest';
-import { formatSuccessOutput, shouldUseJsonOutput } from './output';
+import {
+  formatJsonOutput,
+  formatNoContentSuccess,
+  formatSuccessOutput,
+  isNoContentSuccess,
+  shouldUseJsonOutput,
+} from './output';
 import { confirm } from './prompt';
 import {
   buildRequest,
@@ -105,22 +111,28 @@ export async function runOperation(
     );
   }
 
-  const payload = parsed ?? SYNTHETIC_OK;
   const isTTY = Boolean(process.stdout.isTTY);
   const useJson = shouldUseJsonOutput({
     jsonFlag: isFlagEnabled(flags.json),
     isTTY,
   });
 
+  if (isNoContentSuccess(response.status, parsed)) {
+    const output = useJson
+      ? formatJsonOutput(null, isTTY)
+      : formatNoContentSuccess(operation);
+    console.log(output);
+    return;
+  }
+
+  const payload = parsed ?? SYNTHETIC_OK;
+
   // When piped or non-interactive (the path agents and scripts take), emit
   // compact JSON to avoid spending tokens on indentation. Pretty-print only
   // when a human asked for JSON at a real terminal.
-  let output: string;
-  if (useJson) {
-    output = isTTY ? JSON.stringify(payload, null, 2) : JSON.stringify(payload);
-  } else {
-    output = formatSuccessOutput(payload, operation);
-  }
+  const output = useJson
+    ? formatJsonOutput(payload, isTTY)
+    : formatSuccessOutput(payload, operation);
 
   console.log(output);
 }

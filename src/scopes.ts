@@ -1,9 +1,9 @@
 import { CLI_OPERATIONS } from './generated/cli-manifest';
 
-// Legacy org-level scopes. They map to the granular API read/write scopes
-// server-side, but the device-flow client can grant them directly, so include
-// them in the default request for full coverage. Added explicitly because no
-// CLI command declares them as required.
+// Legacy org-level scopes (api-server principalResolver MCP_SCOPE). They map to
+// the granular API read/write scopes server-side, but the device-flow client
+// can grant them directly, so include them in the default request for full
+// coverage. Added explicitly because no CLI command declares them as required.
 const MCP_SCOPES = ['mcp:read', 'mcp:write'];
 
 /**

@@ -1,13 +1,13 @@
 # developer-api CLI — Agent Instructions
 
 This package is the `amp` CLI: the human- and agent-facing surface over the
-Amplitude Developer API. It is published as a standalone package, so treat
-everything here as public and hold it to a high bar.
+Amplitude Developer API. It is vended publicly as a standalone repo, so it is
+held to a higher bar than internal code.
 
-The Amplitude Developer API OpenAPI spec is the contract; this CLI is a thin,
-generated client over it. The CLI manifest and bundled spec under
-`src/generated/` and `openapi/bundled/` are generated artifacts — never edit
-them by hand.
+The OpenAPI spec in the parent `api-server` package is the contract; this CLI is
+a thin, generated client over it. Before changing command behavior, auth, or the
+generated manifest, read the parent `../AGENTS.md` and
+`../docs/golden-standards.md`.
 
 ## Tenets
 
