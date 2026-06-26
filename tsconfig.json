@@ -1,0 +1,22 @@
+{
+  "include": ["src"],
+  "compilerOptions": {
+    "strict": true,
+    "allowJs": false,
+    "esModuleInterop": true,
+    "incremental": true,
+    "lib": ["ES2021", "DOM"],
+    "module": "commonjs",
+    "target": "es2020",
+    "sourceMap": true,
+    "preserveConstEnums": true,
+    "skipLibCheck": true,
+    "rootDir": ".",
+    "outDir": "dist",
+    "types": ["node"],
+    "noUnusedLocals": false,
+    "resolveJsonModule": true,
+    "forceConsistentCasingInFileNames": true,
+    "useUnknownInCatchVariables": false
+  }
+}

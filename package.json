@@ -1,0 +1,63 @@
+{
+  "name": "@amplitude/developer-api",
+  "version": "0.1.0",
+  "description": "amp CLI and developer artifacts for managing Amplitude platform primitives via the Developer API",
+  "type": "commonjs",
+  "license": "MIT",
+  "homepage": "https://github.com/amplitude/developer-api#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/amplitude/developer-api.git"
+  },
+  "bugs": {
+    "url": "https://github.com/amplitude/developer-api/issues"
+  },
+  "keywords": [
+    "amplitude",
+    "cli",
+    "amp",
+    "developer-api"
+  ],
+  "bin": {
+    "amp": "dist/cli.js"
+  },
+  "files": [
+    "dist/**/*",
+    "openapi/bundled/**/*",
+    "README.md",
+    "docs/**/*"
+  ],
+  "main": "dist/cli.js",
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "pnpm clean && tsgo --build tsconfig.build.json && pnpm bundle:cli",
+    "bundle:cli": "chmod +x dist/cli.js",
+    "clean": "rimraf ./dist tsconfig.build.tsbuildinfo",
+    "cli": "tsx src/cli.ts",
+    "smoke": "bash scripts/smoke.sh",
+    "smoke:cli": "bash scripts/smoke-cli.sh",
+    "test": "vitest run",
+    "test:typescript": "tsgo --project tsconfig.tsc.json --noEmit"
+  },
+  "dependencies": {
+    "@inquirer/prompts": "^8.5.2",
+    "chalk": "^4.1.2",
+    "commander": "^15.0.0",
+    "open": "^11.0.0",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/node": "22.19.17",
+    "@typescript/native-preview": "7.0.0-dev.20260601.1",
+    "rimraf": "^3.0.2",
+    "tsx": "4.7.2",
+    "typescript": "6.0.3",
+    "vitest": "^4.1.4"
+  },
+  "engines": {
+    "node": "^22.22.0"
+  },
+  "packageManager": "pnpm@10.33.0+sha512.10568bb4a6afb58c9eb3630da90cc9516417abebd3fabbe6739f0ae795728da1491e9db5a544c76ad8eb7570f5c4bb3d6c637b2cb41bfdcdb47fa823c8649319"
+}

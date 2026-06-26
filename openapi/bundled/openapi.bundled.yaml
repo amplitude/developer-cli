@@ -1,0 +1,1973 @@
+openapi: 3.1.1
+info:
+  title: Amplitude Developer API
+  version: 0.1.0
+  license:
+    name: Proprietary
+    url: https://amplitude.com/terms
+  summary: OpenAPI-first contract for Amplitude CLI, MCP, SDK, and docs.
+  description: |
+    Public developer-facing API contract for Amplitude resources.
+    This spec is intended to be the canonical source for generated CLI, MCP tools,
+    SDKs, and documentation.
+jsonSchemaDialect: https://json-schema.org/draft/2020-12/schema
+servers:
+  - url: https://developer-api.amplitude.com
+    description: Production
+  - url: https://developer-api.stag2.amplitude.com
+    description: Staging
+security:
+  - bearerAuth: []
+tags:
+  - name: Projects
+    description: Project discovery and project-scoped navigation.
+  - name: Taxonomy Events
+    description: Event taxonomy operations.
+  - name: Taxonomy Event Properties
+    description: Event-property taxonomy operations (scoped to an event).
+  - name: Taxonomy User Properties
+    description: User-property taxonomy operations (scoped to a project).
+  - name: Feature Flags
+    description: Feature flag configuration and rollout operations.
+  - name: Auth
+    description: OAuth device-flow and token endpoints (RFC 8628 / RFC 6749).
+paths:
+  /v1/auth/device-authorization:
+    post:
+      tags:
+        - Auth
+      operationId: deviceAuthorization
+      summary: Start a device authorization request
+      description: |
+        RFC 8628 device authorization endpoint. Initiates the device flow and returns a device_code, user_code, and verification URIs for the user to approve out of band, then poll the token endpoint.
+      x-required-scopes: []
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeviceAuthorizationRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/DeviceAuthorizationRequest'
+      responses:
+        '200':
+          description: Device authorization started.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeviceAuthorizationResponse'
+        '400':
+          description: Invalid request (RFC 6749 §5.2 OAuth error).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OAuthError'
+        '401':
+          description: Client authentication failed (RFC 6749 §5.2 OAuth error).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OAuthError'
+        '500':
+          description: Server error (RFC 6749 §5.2 OAuth error).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OAuthError'
+  /v1/auth/token:
+    post:
+      tags:
+        - Auth
+      operationId: token
+      summary: Exchange a grant for tokens
+      description: |
+        RFC 6749 §3.2 token endpoint. Supports the `device_code` grant (RFC 8628). Authenticated by the fixed confidential device-flow client (injected server-side). Does not require a Bearer token.
+      x-required-scopes: []
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TokenRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/TokenRequest'
+      responses:
+        '200':
+          description: Tokens issued.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenResponse'
+        '400':
+          description: Invalid or unsupported grant (RFC 6749 §5.2 OAuth error).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OAuthError'
+        '401':
+          description: Client authentication failed (RFC 6749 §5.2 OAuth error).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OAuthError'
+        '500':
+          description: Server error (RFC 6749 §5.2 OAuth error).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OAuthError'
+  /v1/context:
+    get:
+      tags:
+        - Projects
+      operationId: getContext
+      summary: Get authenticated context
+      description: Returns the authenticated principal and organization context.
+      x-required-scopes:
+        - read:projects
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    type: object
+                    required:
+                      - object
+                      - principal
+                      - org
+                    properties:
+                      object:
+                        type: string
+                        const: context
+                      principal:
+                        type: object
+                        required:
+                          - object
+                          - login_id
+                          - org_id
+                          - auth_type
+                          - scopes
+                        properties:
+                          object:
+                            type: string
+                            const: principal
+                          login_id:
+                            type: string
+                          org_id:
+                            type: string
+                          org_name:
+                            type:
+                              - string
+                              - 'null'
+                          auth_type:
+                            type: string
+                            enum:
+                              - oauth
+                              - pat
+                              - service_account
+                              - api_key
+                          scopes:
+                            type: array
+                            items:
+                              type: string
+                      org:
+                        type: object
+                        required:
+                          - id
+                          - object
+                          - name
+                        properties:
+                          id:
+                            type: string
+                          object:
+                            type: string
+                            const: org
+                          name:
+                            type:
+                              - string
+                              - 'null'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '500':
+          $ref: '#/components/responses/Problem'
+  /v1/projects:
+    get:
+      tags:
+        - Projects
+      operationId: listProjects
+      summary: List projects
+      description: Returns projects visible to the authenticated principal.
+      x-required-scopes:
+        - read:projects
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Sort'
+        - $ref: '#/components/parameters/Query'
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                  - pagination
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Project'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+        '400':
+          $ref: '#/components/responses/ValidationProblem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '500':
+          $ref: '#/components/responses/Problem'
+  /v1/projects/{project_id}/events:
+    get:
+      tags:
+        - Taxonomy Events
+      operationId: listEvents
+      summary: List event taxonomy entries
+      x-required-scopes:
+        - read:taxonomy
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Query'
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                  - pagination
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Event'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+        '400':
+          $ref: '#/components/responses/ValidationProblem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '500':
+          $ref: '#/components/responses/Problem'
+    post:
+      tags:
+        - Taxonomy Events
+      operationId: createEvent
+      summary: Create event taxonomy entry
+      x-required-scopes:
+        - write:taxonomy
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - event_type
+              properties:
+                event_type:
+                  type: string
+                description:
+                  type:
+                    - string
+                    - 'null'
+              additionalProperties: false
+      responses:
+        '201':
+          description: Event created.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Event'
+        '400':
+          $ref: '#/components/responses/ValidationProblem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '500':
+          $ref: '#/components/responses/Problem'
+  /v1/projects/{project_id}/events/{event_id}:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+      - $ref: '#/components/parameters/EventId'
+    get:
+      tags:
+        - Taxonomy Events
+      operationId: getEvent
+      summary: Get event taxonomy entry
+      x-required-scopes:
+        - read:taxonomy
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Event'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '500':
+          $ref: '#/components/responses/Problem'
+    patch:
+      tags:
+        - Taxonomy Events
+      operationId: updateEvent
+      summary: Update event taxonomy entry
+      x-required-scopes:
+        - write:taxonomy
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                description:
+                  type:
+                    - string
+                    - 'null'
+                is_active:
+                  type: boolean
+              additionalProperties: false
+      responses:
+        '200':
+          description: Event updated.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Event'
+        '400':
+          $ref: '#/components/responses/ValidationProblem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '500':
+          $ref: '#/components/responses/Problem'
+    delete:
+      tags:
+        - Taxonomy Events
+      operationId: deleteEvent
+      summary: Soft-delete event taxonomy entry
+      x-required-scopes:
+        - write:taxonomy
+      parameters:
+        - $ref: '#/components/parameters/DryRun'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '204':
+          description: Event soft-deleted.
+        '400':
+          $ref: '#/components/responses/ValidationProblem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '500':
+          $ref: '#/components/responses/Problem'
+  /v1/projects/{project_id}/events/{event_id}/event-properties:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+      - $ref: '#/components/parameters/EventId'
+    get:
+      tags:
+        - Taxonomy Event Properties
+      operationId: listEventProperties
+      summary: List event properties for an event
+      description: |
+        Returns properties bound to a specific event, including ingested-only
+        properties (those with `is_in_schema: false`). Use the `is_in_schema`
+        flag to detect whether a `PATCH` will succeed before issuing it.
+      x-required-scopes:
+        - read:taxonomy
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Query'
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                  - pagination
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/EventProperty'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+        '400':
+          $ref: '#/components/responses/ValidationProblem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '500':
+          $ref: '#/components/responses/Problem'
+    post:
+      tags:
+        - Taxonomy Event Properties
+      operationId: createEventProperty
+      summary: Create event property
+      description: |
+        Creates an event property and adds it to the project's tracking plan
+        (`is_in_schema: true` after success). If the property already exists in
+        the schema, the existing resource is returned without modification.
+        If the property exists ingested-only (`is_in_schema: false`), this call
+        promotes it into the schema with the metadata supplied here.
+      x-required-scopes:
+        - write:taxonomy
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - property_name
+              properties:
+                property_name:
+                  type: string
+                  minLength: 1
+                description:
+                  type:
+                    - string
+                    - 'null'
+                data_type:
+                  $ref: '#/components/schemas/PropertyDataType'
+                is_array_type:
+                  type: boolean
+                  default: false
+                enum_values:
+                  type: array
+                  items:
+                    type: string
+                regex:
+                  type:
+                    - string
+                    - 'null'
+                is_hidden:
+                  type: boolean
+                  default: false
+                classifications:
+                  type: array
+                  items:
+                    type: string
+              additionalProperties: false
+      responses:
+        '201':
+          description: Event property created.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/EventProperty'
+        '400':
+          $ref: '#/components/responses/ValidationProblem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '500':
+          $ref: '#/components/responses/Problem'
+  /v1/projects/{project_id}/events/{event_id}/event-properties/{event_property_id}:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+      - $ref: '#/components/parameters/EventId'
+      - $ref: '#/components/parameters/EventPropertyId'
+    get:
+      tags:
+        - Taxonomy Event Properties
+      operationId: getEventProperty
+      summary: Get event property
+      x-required-scopes:
+        - read:taxonomy
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/EventProperty'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '500':
+          $ref: '#/components/responses/Problem'
+    patch:
+      tags:
+        - Taxonomy Event Properties
+      operationId: updateEventProperty
+      summary: Update event property metadata
+      description: |
+        Updates metadata on an event property. Returns `422 not_in_schema` if
+        the property is ingested-only (`is_in_schema: false`); promote it via
+        `POST` first. Field absent means leave unchanged; field with `null`
+        clears (where allowed). `enum_values` and `classifications` replace the
+        array entirely — there is no per-item add/remove.
+      x-required-scopes:
+        - write:taxonomy
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                description:
+                  type:
+                    - string
+                    - 'null'
+                data_type:
+                  $ref: '#/components/schemas/PropertyDataType'
+                is_array_type:
+                  type: boolean
+                enum_values:
+                  type: array
+                  items:
+                    type: string
+                regex:
+                  type:
+                    - string
+                    - 'null'
+                is_hidden:
+                  type: boolean
+                classifications:
+                  type: array
+                  items:
+                    type: string
+              additionalProperties: false
+      responses:
+        '200':
+          description: Event property updated.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/EventProperty'
+        '400':
+          $ref: '#/components/responses/ValidationProblem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '422':
+          description: |
+            Property is not part of the project's tracking plan. Returned when
+            attempting to PATCH a property with `is_in_schema: false`.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '500':
+          $ref: '#/components/responses/Problem'
+    delete:
+      tags:
+        - Taxonomy Event Properties
+      operationId: deleteEventProperty
+      summary: Delete event property
+      x-required-scopes:
+        - write:taxonomy
+      parameters:
+        - $ref: '#/components/parameters/DryRun'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '204':
+          description: Event property deleted.
+        '400':
+          $ref: '#/components/responses/ValidationProblem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '500':
+          $ref: '#/components/responses/Problem'
+  /v1/projects/{project_id}/user-properties:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+    get:
+      tags:
+        - Taxonomy User Properties
+      operationId: listUserProperties
+      summary: List user properties for a project
+      x-required-scopes:
+        - read:taxonomy
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Query'
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                  - pagination
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/UserProperty'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+        '400':
+          $ref: '#/components/responses/ValidationProblem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '500':
+          $ref: '#/components/responses/Problem'
+    post:
+      tags:
+        - Taxonomy User Properties
+      operationId: createUserProperty
+      summary: Create user property
+      description: |
+        Creates a user property and adds it to the project's tracking plan.
+        Same idempotency semantics as `createEventProperty`.
+      x-required-scopes:
+        - write:taxonomy
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - property_name
+              properties:
+                property_name:
+                  type: string
+                  minLength: 1
+                display_name:
+                  type:
+                    - string
+                    - 'null'
+                description:
+                  type:
+                    - string
+                    - 'null'
+                data_type:
+                  $ref: '#/components/schemas/PropertyDataType'
+                is_array_type:
+                  type: boolean
+                  default: false
+                enum_values:
+                  type: array
+                  items:
+                    type: string
+                regex:
+                  type:
+                    - string
+                    - 'null'
+                is_hidden:
+                  type: boolean
+                  default: false
+                classifications:
+                  type: array
+                  items:
+                    type: string
+              additionalProperties: false
+      responses:
+        '201':
+          description: User property created.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/UserProperty'
+        '400':
+          $ref: '#/components/responses/ValidationProblem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '500':
+          $ref: '#/components/responses/Problem'
+  /v1/projects/{project_id}/user-properties/{user_property_id}:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+      - $ref: '#/components/parameters/UserPropertyId'
+    get:
+      tags:
+        - Taxonomy User Properties
+      operationId: getUserProperty
+      summary: Get user property
+      x-required-scopes:
+        - read:taxonomy
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/UserProperty'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '500':
+          $ref: '#/components/responses/Problem'
+    patch:
+      tags:
+        - Taxonomy User Properties
+      operationId: updateUserProperty
+      summary: Update user property metadata
+      description: |
+        Updates metadata on a user property. Returns `422 not_in_schema` if the
+        property is ingested-only. Same patch semantics as `updateEventProperty`
+        (field absent = unchanged, `null` = clear, arrays replace).
+
+        Only `display_name`, `description`, `is_hidden`, and `classifications`
+        are mutable via PATCH today. Type/shape fields (`data_type`,
+        `is_array_type`, `enum_values`, `regex`) are settable only at creation.
+        `is_official` is read-only until TMS exposes a write path for it.
+      x-required-scopes:
+        - write:taxonomy
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                display_name:
+                  type:
+                    - string
+                    - 'null'
+                description:
+                  type:
+                    - string
+                    - 'null'
+                is_hidden:
+                  type: boolean
+                classifications:
+                  type: array
+                  items:
+                    type: string
+              additionalProperties: false
+      responses:
+        '200':
+          description: User property updated.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/UserProperty'
+        '400':
+          $ref: '#/components/responses/ValidationProblem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '422':
+          description: |
+            Property is not part of the project's tracking plan. Returned when
+            attempting to PATCH a property with `is_in_schema: false`.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '500':
+          $ref: '#/components/responses/Problem'
+    delete:
+      tags:
+        - Taxonomy User Properties
+      operationId: deleteUserProperty
+      summary: Delete user property
+      x-required-scopes:
+        - write:taxonomy
+      parameters:
+        - $ref: '#/components/parameters/DryRun'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '204':
+          description: User property deleted.
+        '400':
+          $ref: '#/components/responses/ValidationProblem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '500':
+          $ref: '#/components/responses/Problem'
+  /v1/projects/{project_id}/flags:
+    get:
+      tags:
+        - Feature Flags
+      operationId: listFeatureFlags
+      summary: List feature flags
+      x-required-scopes:
+        - read:flags
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                  - pagination
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/FeatureFlag'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+        '400':
+          $ref: '#/components/responses/ValidationProblem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '500':
+          $ref: '#/components/responses/Problem'
+    post:
+      tags:
+        - Feature Flags
+      operationId: createFeatureFlag
+      summary: Create feature flag
+      x-required-scopes:
+        - write:flags
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - key
+                - name
+              properties:
+                key:
+                  type: string
+                  pattern: ^[a-z0-9_-]+$
+                  description: Lowercase letters, numbers, hyphens, and underscores only.
+                name:
+                  type: string
+                description:
+                  type:
+                    - string
+                    - 'null'
+                evaluation_mode:
+                  type: string
+                  enum:
+                    - local
+                    - remote
+                  default: remote
+                bucketing_key:
+                  type: string
+                variants:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/Variant'
+                deployment_ids:
+                  type: array
+                  items:
+                    type: string
+                rollout_percentage:
+                  type: integer
+                  minimum: 0
+                  maximum: 100
+                rollout_weights:
+                  $ref: '#/components/schemas/RolloutWeights'
+                testers:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/Tester'
+                target_segments:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/TargetSegmentInput'
+              additionalProperties: false
+      responses:
+        '201':
+          description: Feature flag created.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/FeatureFlag'
+        '400':
+          $ref: '#/components/responses/ValidationProblem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '500':
+          $ref: '#/components/responses/Problem'
+  /v1/projects/{project_id}/flags/{flag_id}:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+      - $ref: '#/components/parameters/FlagId'
+    get:
+      tags:
+        - Feature Flags
+      operationId: getFeatureFlag
+      summary: Get feature flag
+      x-required-scopes:
+        - read:flags
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/FeatureFlag'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '500':
+          $ref: '#/components/responses/Problem'
+    patch:
+      tags:
+        - Feature Flags
+      operationId: updateFeatureFlag
+      summary: Update feature flag
+      description: Updates feature flag metadata and rollout settings. Variant, tester, deployment, and link mutations will be exposed through dedicated subresources in a later slice.
+      x-required-scopes:
+        - write:flags
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                description:
+                  type:
+                    - string
+                    - 'null'
+                enabled:
+                  type: boolean
+                evaluation_mode:
+                  type: string
+                  enum:
+                    - local
+                    - remote
+                bucketing_key:
+                  type: string
+                rollout_percentage:
+                  type: integer
+                  minimum: 0
+                  maximum: 100
+                tags:
+                  type: array
+                  items:
+                    type: string
+              additionalProperties: false
+      responses:
+        '200':
+          description: Feature flag updated.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/FeatureFlag'
+        '400':
+          $ref: '#/components/responses/ValidationProblem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '500':
+          $ref: '#/components/responses/Problem'
+    delete:
+      tags:
+        - Feature Flags
+      operationId: archiveFeatureFlag
+      summary: Archive feature flag
+      x-required-scopes:
+        - write:flags
+      parameters:
+        - $ref: '#/components/parameters/DryRun'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '204':
+          description: Feature flag archived.
+        '400':
+          $ref: '#/components/responses/ValidationProblem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '500':
+          $ref: '#/components/responses/Problem'
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    ProjectId:
+      name: project_id
+      in: path
+      required: true
+      description: Amplitude project identifier, backed by the canonical app ID.
+      schema:
+        type: string
+        pattern: ^[0-9]+$
+        example: '12345'
+    Cursor:
+      name: cursor
+      in: query
+      required: false
+      description: Cursor token from previous list response.
+      schema:
+        type:
+          - string
+          - 'null'
+    Limit:
+      name: limit
+      in: query
+      required: false
+      description: Number of items to return. Defaults to 50, max 200.
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 200
+        default: 50
+    Sort:
+      name: sort
+      in: query
+      required: false
+      description: Comma-separated sort fields. Prefix with `-` for descending.
+      schema:
+        type: string
+        example: '-created_at,name'
+    Query:
+      name: q
+      in: query
+      required: false
+      description: Full-text search query.
+      schema:
+        type: string
+    DryRun:
+      name: dry_run
+      in: query
+      required: false
+      description: Validate request without performing mutation.
+      schema:
+        type: boolean
+        default: false
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: Unique idempotency key used to safely retry write operations.
+      schema:
+        type: string
+        minLength: 8
+        maxLength: 255
+    EventId:
+      name: event_id
+      in: path
+      required: true
+      description: Public event identifier. For the current TMS-backed API, this value is the event type.
+      schema:
+        type: string
+        minLength: 1
+    EventPropertyId:
+      name: event_property_id
+      in: path
+      required: true
+      description: |
+        Public event property identifier. Equal to `property_name`. URL-encode
+        when the property name contains spaces or special characters.
+      schema:
+        type: string
+        minLength: 1
+    UserPropertyId:
+      name: user_property_id
+      in: path
+      required: true
+      description: |
+        Public user property identifier. Equal to `property_name`. URL-encode
+        when the property name contains spaces or special characters.
+      schema:
+        type: string
+        minLength: 1
+    FlagId:
+      name: flag_id
+      in: path
+      required: true
+      description: Feature flag identifier.
+      schema:
+        type: string
+        minLength: 1
+    ExperimentId:
+      name: experiment_id
+      in: path
+      required: true
+      description: Experiment identifier. Experiments are backed by flag configurations and use the same identifier namespace.
+      schema:
+        type: string
+        minLength: 1
+  responses:
+    Problem:
+      description: Error response encoded as RFC 9457 Problem Details.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+    ValidationProblem:
+      description: Validation failure response encoded as RFC 9457 Problem Details.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+  schemas:
+    ObjectMeta:
+      type: object
+      required:
+        - id
+        - object
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+        object:
+          type: string
+          description: |
+            Stable resource-type discriminator. Each resource sets a fixed value
+            (declared via `const` on the concrete schema, e.g. `project`, `event`).
+            Clients can use this field to safely narrow polymorphic responses.
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    Pagination:
+      type: object
+      required:
+        - next_cursor
+        - has_more
+      properties:
+        next_cursor:
+          type:
+            - string
+            - 'null'
+        has_more:
+          type: boolean
+    ProblemDetails:
+      type: object
+      required:
+        - type
+        - title
+        - status
+        - error_code
+        - retryable
+      properties:
+        type:
+          type: string
+          format: uri
+        title:
+          type: string
+        status:
+          type: integer
+          minimum: 400
+          maximum: 599
+        detail:
+          type:
+            - string
+            - 'null'
+        instance:
+          type:
+            - string
+            - 'null'
+          format: uri
+        error_code:
+          type: string
+        retryable:
+          type: boolean
+        retry_after_seconds:
+          type:
+            - integer
+            - 'null'
+          minimum: 0
+        validation_errors:
+          type:
+            - array
+            - 'null'
+          items:
+            $ref: '#/components/schemas/ValidationError'
+    ValidationError:
+      type: object
+      required:
+        - field
+        - message
+        - code
+      properties:
+        field:
+          type: string
+        message:
+          type: string
+        code:
+          type: string
+    Project:
+      allOf:
+        - $ref: '#/components/schemas/ObjectMeta'
+        - type: object
+          required:
+            - name
+          properties:
+            id:
+              type: string
+              pattern: ^[0-9]+$
+            object:
+              type: string
+              const: project
+              description: Resource-type discriminator. Always `project`.
+            name:
+              type: string
+            description:
+              type:
+                - string
+                - 'null'
+    Event:
+      type: object
+      required:
+        - id
+        - object
+        - project_id
+        - event_type
+        - display_name
+        - is_active
+      properties:
+        id:
+          type: string
+          description: Canonical event identifier. Equal to `event_type`.
+        object:
+          type: string
+          const: event
+          description: Resource-type discriminator. Always `event`.
+        project_id:
+          type: string
+          pattern: ^[0-9]+$
+        event_type:
+          type: string
+        display_name:
+          type: string
+        description:
+          type:
+            - string
+            - 'null'
+        is_active:
+          type: boolean
+    EventProperty:
+      type: object
+      required:
+        - id
+        - object
+        - project_id
+        - event_type
+        - property_name
+        - is_hidden
+        - is_in_schema
+        - is_array_type
+        - enum_values
+        - classifications
+      properties:
+        id:
+          type: string
+          description: |
+            Stable resource identifier. Equal to `property_name`.
+        object:
+          type: string
+          const: event_property
+          description: Resource-type discriminator. Always `event_property`.
+        project_id:
+          type: string
+          pattern: ^[0-9]+$
+        event_type:
+          type: string
+          description: Event this property is bound to.
+        property_name:
+          type: string
+        description:
+          type:
+            - string
+            - 'null'
+        is_hidden:
+          type: boolean
+          description: Hidden from default UI surfaces and API listings.
+        is_in_schema:
+          type: boolean
+          description: |
+            Whether this property is part of the project's curated tracking
+            plan. `false` means ingested-only (seen via SDK calls but never
+            formally added). Properties with `is_in_schema: false` cannot be
+            modified — `PATCH` returns `422 not_in_schema` and metadata writes
+            are rejected. `POST` implicitly transitions a property to
+            `is_in_schema: true`.
+        data_type:
+          $ref: '#/components/schemas/PropertyDataType'
+        is_array_type:
+          type: boolean
+        enum_values:
+          type: array
+          items:
+            type: string
+        regex:
+          type:
+            - string
+            - 'null'
+        classifications:
+          type: array
+          items:
+            type: string
+          description: |
+            Data Access Controls (DAC) tags. Examples include `PII`,
+            `SENSITIVE`, `INTERNAL`.
+    UserProperty:
+      type: object
+      required:
+        - id
+        - object
+        - project_id
+        - property_name
+        - is_hidden
+        - is_in_schema
+        - is_array_type
+        - enum_values
+        - classifications
+      properties:
+        id:
+          type: string
+          description: |
+            Stable resource identifier. Equal to `property_name`.
+        object:
+          type: string
+          const: user_property
+          description: Resource-type discriminator. Always `user_property`.
+        project_id:
+          type: string
+          pattern: ^[0-9]+$
+        property_name:
+          type: string
+        display_name:
+          type:
+            - string
+            - 'null'
+        description:
+          type:
+            - string
+            - 'null'
+        is_official:
+          type:
+            - boolean
+            - 'null'
+          description: |
+            Curated/official flag. `null` ⇒ inherited / unset upstream.
+        is_hidden:
+          type: boolean
+        is_in_schema:
+          type: boolean
+          description: |
+            Whether this property is part of the project's curated tracking
+            plan. Same semantics as `EventProperty.is_in_schema`.
+        data_type:
+          $ref: '#/components/schemas/PropertyDataType'
+        is_array_type:
+          type: boolean
+        enum_values:
+          type: array
+          items:
+            type: string
+        regex:
+          type:
+            - string
+            - 'null'
+        classifications:
+          type: array
+          items:
+            type: string
+    PropertyDataType:
+      description: |
+        Logical data type of a property. `null` means untyped at the source;
+        clients should treat it as `string` for ingestion.
+      type:
+        - string
+        - 'null'
+      enum:
+        - string
+        - number
+        - boolean
+        - object
+        - enum
+        - any
+        - null
+    FeatureFlag:
+      allOf:
+        - $ref: '#/components/schemas/FeatureFlagBase'
+        - type: object
+          required:
+            - object
+          properties:
+            object:
+              type: string
+              const: feature_flag
+              description: Resource-type discriminator. Always `feature_flag`.
+    Variant:
+      type: object
+      required:
+        - key
+      properties:
+        key:
+          type: string
+          pattern: ^[A-Za-z0-9_-]+$
+          description: Stable variant key. The value `off` is reserved.
+        name:
+          type:
+            - string
+            - 'null'
+        description:
+          type:
+            - string
+            - 'null'
+        payload:
+          description: Optional JSON payload returned by evaluation.
+    TargetSegment:
+      type: object
+      required:
+        - conditions
+      properties:
+        name:
+          type:
+            - string
+            - 'null'
+        conditions:
+          type: array
+          items:
+            $ref: '#/components/schemas/TargetCondition'
+        percentage:
+          type:
+            - integer
+            - 'null'
+          minimum: 0
+          maximum: 100
+          description: Segment rollout percentage.
+        rollout_weights:
+          $ref: '#/components/schemas/RolloutWeights'
+        bucketing_key:
+          type:
+            - string
+            - 'null'
+    TargetSegmentInput:
+      type: object
+      required:
+        - percentage
+        - rollout_weights
+      properties:
+        name:
+          type:
+            - string
+            - 'null'
+        conditions:
+          type: array
+          items:
+            $ref: '#/components/schemas/TargetCondition'
+          description: Omitted (or empty) for the catch-all "all other users" segment.
+        percentage:
+          type: integer
+          minimum: 0
+          maximum: 100
+          description: Segment rollout percentage.
+        rollout_weights:
+          $ref: '#/components/schemas/RolloutWeights'
+        bucketing_key:
+          type:
+            - string
+            - 'null'
+    DeviceAuthorizationRequest:
+      type: object
+      required:
+        - code_challenge
+        - code_challenge_method
+      properties:
+        scope:
+          type: string
+          description: Space-delimited OAuth scopes to request.
+        code_challenge:
+          type: string
+          description: |
+            PKCE code challenge (RFC 7636): the base64url-encoded SHA-256 of your code_verifier.
+        code_challenge_method:
+          type: string
+          enum:
+            - S256
+          description: PKCE challenge method. Must be S256.
+    DeviceAuthorizationResponse:
+      type: object
+      required:
+        - device_code
+        - user_code
+        - verification_uri
+        - expires_in
+      properties:
+        device_code:
+          type: string
+        user_code:
+          type: string
+        verification_uri:
+          type: string
+        verification_uri_complete:
+          type: string
+        expires_in:
+          type: integer
+        interval:
+          type: integer
+    OAuthError:
+      type: object
+      description: RFC 6749 §5.2 OAuth error response.
+      required:
+        - error
+      properties:
+        error:
+          type: string
+        error_description:
+          type: string
+        error_hint:
+          type: string
+        error_uri:
+          type: string
+    TokenRequest:
+      type: object
+      required:
+        - grant_type
+        - device_code
+        - code_verifier
+      properties:
+        grant_type:
+          type: string
+          enum:
+            - urn:ietf:params:oauth:grant-type:device_code
+          description: The OAuth grant type. Must be `urn:ietf:params:oauth:grant-type:device_code`.
+        device_code:
+          type: string
+          description: The device_code from the device-authorization response.
+        code_verifier:
+          type: string
+          description: |
+            PKCE code verifier matching the code_challenge sent to the device-authorization endpoint.
+    TokenResponse:
+      type: object
+      required:
+        - access_token
+        - token_type
+        - expires_in
+      properties:
+        access_token:
+          type: string
+        token_type:
+          type: string
+        expires_in:
+          type: integer
+        refresh_token:
+          type: string
+        scope:
+          type: string
+        id_token:
+          type: string
+    RolloutWeights:
+      type: object
+      additionalProperties:
+        type: number
+        minimum: 0
+      description: 'Variant-keyed rollout weights. Values may be normalized to sum to 100 (percentages) or expressed as unnormalized relative weights (for example `{ "control": 1, "treatment": 1 }` for an even split). Weights are non-negative and may be fractional.'
+    TargetCondition:
+      type: object
+      required:
+        - prop
+        - op
+        - type
+        - values
+      properties:
+        group_type:
+          type:
+            - string
+            - 'null'
+        prop:
+          type: string
+          minLength: 1
+          description: Property name or cohort identifier being targeted.
+        prop_type:
+          type:
+            - string
+            - 'null'
+          description: Namespace of the targeted property, for example `user`, `event`, or `group`. Omitted for conditions that target a cohort rather than a property.
+        op:
+          type: string
+          description: Targeting operator applied to the property values.
+          enum:
+            - is
+            - is not
+            - contains
+            - does not contain
+            - less
+            - less or equal
+            - greater
+            - greater or equal
+            - set is
+            - set is not
+            - set contains
+            - set does not contain
+            - glob match
+            - glob does not match
+        type:
+          type: string
+          description: Condition type, for example `property` or `cohort`.
+        values:
+          type: array
+          minItems: 1
+          items:
+            type: string
+          description: At least one value to match against. Conditions with no values are rejected.
+    Tester:
+      type: object
+      required:
+        - variant_key
+        - values
+      properties:
+        variant_key:
+          type: string
+        values:
+          type: array
+          items:
+            type: string
+          maxItems: 2000
+          description: User IDs, device IDs, or cohort identifiers included in this variant. At most 2000 entries per variant (the limit is 10 when the entries are cohort identifiers).
+    ParentDependency:
+      type: object
+      required:
+        - flag_id
+      properties:
+        flag_id:
+          type: string
+        allowed_variants:
+          type: array
+          items:
+            type: string
+    ParentDependencies:
+      type: object
+      required:
+        - operator
+        - flags
+      properties:
+        operator:
+          type: string
+          enum:
+            - all
+            - any
+        flags:
+          type: array
+          items:
+            $ref: '#/components/schemas/ParentDependency'
+    Link:
+      type: object
+      required:
+        - url
+        - title
+      properties:
+        url:
+          type: string
+          format: uri
+        title:
+          type: string
+    FeatureFlagBase:
+      type: object
+      required:
+        - id
+        - project_id
+        - key
+        - name
+        - enabled
+        - evaluation_mode
+        - variants
+        - bucketing_key
+        - rollout_percentage
+        - rollout_weights
+        - target_segments
+        - version
+        - archived
+        - tags
+      properties:
+        id:
+          type: string
+          readOnly: true
+        project_id:
+          type: string
+          pattern: ^[0-9]+$
+          readOnly: true
+        key:
+          type: string
+        name:
+          type: string
+        description:
+          type:
+            - string
+            - 'null'
+        deployments:
+          type: array
+          items:
+            type: string
+          readOnly: true
+          description: Deployment IDs associated with this flag. Managed via the create/update deployment fields, not set directly on this field.
+        enabled:
+          type: boolean
+        evaluation_mode:
+          type: string
+          enum:
+            - local
+            - remote
+        variants:
+          type: array
+          items:
+            $ref: '#/components/schemas/Variant'
+        bucketing_key:
+          type: string
+          description: Bucketing key used for assignment. Never null in responses; defaults to `amplitude_id` when not explicitly set.
+        bucketing_salt:
+          type:
+            - string
+            - 'null'
+          readOnly: true
+        bucketing_unit:
+          type:
+            - string
+            - 'null'
+        rollout_percentage:
+          type: integer
+          minimum: 0
+          maximum: 100
+        rollout_weights:
+          $ref: '#/components/schemas/RolloutWeights'
+        target_segments:
+          type: array
+          items:
+            $ref: '#/components/schemas/TargetSegment'
+        testers:
+          type: array
+          items:
+            $ref: '#/components/schemas/Tester'
+        owners:
+          type: array
+          items:
+            type: string
+        tags:
+          type: array
+          items:
+            type: string
+        created_by:
+          type:
+            - string
+            - 'null'
+          readOnly: true
+        last_modified_by:
+          type:
+            - string
+            - 'null'
+          readOnly: true
+        created_at:
+          type:
+            - string
+            - 'null'
+          format: date-time
+          readOnly: true
+        updated_at:
+          type:
+            - string
+            - 'null'
+          format: date-time
+          readOnly: true
+        parent_dependencies:
+          allOf:
+            - $ref: '#/components/schemas/ParentDependencies'
+          readOnly: true
+        links:
+          type: array
+          items:
+            $ref: '#/components/schemas/Link'
+        version:
+          type: integer
+          readOnly: true
+          description: Server-managed config version used for optimistic concurrency.
+        archived:
+          type: boolean
+          readOnly: true
+          description: Whether the resource is archived. Set via the archive (DELETE) operation.
+        url:
+          type:
+            - string
+            - 'null'
+          format: uri
+          readOnly: true

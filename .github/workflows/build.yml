@@ -1,0 +1,53 @@
+name: Build & Test
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build, test, and package smoke
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Install pnpm
+        # Version comes from the "packageManager" field in package.json — do not
+        # also set `version:` here or action-setup fails on the conflict.
+        uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v5.0.0
+        with:
+          run_install: false
+
+      - name: Set up Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm test:typescript
+
+      - name: Unit tests
+        run: pnpm test
+
+      - name: Build
+        run: pnpm build
+
+      # publint catches packaging mistakes (missing files entries, broken bin,
+      # bad exports) before they ship to npm.
+      - name: publint
+        run: pnpm dlx publint
+
+      # No-network smoke: pack -> install the tarball into a throwaway global
+      # prefix -> assert the `amp` bin loads. Validates the packaged artifact,
+      # not just the source tree. Needs no PAT and does not hit the Amplitude API.
+      - name: Packaging smoke
+        run: bash scripts/smoke-cli.sh

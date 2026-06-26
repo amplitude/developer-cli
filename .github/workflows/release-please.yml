@@ -1,0 +1,78 @@
+name: release-please
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+  id-token: write
+
+jobs:
+  release-please:
+    runs-on: ubuntu-24.04
+    outputs:
+      releases_created: ${{ steps.release.outputs.releases_created }}
+    steps:
+      # Mint a GitHub App installation token so release-please's PRs trigger
+      # downstream workflows (GITHUB_TOKEN-authored events do not, by design,
+      # which would leave required checks unrun and the Release PR BLOCKED).
+      - uses: actions/create-github-app-token@df432ceedc7162793a195dd1713ff69aefc7379e # v2.0.6
+        id: app-token
+        with:
+          app-id: ${{ secrets.RELEASE_PLEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_PLEASE_APP_PRIVATE_KEY }}
+
+      - uses: googleapis/release-please-action@16a9c90856f42705d54a6fda1823352bdc62cf38 # v4.4.0
+        id: release
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+
+  publish:
+    name: Publish to npm
+    runs-on: ubuntu-24.04
+    needs: release-please
+    if: needs.release-please.outputs.releases_created == 'true'
+    environment: npm-publish
+    steps:
+      - name: Checkout the repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 0
+
+      - name: Install pnpm
+        # Version comes from the "packageManager" field in package.json — do not
+        # also set `version:` here or action-setup fails on the conflict.
+        uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v5.0.0
+        with:
+          run_install: false
+
+      - name: Set up Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          # Match build.yml and package.json engines (^22.22.0).
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build the package
+        run: pnpm build
+
+      # Authenticates to npm via OIDC Trusted Publishing (id-token: write at the
+      # workflow level). The Trusted Publisher for @amplitude/developer-api must
+      # be configured at
+      # https://www.npmjs.com/package/@amplitude/developer-api/access to trust
+      # repo=amplitude/developer-api, workflow=release-please.yml,
+      # environment=npm-publish. No NPM_TOKEN required.
+      #
+      # Pre-1.0 we publish to the `beta` dist-tag so `latest` stays unset until
+      # we promote at 1.0. Drop `--tag beta` when cutting 1.0.0.
+      - name: Publish the package to npm registry
+        run: pnpm publish --access public --no-git-checks --provenance --tag beta
