@@ -1,4 +1,4 @@
-# Bugbot review guide — @amplitude/developer-api
+# Bugbot review guide — @amplitude/developer-cli
 
 This repo is the published `amp` CLI: a thin, generated client over the
 Amplitude Developer API. It is a **public distribution**, so review for clarity

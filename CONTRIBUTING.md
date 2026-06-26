@@ -1,7 +1,7 @@
 # Contributing
 
 This repository is the published distribution of the `amp` CLI
-(`@amplitude/developer-api`). It is maintained by Amplitude and updated through
+(`@amplitude/developer-cli`). It is maintained by Amplitude and updated through
 an internal release process.
 
 ## We don't accept pull requests here
@@ -12,7 +12,7 @@ this guide — please don't take it personally.
 
 ## Found a bug or want a feature?
 
-Please [open an issue](https://github.com/amplitude/developer-api/issues). Good
+Please [open an issue](https://github.com/amplitude/developer-cli/issues). Good
 reports include:
 
 - The `amp` version (`amp --version`)

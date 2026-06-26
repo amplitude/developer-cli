@@ -1,22 +1,22 @@
 {
-  "name": "@amplitude/developer-api",
+  "name": "@amplitude/developer-cli",
   "version": "0.1.0",
   "description": "amp CLI and developer artifacts for managing Amplitude platform primitives via the Developer API",
   "type": "commonjs",
   "license": "MIT",
-  "homepage": "https://github.com/amplitude/developer-api#readme",
+  "homepage": "https://github.com/amplitude/developer-cli#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/amplitude/developer-api.git"
+    "url": "git+https://github.com/amplitude/developer-cli.git"
   },
   "bugs": {
-    "url": "https://github.com/amplitude/developer-api/issues"
+    "url": "https://github.com/amplitude/developer-cli/issues"
   },
   "keywords": [
     "amplitude",
     "cli",
     "amp",
-    "developer-api"
+    "developer-cli"
   ],
   "bin": {
     "amp": "dist/cli.js"
