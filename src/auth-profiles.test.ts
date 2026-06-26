@@ -8,6 +8,7 @@ import {
   envLabel,
   expiryLabel,
   formatProfileList,
+  logoutAllGateDecision,
   maskToken,
   runAuthStatus,
   runAuthToken,
@@ -174,6 +175,20 @@ describe('runAuthUse', () => {
   });
 });
 
+describe('logoutAllGateDecision', () => {
+  it('proceeds when --yes is set', () => {
+    expect(logoutAllGateDecision({ isTTY: false, yes: true })).toBe('proceed');
+  });
+
+  it('confirms interactively when no bypass is given in a TTY', () => {
+    expect(logoutAllGateDecision({ isTTY: true, yes: false })).toBe('confirm');
+  });
+
+  it('blocks in a non-interactive shell without --yes', () => {
+    expect(logoutAllGateDecision({ isTTY: false, yes: false })).toBe('block');
+  });
+});
+
 describe('runLogout', () => {
   const dirs: string[] = [];
   afterEach(() => {
@@ -208,10 +223,13 @@ describe('runLogout', () => {
     return path;
   }
 
-  it('removes a non-default profile and leaves the default untouched', () => {
+  it('removes a non-default profile and leaves the default untouched', async () => {
     const path = seeded();
     const out: string[] = [];
-    runLogout({ profile: 'staging' }, { path, stdout: (l) => out.push(l) });
+    await runLogout(
+      { profile: 'staging' },
+      { path, stdout: (l) => out.push(l) },
+    );
 
     const after = loadStore(path);
     expect(after.profiles.staging).toBeUndefined();
@@ -219,10 +237,10 @@ describe('runLogout', () => {
     expect(out.join('\n')).toMatch(/Logged out of "staging"\./);
   });
 
-  it('clears the default (never auto-promotes) when logging out the default', () => {
+  it('clears the default (never auto-promotes) when logging out the default', async () => {
     const path = seeded();
     const out: string[] = [];
-    runLogout({}, { path, stdout: (l) => out.push(l) });
+    await runLogout({}, { path, stdout: (l) => out.push(l) });
 
     const after = loadStore(path);
     expect(after.profiles.amplitude).toBeUndefined();
@@ -231,25 +249,30 @@ describe('runLogout', () => {
     expect(out.join('\n')).toMatch(/No default set/);
   });
 
-  it('errors with known names on an unknown target', () => {
+  it('errors with known names on an unknown target', async () => {
     const path = seeded();
-    expect(() => runLogout({ profile: 'nope' }, { path })).toThrow(
+    await expect(runLogout({ profile: 'nope' }, { path })).rejects.toThrow(
       /Known: amplitude, staging/,
     );
   });
 
-  it('errors when there is nothing to log out of', () => {
+  it('errors when there is nothing to log out of', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'amp-logout-empty-'));
     dirs.push(dir);
     const path = join(dir, 'credentials.json');
     saveStore(emptyStore(), path);
-    expect(() => runLogout({}, { path })).toThrow(/No profile to log out of/);
+    await expect(runLogout({}, { path })).rejects.toThrow(
+      /No profile to log out of/,
+    );
   });
 
-  it('--all wipes every profile and clears the default', () => {
+  it('--all --yes wipes every profile and clears the default', async () => {
     const path = seeded();
     const out: string[] = [];
-    runLogout({ all: true }, { path, stdout: (l) => out.push(l) });
+    await runLogout(
+      { all: true, yes: true },
+      { path, stdout: (l) => out.push(l), isTTY: false },
+    );
 
     const after = loadStore(path);
     expect(Object.keys(after.profiles)).toEqual([]);
@@ -257,20 +280,67 @@ describe('runLogout', () => {
     expect(out.join('\n')).toMatch(/Removed all 2 profiles/);
   });
 
-  it('--all on an empty store is a no-op message, not an error', () => {
+  it('--all on an empty store is a no-op message, not an error', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'amp-logout-all-empty-'));
     dirs.push(dir);
     const path = join(dir, 'credentials.json');
     saveStore(emptyStore(), path);
     const out: string[] = [];
-    runLogout({ all: true }, { path, stdout: (l) => out.push(l) });
+    await runLogout({ all: true }, { path, stdout: (l) => out.push(l) });
     expect(out.join('\n')).toMatch(/No profiles to remove/);
   });
 
-  it('rejects --all combined with --profile', () => {
-    expect(() =>
+  it('blocks --all without --yes in a non-interactive shell', async () => {
+    const path = seeded();
+    await expect(
+      runLogout({ all: true }, { path, isTTY: false }),
+    ).rejects.toThrow(/Pass --yes to remove every stored profile/);
+    expect(Object.keys(loadStore(path).profiles)).toEqual([
+      'amplitude',
+      'staging',
+    ]);
+  });
+
+  it('aborts --all when confirmation is declined', async () => {
+    const path = seeded();
+    await expect(
+      runLogout(
+        { all: true },
+        {
+          path,
+          isTTY: true,
+          confirm: () => Promise.resolve(false),
+        },
+      ),
+    ).rejects.toThrow(/Aborted/);
+    expect(Object.keys(loadStore(path).profiles)).toEqual([
+      'amplitude',
+      'staging',
+    ]);
+  });
+
+  it('wipes every profile when confirmation is approved', async () => {
+    const path = seeded();
+    const out: string[] = [];
+    await runLogout(
+      { all: true },
+      {
+        path,
+        isTTY: true,
+        confirm: () => Promise.resolve(true),
+        stdout: (l) => out.push(l),
+      },
+    );
+
+    const after = loadStore(path);
+    expect(Object.keys(after.profiles)).toEqual([]);
+    expect(out.join('\n')).toMatch(/Removed all 2 profiles/);
+  });
+
+  it('rejects --all combined with --profile', async () => {
+    await expect(
       runLogout({ all: true, profile: 'staging' }, { path: seeded() }),
-    ).toThrow(/not both/);
+    ).rejects.toThrow(/not both/);
   });
 });
 
@@ -321,6 +391,25 @@ describe('runAuthStatus', () => {
     expect(text).toMatch(/Expires: {2}in 2h 0m/);
     expect(text).not.toContain('eyJ.jwt');
     expect(process.exitCode).not.toBe(1);
+  });
+
+  it('emits plain text without ANSI when stdout is not a TTY', () => {
+    const out: string[] = [];
+    runAuthStatus(
+      {},
+      {
+        store: statusStore(),
+        now: () => NOW,
+        env: {},
+        isTTY: false,
+        stdout: (l) => out.push(l),
+      },
+    );
+    const text = out.join('\n');
+
+    expect(text).toMatch(/Auth status/);
+    expect(text).toMatch(/Source: {3}default profile amplitude/);
+    expect(text).not.toContain(`${String.fromCharCode(0x1b)}[`);
   });
 
   it('exits non-zero with guidance when nothing resolves', () => {

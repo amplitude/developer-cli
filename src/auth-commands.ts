@@ -32,7 +32,23 @@ import {
 import type { TokenResponse } from './oauthResponseSchemas';
 import { askSecret, confirm } from './prompt';
 import { DEFAULT_SCOPES } from './scopes';
-import { terminal } from './terminal';
+import { terminal, terminalForStdout } from './terminal';
+
+export type LogoutAllGateDecision = 'block' | 'confirm' | 'proceed';
+
+/**
+ * Decides whether `amp logout --all` may wipe every stored profile. Mirrors the
+ * DELETE gate: interactive confirm at a TTY, `--yes` in scripts, block otherwise.
+ */
+export function logoutAllGateDecision(options: {
+  isTTY: boolean;
+  yes: boolean;
+}): LogoutAllGateDecision {
+  if (options.yes) {
+    return 'proceed';
+  }
+  return options.isTTY ? 'confirm' : 'block';
+}
 
 /** Builds an OAuth credential record from a freshly minted device-flow token. */
 export function oauthCredentialFromToken(
@@ -301,6 +317,8 @@ interface ProfileCommandDeps {
   path?: string;
   now?: () => number;
   stdout?: (line: string) => void;
+  confirm?: (message: string) => Promise<boolean>;
+  isTTY?: boolean;
 }
 
 /** Reverses a base_url back to its friendly `--env` name when one is known. */
@@ -416,11 +434,12 @@ export function runAuthUse(
  * survivor (the active identity only changes on an explicit command), so
  * logging out the default leaves no default set.
  */
-export function runLogout(
+export async function runLogout(
   flags: Record<string, FlagValue>,
   deps: ProfileCommandDeps = {},
-): void {
+): Promise<void> {
   const emitStdout = deps.stdout ?? ((line) => console.log(line));
+  const confirmLogout = deps.confirm ?? confirm;
   const store = loadStore(deps.path);
 
   if (isFlagEnabled(flags.all)) {
@@ -432,6 +451,25 @@ export function runLogout(
       emitStdout('No profiles to remove.');
       return;
     }
+
+    const decision = logoutAllGateDecision({
+      isTTY: deps.isTTY ?? Boolean(process.stdin.isTTY && process.stdout.isTTY),
+      yes: isFlagEnabled(flags.yes),
+    });
+    if (decision === 'block') {
+      throw new Error(
+        'Pass --yes to remove every stored profile with `amp logout --all`.',
+      );
+    }
+    if (decision === 'confirm') {
+      const approved = await confirmLogout(
+        `Remove all ${count} profile${count === 1 ? '' : 's'}? Stored credentials cannot be recovered.`,
+      );
+      if (!approved) {
+        throw new Error('Aborted.');
+      }
+    }
+
     saveStore(emptyStore(), deps.path);
     emitStdout(
       terminal.success(
@@ -487,6 +525,7 @@ interface AuthStatusDeps {
   now?: () => number;
   env?: NodeJS.ProcessEnv;
   stdout?: (line: string) => void;
+  isTTY?: boolean;
 }
 
 /**
@@ -502,10 +541,11 @@ export function runAuthStatus(
   deps: AuthStatusDeps = {},
 ): void {
   const emitStdout = deps.stdout ?? ((line) => console.log(line));
+  const styled = terminalForStdout(deps.isTTY);
   const now = deps.now?.() ?? Date.now();
   const store = deps.store ?? loadStore();
 
-  emitStdout(`${terminal.heading('Auth status')}\n`);
+  emitStdout(`${styled.heading('Auth status')}\n`);
 
   const emitProfileRows = (name: string, profile: Profile): void => {
     const marker = store.default === name ? ' (default)' : '';
@@ -526,7 +566,7 @@ export function runAuthStatus(
       emitProfileRows(selected.name, selected.profile);
     }
     emitStdout(
-      terminal.warning(error instanceof Error ? error.message : String(error)),
+      styled.warning(error instanceof Error ? error.message : String(error)),
     );
     process.exitCode = 1;
     return;
@@ -534,18 +574,18 @@ export function runAuthStatus(
 
   if (auth.source.startsWith('AMP_TOKEN')) {
     emitStdout(
-      terminal.warning('AMP_TOKEN is set and overrides any stored profile.'),
+      styled.warning('AMP_TOKEN is set and overrides any stored profile.'),
     );
   }
 
-  emitStdout(`Source:   ${terminal.dim(auth.source)}`);
+  emitStdout(`Source:   ${styled.dim(auth.source)}`);
 
   const profile = auth.profile ? getProfile(store, auth.profile) : undefined;
   if (auth.profile && profile) {
     emitProfileRows(auth.profile, profile);
   }
 
-  emitStdout(`Base URL: ${terminal.dim(auth.baseUrl)}`);
+  emitStdout(`Base URL: ${styled.dim(auth.baseUrl)}`);
   emitStdout(`Token:    ${maskToken(auth.token)}`);
 }
 

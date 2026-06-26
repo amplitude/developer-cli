@@ -91,7 +91,7 @@ export async function main(): Promise<void> {
   }
 
   if (command[0] === 'logout' && command.length === 1) {
-    runLogout(flags);
+    await runLogout(flags);
     return;
   }
 
