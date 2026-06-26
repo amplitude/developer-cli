@@ -66,10 +66,10 @@ jobs:
         run: pnpm build
 
       # Authenticates to npm via OIDC Trusted Publishing (id-token: write at the
-      # workflow level). The Trusted Publisher for @amplitude/developer-api must
+      # workflow level). The Trusted Publisher for @amplitude/developer-cli must
       # be configured at
-      # https://www.npmjs.com/package/@amplitude/developer-api/access to trust
-      # repo=amplitude/developer-api, workflow=release-please.yml,
+      # https://www.npmjs.com/package/@amplitude/developer-cli/access to trust
+      # repo=amplitude/developer-cli, workflow=release-please.yml,
       # environment=npm-publish. No NPM_TOKEN required.
       #
       # Pre-1.0 we publish to the `beta` dist-tag so `latest` stays unset until

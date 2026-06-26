@@ -1,4 +1,4 @@
-# developer-api CLI — Agent Instructions
+# developer-cli CLI — Agent Instructions
 
 This package is the `amp` CLI: the human- and agent-facing surface over the
 Amplitude Developer API. It is published as a standalone package, so treat

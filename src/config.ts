@@ -3,7 +3,7 @@ import { apiBaseUrlFromEnv } from './env';
 
 export const DEFAULT_API_BASE_URL = 'https://developer-api.amplitude.com';
 
-// Friendly `--env` names → developer-api base URLs. `auth login` requires an
+// Friendly `--env` names → Developer API base URLs. `auth login` requires an
 // explicit env (or --base-url) when creating a profile — no implicit default —
 // so this map is the ergonomic primitive, not optional sugar.
 //

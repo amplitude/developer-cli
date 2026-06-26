@@ -1,4 +1,4 @@
-# @amplitude/developer-api
+# @amplitude/developer-cli
 
 CLI and developer artifacts for the [Amplitude Developer API](https://developer-api.amplitude.com).
 
@@ -29,14 +29,14 @@ version):
 ## Install
 
 ```bash
-npm install -g @amplitude/developer-api
+npm install -g @amplitude/developer-cli
 amp help
 ```
 
 Or run without installing:
 
 ```bash
-npx @amplitude/developer-api help
+npx @amplitude/developer-cli help
 ```
 
 ## Authentication
