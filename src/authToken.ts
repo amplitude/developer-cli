@@ -1,6 +1,8 @@
 import { createHash, randomBytes } from 'node:crypto';
+import type { Readable } from 'node:stream';
 import { setTimeout as delay } from 'node:timers/promises';
 
+import open from 'open';
 import { z } from 'zod';
 
 import { toOAuthError } from './oauthError';
@@ -55,21 +57,158 @@ export function generatePkcePair(): PkcePair {
   return { codeVerifier, codeChallenge };
 }
 
-// The human-facing prompt (goes to stderr). Shows the verification URL with the
-// user_code already embedded — the /device route reads it from the param, so
-// the user never types it; deliberately omits the secret `device_code`.
+// Prefer the code-embedded URL (the /device route reads user_code from the
+// param, so the user never types it) and fall back to the bare verification_uri.
+function verificationUrl(device: DeviceAuthorizationResponse): string {
+  return device.verification_uri_complete ?? device.verification_uri;
+}
+
+// The human-facing prompt (goes to stderr). Surfaces the user_code as the thing
+// to verify — the browser confirmation page shows the same code, and matching
+// the two is what proves this CLI (not an attacker) initiated the request. We
+// deliberately omit the secret `device_code`. The "Press Enter…" hint and the
+// trailing "Waiting…" line are emitted by the caller, since the hint only
+// applies at a TTY.
 export function formatVerificationPrompt(
   device: DeviceAuthorizationResponse,
 ): string {
-  const url = device.verification_uri_complete ?? device.verification_uri;
-
   return [
-    'To authorize, open this URL in a browser and sign in:',
+    'To authorize, confirm this code in your browser:',
     '',
-    url,
+    `  ${device.user_code}`,
     '',
-    'Waiting for approval…',
+    'At the following url:',
+    '',
+    `  ${verificationUrl(device)}`,
   ].join('\n');
+}
+
+type InteractiveStdin = Readable & {
+  isTTY?: boolean;
+  setRawMode?: (mode: boolean) => void;
+};
+
+// Opens the verification URL when the user presses Enter, without blocking the
+// poll loop (the listener runs on the event loop; the poll keeps awaiting its
+// sleeps). Returns a teardown that restores the terminal and lets the process
+// exit (a resumed stdin keeps Node alive). `open` is fire-and-forget; a spawn
+// failure (sync throw or rejected promise) degrades to a hint, not a dead login.
+//
+// Raw mode is what makes this usable: in cooked mode the TTY echoes every
+// keystroke and turns Enter into a visible newline. Raw mode suppresses both —
+// stray typing is swallowed and only Enter acts — but it also stops Ctrl+C from
+// reaching the default SIGINT handler, so we restore the terminal and re-raise
+// SIGINT ourselves to keep abort working.
+function listenForOpen(
+  url: string,
+  openUrl: (url: string) => Promise<unknown>,
+  stdin: InteractiveStdin,
+  emitStderr: (line: string) => void,
+): () => void {
+  const useRawMode =
+    stdin.isTTY === true && typeof stdin.setRawMode === 'function';
+
+  function restore(): void {
+    stdin.off('data', onData);
+    if (useRawMode) {
+      stdin.setRawMode?.(false);
+    }
+    stdin.pause();
+  }
+
+  function onData(chunk: Buffer | string): void {
+    const input = chunk.toString();
+    if (input.includes('\u0003')) {
+      restore();
+      process.kill(process.pid, 'SIGINT');
+      return;
+    }
+    if (input.includes('\r') || input.includes('\n')) {
+      Promise.resolve()
+        .then(() => openUrl(url))
+        .catch(() =>
+          emitStderr('Could not open a browser. Open the URL above manually.'),
+        );
+    }
+  }
+
+  if (useRawMode) {
+    stdin.setRawMode?.(true);
+  }
+  stdin.on('data', onData);
+  stdin.resume();
+
+  return restore;
+}
+
+// Wires the "Press Enter to open" affordance and returns its teardown. Needs
+// both stdin and stderr to be a TTY: stdin to read the keypress, stderr (where
+// every prompt goes) so the hint is actually visible. Returns undefined when
+// either isn't interactive — piped stdin (agent/CI) has no keypress to listen
+// for, and a redirected stderr would otherwise enable raw mode (the terminal
+// stops echoing) with no on-screen prompt explaining why.
+function startOpenAffordance(
+  device: DeviceAuthorizationResponse,
+  options: DeviceFlowOptions,
+  emitStderr: (line: string) => void,
+): (() => void) | undefined {
+  const stdin = options.stdin ?? process.stdin;
+  if (!stdin.isTTY || process.stderr.isTTY !== true) {
+    return undefined;
+  }
+  emitStderr('\nPress Enter to open it in your browser.');
+  return listenForOpen(
+    verificationUrl(device),
+    options.openUrl ?? open,
+    stdin,
+    emitStderr,
+  );
+}
+
+const SPINNER_FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+const SPINNER_INTERVAL_MS = 80;
+
+interface WaitingIndicatorOptions {
+  // Defaults to whether stderr is a real terminal. Piped output gets a single
+  // static line instead of an animation (no \r tricks, no ANSI escapes).
+  isInteractive?: boolean;
+  // Raw write seam (no trailing newline), for the in-place animation. Defaults
+  // to process.stderr; injected in tests.
+  write?: (chunk: string) => void;
+}
+
+// A braille spinner for the "Waiting…" line. At a TTY it animates in place via
+// carriage return; otherwise it prints the label once. Returns a stop() that
+// halts the timer and clears the spinner line so the next output starts clean.
+// The interval is unref'd so it can never, by itself, keep the process alive.
+export function startWaitingIndicator(
+  label: string,
+  emitStderr: (line: string) => void,
+  options: WaitingIndicatorOptions = {},
+): () => void {
+  const isInteractive = options.isInteractive ?? process.stderr.isTTY === true;
+  if (!isInteractive) {
+    emitStderr(label);
+    return () => {};
+  }
+
+  const write = options.write ?? ((chunk) => void process.stderr.write(chunk));
+  let frame = 0;
+  const render = (): void => {
+    write(`\r${SPINNER_FRAMES[frame]} ${label}`);
+    frame = (frame + 1) % SPINNER_FRAMES.length;
+  };
+
+  render();
+  const timer = setInterval(render, SPINNER_INTERVAL_MS);
+  timer.unref?.();
+
+  return () => {
+    clearInterval(timer);
+    // Carriage return + clear-to-end-of-line wipes the spinner before the next
+    // line (a success message, or the SIGINT-killed prompt) is written.
+    write('\r\u001b[K');
+  };
 }
 
 interface ExchangeResult {
@@ -193,6 +332,11 @@ export interface DeviceFlowOptions {
   now?: () => number;
   // The human prompt (verification URL) goes to stderr.
   stderr?: (line: string) => void;
+  // Interactive input for the "Press Enter to open" affordance. Defaults to the
+  // real process.stdin; the affordance only engages when it's a TTY.
+  stdin?: InteractiveStdin;
+  // Test seam for the browser-open side effect; defaults to the `open` package.
+  openUrl?: (url: string) => Promise<unknown>;
 }
 
 export interface RunAuthTokenOptions extends DeviceFlowOptions {
@@ -247,17 +391,34 @@ export async function requestDeviceToken(
 
   emitStderr(formatVerificationPrompt(deviceAuthorization));
 
-  return pollForToken({
-    exchange: () =>
-      request('POST', '/v1/auth/token', {
-        grant_type: DEVICE_CODE_GRANT_TYPE,
-        device_code: deviceAuthorization.device_code,
-        code_verifier: codeVerifier,
-      }),
-    sleep,
-    intervalSeconds: deviceAuthorization.interval ?? 5,
-    deadline: { now, expiresInSeconds: deviceAuthorization.expires_in },
-  });
+  const stopListening = startOpenAffordance(
+    deviceAuthorization,
+    options,
+    emitStderr,
+  );
+
+  emitStderr('');
+  const stopWaiting = startWaitingIndicator(
+    'Waiting for confirmation…',
+    emitStderr,
+  );
+
+  try {
+    return await pollForToken({
+      exchange: () =>
+        request('POST', '/v1/auth/token', {
+          grant_type: DEVICE_CODE_GRANT_TYPE,
+          device_code: deviceAuthorization.device_code,
+          code_verifier: codeVerifier,
+        }),
+      sleep,
+      intervalSeconds: deviceAuthorization.interval ?? 5,
+      deadline: { now, expiresInSeconds: deviceAuthorization.expires_in },
+    });
+  } finally {
+    stopWaiting();
+    stopListening?.();
+  }
 }
 
 export async function runAuthTokenCommand(

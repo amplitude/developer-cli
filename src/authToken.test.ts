@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { PassThrough } from 'node:stream';
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -7,7 +8,9 @@ import {
   formatVerificationPrompt,
   generatePkcePair,
   pollForToken,
+  requestDeviceToken,
   runAuthTokenCommand,
+  startWaitingIndicator,
 } from './authToken';
 
 describe('generatePkcePair', () => {
@@ -36,6 +39,152 @@ describe('formatVerificationPrompt', () => {
     expect(message).toContain('WDJB-MJHT');
     expect(message).toContain('https://amp.example/device');
     expect(message).not.toContain('SECRET-DEVICE-CODE');
+  });
+});
+
+describe('requestDeviceToken open affordance', () => {
+  const deviceAuthorization = {
+    status: 200,
+    body: {
+      device_code: 'DEVICE-CODE-SECRET',
+      user_code: 'WDJB-MJHT',
+      verification_uri: 'https://amp.example/device',
+      verification_uri_complete:
+        'https://amp.example/device?user_code=WDJB-MJHT',
+      expires_in: 600,
+      interval: 1,
+    },
+  };
+
+  it('opens the verification URL when Enter is pressed at a TTY', async () => {
+    const stdin = Object.assign(new PassThrough(), { isTTY: true });
+    // The affordance needs stderr to be a TTY too (that's where the "Press
+    // Enter" hint shows); restore it so the stub can't leak to other tests.
+    const originalStderrIsTTY = process.stderr.isTTY;
+    process.stderr.isTTY = true;
+    const opened: string[] = [];
+
+    let tokenAttempts = 0;
+    const request = (method: string, path: string) => {
+      if (path.endsWith('/v1/auth/device-authorization')) {
+        return Promise.resolve(deviceAuthorization);
+      }
+      tokenAttempts += 1;
+      if (tokenAttempts < 2) {
+        return Promise.resolve({
+          status: 400,
+          body: { error: 'authorization_pending' },
+        });
+      }
+      return Promise.resolve({
+        status: 200,
+        body: {
+          access_token: 'ACCESS-TOKEN',
+          token_type: 'bearer',
+          expires_in: 3600,
+        },
+      });
+    };
+
+    // Press Enter while the first poll is sleeping, then resolve a tick later so
+    // the stdin data listener (and the open it triggers) has run.
+    const sleep = () => {
+      stdin.write('\n');
+      return new Promise<void>((resolve) => setImmediate(resolve));
+    };
+
+    try {
+      await requestDeviceToken({
+        flow: 'device',
+        request,
+        sleep,
+        now: () => 0,
+        stderr: () => {},
+        stdin,
+        openUrl: (url) => {
+          opened.push(url);
+          return Promise.resolve();
+        },
+      });
+    } finally {
+      process.stderr.isTTY = originalStderrIsTTY;
+    }
+
+    expect(opened).toEqual(['https://amp.example/device?user_code=WDJB-MJHT']);
+  });
+
+  it('skips the affordance (no hint, no open) when stdin is not a TTY', async () => {
+    const stdin = Object.assign(new PassThrough(), { isTTY: false });
+    const opened: string[] = [];
+    const err: string[] = [];
+
+    const request = (method: string, path: string) =>
+      path.endsWith('/v1/auth/device-authorization')
+        ? Promise.resolve(deviceAuthorization)
+        : Promise.resolve({
+            status: 200,
+            body: {
+              access_token: 'ACCESS-TOKEN',
+              token_type: 'bearer',
+              expires_in: 3600,
+            },
+          });
+
+    await requestDeviceToken({
+      flow: 'device',
+      request,
+      sleep: () => Promise.resolve(),
+      now: () => 0,
+      stderr: (line) => err.push(line),
+      stdin,
+      openUrl: (url) => {
+        opened.push(url);
+        return Promise.resolve();
+      },
+    });
+
+    expect(opened).toEqual([]);
+    expect(err.join('\n')).not.toContain('Press Enter');
+  });
+});
+
+describe('startWaitingIndicator', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('animates frames in place at a TTY and clears the line on stop', () => {
+    vi.useFakeTimers();
+    const writes: string[] = [];
+    const stop = startWaitingIndicator('Waiting…', () => {}, {
+      isInteractive: true,
+      write: (chunk) => writes.push(chunk),
+    });
+
+    expect(writes[0]).toBe('\r⠋ Waiting…');
+
+    vi.advanceTimersByTime(80);
+    expect(writes[1]).toBe('\r⠙ Waiting…');
+
+    stop();
+    expect(writes.at(-1)).toBe('\r\u001b[K');
+
+    // No further frames render once stopped.
+    vi.advanceTimersByTime(240);
+    expect(writes.filter((chunk) => chunk.includes('Waiting…')).length).toBe(2);
+  });
+
+  it('prints a single static line when stderr is not a TTY', () => {
+    const lines: string[] = [];
+    const writes: string[] = [];
+    const stop = startWaitingIndicator('Waiting…', (line) => lines.push(line), {
+      isInteractive: false,
+      write: (chunk) => writes.push(chunk),
+    });
+    stop();
+
+    expect(lines).toEqual(['Waiting…']);
+    expect(writes).toEqual([]);
   });
 });
 
