@@ -5,6 +5,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import open from 'open';
 import { z } from 'zod';
 
+import { CLI_VERSION } from './help';
 import { toOAuthError } from './oauthError';
 import {
   type DeviceAuthorizationResponse,
@@ -73,13 +74,13 @@ export function formatVerificationPrompt(
   device: DeviceAuthorizationResponse,
 ): string {
   return [
-    'To authorize, confirm this code in your browser:',
+    'To authorize, confirm this code:',
     '',
     `  ${device.user_code}`,
     '',
     'At the following url:',
     '',
-    `  ${verificationUrl(device)}`,
+    verificationUrl(device),
   ].join('\n');
 }
 
@@ -280,6 +281,96 @@ export async function pollForToken({
   }
 }
 
+export type PollDeviceResult =
+  | { status: 'authorized'; token: TokenResponse }
+  // `interval` is the current poll interval (raised by any `slow_down`), so the
+  // caller can persist it — RFC 8628 §3.5 requires the raised interval to apply
+  // to all subsequent requests, including later poll invocations.
+  | { status: 'pending'; interval: number }
+  | { status: 'expired' }
+  | {
+      status: 'error';
+      error: { code: string; description?: string; hint?: string };
+    };
+
+// RFC 6749 §5.2 transient errors — retry within the bounded window rather than
+// giving up. `server_error` is also the fallback for a non-RFC/non-JSON body
+// (see toOAuthError), so a transient token-endpoint blip never destroys a valid
+// device code.
+const TRANSIENT_OAUTH_ERRORS = new Set([
+  'server_error',
+  'temporarily_unavailable',
+]);
+
+interface PollDeviceBoundedOptions {
+  request: AnonymousRequest;
+  deviceCode: string;
+  codeVerifier: string;
+  intervalSeconds: number;
+  codeExpiresAtMs: number;
+  timeoutSeconds: number;
+  now: () => number;
+  sleep: (seconds: number) => Promise<void>;
+}
+
+// Bounded variant of pollForToken: instead of throwing on deadline, returns a
+// result union so the caller can distinguish "my bounded timeout elapsed but
+// the code is still valid" (pending — safe to resume polling later) from "the
+// device code itself expired" (expired — the user must restart the flow).
+export async function pollDeviceTokenBounded(
+  options: PollDeviceBoundedOptions,
+): Promise<PollDeviceResult> {
+  let interval = options.intervalSeconds;
+  const timeoutDeadlineMs = options.now() + options.timeoutSeconds * 1000;
+
+  for (;;) {
+    const { status, body } = await options.request('POST', '/v1/auth/token', {
+      grant_type: DEVICE_CODE_GRANT_TYPE,
+      device_code: options.deviceCode,
+      code_verifier: options.codeVerifier,
+    });
+
+    if (isOk(status)) {
+      return {
+        status: 'authorized',
+        token: parseResponse(tokenResponseSchema, body, 'token'),
+      };
+    }
+
+    const oauthError = toOAuthError(body);
+    if (oauthError.error === 'slow_down') {
+      // RFC 8628 §3.5: slow_down permanently raises the interval by 5s.
+      interval += 5;
+    } else if (
+      oauthError.error !== 'authorization_pending' &&
+      !TRANSIENT_OAUTH_ERRORS.has(oauthError.error)
+    ) {
+      return oauthError.error === 'expired_token'
+        ? { status: 'expired' }
+        : {
+            status: 'error',
+            error: {
+              code: oauthError.error,
+              description: oauthError.error_description ?? undefined,
+              hint: oauthError.error_hint ?? undefined,
+            },
+          };
+    }
+
+    if (options.now() >= options.codeExpiresAtMs) {
+      return { status: 'expired' };
+    }
+    // Only sleep + re-poll when a full RFC interval still fits before the
+    // deadline. Otherwise return pending now: sleeping the interval would
+    // overshoot the caller's --timeout budget, and a shorter sleep would poll
+    // faster than the interval RFC 8628 §3.5 mandates.
+    if (options.now() + interval * 1000 >= timeoutDeadlineMs) {
+      return { status: 'pending', interval };
+    }
+    await options.sleep(interval);
+  }
+}
+
 export type AnonymousRequest = (
   method: string,
   path: string,
@@ -292,9 +383,21 @@ export type AnonymousRequest = (
 // getJson/requestJson, never throws on a non-2xx — it returns the status and
 // parsed body for the poll loop to interpret. A non-JSON body (e.g. an HTML
 // error page) degrades to the raw text rather than throwing a parse error.
-export function createAnonymousRequest(baseUrl: string): AnonymousRequest {
+export function createAnonymousRequest(
+  baseUrl: string,
+  deviceId?: string,
+): AnonymousRequest {
   return async (method, path, body) => {
-    const headers: Record<string, string> = { Accept: 'application/json' };
+    // Client-context headers, stamped on analytics server-side and sent on every
+    // request: `User-Agent` identifies the API client + version; `Amp-Device-Id`
+    // (when known) carries the persistent install id so the anonymous identity
+    // is stable across invocations. Headers, not the body, so they can't affect
+    // request validation.
+    const headers: Record<string, string> = {
+      Accept: 'application/json',
+      'User-Agent': `amp-cli/${CLI_VERSION}`,
+      ...(deviceId ? { 'Amp-Device-Id': deviceId } : {}),
+    };
     if (body !== undefined) {
       headers['Content-Type'] = 'application/json';
     }
@@ -327,6 +430,8 @@ export interface DeviceFlowOptions {
   flow: string | undefined;
   scope?: string;
   // Token-optional, non-throwing HTTP call against the Developer API endpoints.
+  // The persistent device_id (when known) is carried as a header baked into this
+  // request by createAnonymousRequest — not a device-flow option.
   request: AnonymousRequest;
   sleep?: (seconds: number) => Promise<void>;
   now?: () => number;

@@ -28,13 +28,16 @@ export const CURRENT_VERSION = 1;
 // lenient so a name written by a newer CLI (or before this rule existed)
 // round-trips instead of dropping the profile. Strict identifier charset keeps
 // names safe to interpolate into `auth list` / `status` output (no newlines or
-// control chars to spoof a row) and predictable across tools.
+// control chars to spoof a row) and predictable across tools. `default` is a
+// valid name: it is the profile the CLI targets when --profile is omitted.
 export const profileNameSchema = z
   .string()
   .min(1, 'must not be empty')
   .max(64, 'must be at most 64 characters')
-  .regex(/^[A-Za-z0-9._-]+$/, 'use letters, digits, dot, underscore, or hyphen')
-  .refine((name) => name !== 'default', 'the name "default" is reserved');
+  .regex(
+    /^[A-Za-z0-9._-]+$/,
+    'use letters, digits, dot, underscore, or hyphen',
+  );
 
 /** Throws a friendly error if `name` is not a valid profile name. */
 export function assertValidProfileName(name: string): void {

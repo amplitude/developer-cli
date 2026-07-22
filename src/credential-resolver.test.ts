@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   authorizationHeaderForToken,
   resolveAuth,
+  resolveAuthFromFlags,
 } from './credential-resolver';
 import {
   type CredentialStore,
@@ -173,6 +174,34 @@ describe('resolveAuth', () => {
         now: NOW,
       }).baseUrl,
     ).toBe('https://dev.example.com');
+  });
+});
+
+describe('resolveAuthFromFlags', () => {
+  it('resolves --region into the base URL', () => {
+    const r = resolveAuthFromFlags(
+      { region: 'eu' },
+      { store: oauthStore('p', 'https://prod', FUTURE), now: NOW },
+    );
+    expect(r.baseUrl).toBe('https://developer-api.eu.amplitude.com');
+  });
+
+  it('throws when both --region and --env are given', () => {
+    expect(() =>
+      resolveAuthFromFlags(
+        { region: 'eu', env: 'staging' },
+        { store: oauthStore('p', 'https://prod', FUTURE), now: NOW },
+      ),
+    ).toThrow('Pass either --region or --env, not both.');
+  });
+
+  it('throws when both --region and --env are given even though --base-url would win', () => {
+    expect(() =>
+      resolveAuthFromFlags(
+        { region: 'us', env: 'staging', 'base-url': 'http://localhost:3036' },
+        { store: oauthStore('p', 'https://prod', FUTURE), now: NOW },
+      ),
+    ).toThrow('Pass either --region or --env, not both.');
   });
 });
 

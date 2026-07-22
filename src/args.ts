@@ -27,8 +27,11 @@ const GLOBAL_OPTIONS: CliOptionDefinition[] = [
   { aliases: ['scope'], valueRequirement: 'required' },
   { aliases: ['profile'], valueRequirement: 'required' },
   { aliases: ['env'], valueRequirement: 'required' },
+  { aliases: ['region'], valueRequirement: 'required' },
+  { aliases: ['timeout'], valueRequirement: 'required' },
   { aliases: ['with-token'], valueRequirement: 'optional' },
   { aliases: ['all'], valueRequirement: 'optional' },
+  { aliases: ['force'], valueRequirement: 'optional' },
   { aliases: ['help', 'h'], valueRequirement: 'optional' },
   { aliases: ['version', 'v'], valueRequirement: 'optional' },
 ];

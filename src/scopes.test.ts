@@ -14,4 +14,8 @@ describe('DEFAULT_SCOPES', () => {
     expect(scopes).toContain('mcp:read');
     expect(scopes).toContain('mcp:write');
   });
+
+  it('excludes read:analytics until the OAuth client registers it', () => {
+    expect(DEFAULT_SCOPES.split(' ')).not.toContain('read:analytics');
+  });
 });

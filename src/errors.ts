@@ -30,7 +30,7 @@ function hintForErrorCode(errorCode: string | undefined): string | undefined {
   switch (errorCode) {
     case 'authentication_required':
     case 'invalid_token':
-      return 'Run `amp auth login`, or set AMP_TOKEN for a single shell.';
+      return 'Interactive: `amp auth login`. Agents/CI: `amp auth login start` then `amp auth login poll`, or `amp auth pat --with-token`, or set AMP_TOKEN.';
     case 'insufficient_scope':
       return 'Run `amp context` to inspect your token, then re-authenticate with the required access (`amp auth login`).';
     case 'validation_error':
@@ -39,7 +39,7 @@ function hintForErrorCode(errorCode: string | undefined): string | undefined {
       return 'Verify identifiers such as --project, --flag, and --event.';
     case 'auth_unavailable':
     case 'upstream_error':
-      return 'Retry the request. If it persists, check API status or use --base-url for a different host.';
+      return 'Retry the request. If it persists, check API status or try a different region with --region.';
     default:
       return undefined;
   }

@@ -290,8 +290,8 @@ describe('credential-store', () => {
       }
     });
 
-    it('rejects the reserved name "default"', () => {
-      expect(() => assertValidProfileName('default')).toThrow(/reserved/);
+    it('accepts the name "default" (used as the implicit profile)', () => {
+      expect(() => assertValidProfileName('default')).not.toThrow();
     });
 
     it('rejects whitespace, control chars, slashes, empty, and over-length', () => {

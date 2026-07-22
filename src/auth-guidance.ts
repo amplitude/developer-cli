@@ -1,7 +1,7 @@
 import { apiBaseUrlFromEnv } from './env';
 
 export const DEFAULT_APP_ORIGIN = 'https://app.amplitude.com';
-export const EU_APP_ORIGIN = 'https://eu.amplitude.com';
+export const EU_APP_ORIGIN = 'https://app.eu.amplitude.com';
 export const DEFAULT_ORG_URL = 'amplitude';
 
 const PAT_SETTINGS_SUFFIX = '/settings/profile/personal-access-tokens';
@@ -68,10 +68,11 @@ export function authSetupInstructions(options?: {
     'Authenticate amp with a Personal Access Token (PAT).',
     '',
     'Recommended:',
-    '  amp auth pat --with-token --profile <name> --env <env>',
+    '  amp auth pat --with-token --region <us|eu>',
     '',
     'That prints the PAT settings page and reads the token from stdin (or a',
-    'masked prompt at a terminal), saving it as a profile for future commands.',
+    'masked prompt at a terminal), saving it as the "default" profile (pass',
+    '--profile <name> to use a different one) for future commands.',
     '',
     'Manual setup:',
     `  ${setupUrl}`,

@@ -5,42 +5,42 @@ OpenAPI spec. A handwritten runtime in `src/cli.ts` maps flags to HTTP requests.
 
 ## Authentication
 
-Authenticate via the OAuth device flow and save the result as a named profile.
-Creating a profile is force-explicit — name it and pick its environment:
+Authenticate via the OAuth device flow and save the result as a profile. Omit
+`--profile` and the CLI targets `default` — the implicit profile used when you
+don't name one. Picking a region stays explicit:
 
 ```bash
-amp auth login --profile prod --env prod
+amp auth login --region us
 ```
 
-That runs the device flow against the chosen environment's Developer API, saves
+That runs the device flow against the chosen region's Developer API, saves
 the token to `~/.amplitude/amp/credentials.json` (0600), and activates the
-profile. A
-profile binds a credential to an environment (`base_url`), so a staging token
-can never be sent to prod.
+profile. A profile binds a credential to a region (`base_url`), so an EU
+token can never be sent to prod.
 
 ```bash
-amp auth login --profile staging --env staging   # activates staging
+amp auth login --profile eu --region eu          # activates the EU profile
 amp auth use prod                                 # switch (no re-auth)
 amp auth list                                     # * marks the active profile
 amp auth status                                   # type, base URL, expiry
-amp logout --profile staging                      # remove one
+amp logout --profile eu                           # remove one
 amp logout --all                                   # remove every profile
 ```
 
-A bare `amp auth login` re-authenticates the active profile in place (env from
-its record). `--env` maps `local|dev|staging|prod|prod-eu` to a base URL; pass
-`--base-url <url>` instead to target an arbitrary host.
+A bare `amp auth login` re-authenticates the active profile in place (region
+from its record). `--region` maps `us|eu` to a base URL.
 
 To use a Personal Access Token instead of the device flow:
 
 ```bash
-echo "$PAT" | amp auth pat --with-token --profile ci --env prod   # stdin
-amp auth pat --with-token --profile ci --env prod                 # masked prompt at a TTY
+echo "$PAT" | amp auth pat --with-token --region us            # stdin → "default" profile
+amp auth pat --with-token --profile ci --region us             # name it; masked prompt at a TTY
 ```
 
 `--with-token` reads the PAT from stdin when piped (the agent / CI path) or a
-masked prompt at a terminal (the human path). Same force-explicit create rule
-and store as `login`; the credential is saved as `{ "type": "pat" }`.
+masked prompt at a terminal (the human path). Same rules as `login`: `--profile`
+is optional (defaults to `default`) and `--region` is required to create a
+profile; the credential is saved as `{ "type": "pat" }`.
 
 `--with-token` is mandatory: it makes the supply-an-existing-PAT path explicit
 and keeps the bare `amp auth pat` verb reserved.
@@ -54,7 +54,7 @@ profile; `amp auth status` announces when it is in effect.
 
 ```bash
 export AMP_TOKEN=amp_...        # one-off / CI; overrides stored profiles
-export AMP_PROFILE=staging      # select a stored profile by name
+export AMP_PROFILE=eu           # select a stored profile by name
 ```
 
 Accepted forms for `--token` / `AMP_TOKEN`:
@@ -85,8 +85,7 @@ Route-level scopes are defined on each OpenAPI operation (`x-required-scopes`).
 
 | Flag / env                              | Purpose                                    |
 | --------------------------------------- | ------------------------------------------ |
-| `--base-url` / `AMP_API_BASE_URL`       | API host (default: prod)                   |
-| `--env <env>`                           | Friendly env name → base URL               |
+| `--region <us\|eu>`                     | Data region name → base URL                |
 | `--profile <name>` / `AMP_PROFILE`      | Select a stored profile                    |
 | `--token` / `AMP_TOKEN` / saved profile | Auth token                                 |
 | `--json`                                | Force raw JSON output (default when piped) |
@@ -129,14 +128,6 @@ Manual checklist:
 
 Known issue: `flags update --enabled false` fails for deployment-less flags.
 Avoid that path in smoke tests until it is fixed.
-
-## Local server
-
-Point at a running local server:
-
-```bash
-amp --base-url http://localhost:3036 context
-```
 
 ## Generated files
 

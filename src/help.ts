@@ -135,15 +135,15 @@ function printSurfaceOverview(): string {
   return lines.join('\n');
 }
 
-export function printGlobalHelp(defaultApiBaseUrl: string): void {
+export function printGlobalHelp(): void {
   console.log(`amp ${CLI_VERSION} — Amplitude Developer API CLI
 
 Usage:
-  amp auth login --profile <name> --env <env>   Authenticate and save a profile
-  amp auth <status|list|use|token>              Inspect, switch, or print credentials
-  amp logout [--profile <name>|--all]           Remove a profile (or all)
-  amp version                                   Print CLI version
-  amp help [surface...]                         Explore commands for a product surface
+  amp auth login --region <us|eu>      Authenticate and save a profile
+  amp auth <status|list|use|token>     Inspect, switch, or print credentials
+  amp logout [--profile <name>|--all]  Remove a profile (or all)
+  amp version                          Print CLI version
+  amp help [surface...]                Explore commands for a product surface
 
 ${printSurfaceOverview()}
 
@@ -152,8 +152,7 @@ Explore commands:
   amp <surface> <cmd> --help     Flags and examples for one command
 
 Global flags:
-  --base-url <url>     API base URL, defaults to ${defaultApiBaseUrl}
-  --env <env>          Target env (local|dev|staging|prod|prod-eu); sets the base URL
+  --region <us|eu>     Target region (us|eu); sets the base URL
   --profile <name>     Use a stored profile for this command
   --token <token>      Raw PAT, PAT=<token>, or bearer-compatible token
   --json               Print raw JSON (default when piped)
@@ -164,7 +163,6 @@ Global flags:
 Environment:
   AMP_TOKEN          Raw token (amp_... → PAT, else bearer); overrides stored profiles
   AMP_PROFILE        Stored profile to select by name
-  AMP_API_BASE_URL   API base URL
   ~/.amplitude/amp/credentials.json  Saved profiles from \`amp auth login\``);
 }
 
@@ -175,41 +173,44 @@ export function authHelpText(): string {
     'Authenticate and manage saved credential profiles.',
     '',
     'Usage:',
-    '  amp auth login --profile <name> --env <env>   Device flow → save + activate a profile',
-    '  amp auth login                                Re-authenticate the active profile',
-    '  amp auth pat --with-token --profile <name> --env <env>  Save a supplied PAT (stdin/prompt)',
-    '  amp auth use <name>                           Switch the active profile (no re-auth)',
-    '  amp auth list                                 List profiles (* marks the active one)',
-    '  amp auth status                               Show the active credential and expiry',
-    '  amp auth token                                Print the active access token to stdout',
-    '  amp logout [--profile <name>|--all]           Remove a profile (or all)',
+    '  amp auth login --region <us|eu>             Device flow → save + activate a profile',
+    '  amp auth login                              Re-authenticate the active profile',
+    '  amp auth pat --with-token --region <us|eu>  Save a supplied PAT (stdin/prompt)',
+    '  amp auth use <name>                         Switch the active profile (no re-auth)',
+    '  amp auth list                               List profiles (* marks the active one)',
+    '  amp auth status                             Show the active credential and expiry',
+    '  amp auth token                              Print the active access token to stdout',
+    '  amp logout [--profile <name>|--all]         Remove a profile (or all)',
     '',
     'Examples:',
-    '  amp auth login --profile prod --env prod',
-    '  amp auth login --profile staging --env staging',
+    '  amp auth login --region us',
+    '  amp auth login --profile eu --region eu',
     '  amp auth use prod',
     '  TOKEN=$(amp auth token)',
     '',
-    'Creating a profile is force-explicit: a new profile needs both --profile',
-    '<name> and --env <env> (or --base-url <url>). Re-authenticating an existing',
-    'profile reuses the env recorded on it, so a bare `amp auth login` refreshes',
-    'the active profile in place. Login activates the profile it mints and prints',
-    'the switch; the active identity never changes without a command.',
+    'Creating a profile is force-explicit: --region <us|eu> is required;',
+    '--profile <name> is optional — omit it and the CLI targets the',
+    'implicit `default` profile, created on first use.',
+    'Re-authenticating an existing profile reuses the target recorded on it, so a',
+    'bare `amp auth login` refreshes the active profile in place. Login activates',
+    'the profile it mints and prints the switch; the active identity never changes',
+    'without a command.',
     '',
     'A login requests every scope the CLI can use by default, so all commands',
     'work immediately.',
     '',
+    'Agents / scripting (JSON):',
+    '  amp auth login start --region <us|eu> --json  Begin the device flow',
+    '  amp auth login poll --json                    Complete it (add --timeout <seconds>)',
+    '  Both always emit a JSON envelope — never prose — for scripted use.',
+    '',
     'Environment:',
     '  AMP_TOKEN          Raw token (amp_... → PAT, else bearer); overrides stored profiles',
     '  AMP_PROFILE        Stored profile to select by name',
-    '  AMP_API_BASE_URL   API base URL',
   ].join('\n');
 }
 
-export function printCommandHelp(
-  command: string[],
-  defaultApiBaseUrl: string,
-): void {
+export function printCommandHelp(command: string[]): void {
   if (command.length === 1 && command[0] === 'auth') {
     console.log(authHelpText());
     return;
@@ -227,7 +228,7 @@ export function printCommandHelp(
     return;
   }
 
-  printGlobalHelp(defaultApiBaseUrl);
+  printGlobalHelp();
 }
 
 function printOperationHelp(operation: CliOperation): void {
@@ -255,7 +256,7 @@ function printOperationHelp(operation: CliOperation): void {
 
   lines.push(
     '',
-    'Global flags: --base-url, --token, --json, --yes, --body-json',
+    'Global flags: --token, --json, --yes, --body-json',
     'Run `amp help` for product surfaces.',
   );
 

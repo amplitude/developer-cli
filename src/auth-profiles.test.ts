@@ -1,6 +1,6 @@
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 
 import { afterEach, describe, expect, it } from 'vitest';
 
@@ -10,6 +10,7 @@ import {
   formatProfileList,
   logoutAllGateDecision,
   maskToken,
+  regionLabelForBaseUrl,
   runAuthStatus,
   runAuthToken,
   runAuthUse,
@@ -24,8 +25,24 @@ import {
   setDefault,
   setProfile,
 } from './credential-store';
+import {
+  emptyPending,
+  getPending,
+  loadPending,
+  savePending,
+  setPending,
+} from './pending-store';
 
 const NOW = Date.parse('2026-06-23T12:00:00.000Z');
+
+const pendingEntry = (baseUrl: string) => ({
+  device_code: 'DC',
+  code_verifier: 'CV',
+  base_url: baseUrl,
+  expires_at: '2999-01-01T00:00:00Z',
+  interval: 5,
+  started_at: '2026-07-15T00:00:00.000Z',
+});
 
 function oauthProfile(baseUrl: string, expiresAt: string) {
   return {
@@ -51,6 +68,24 @@ describe('envLabel', () => {
     expect(envLabel('https://custom.example.com')).toBe(
       'https://custom.example.com',
     );
+  });
+});
+
+describe('regionLabelForBaseUrl', () => {
+  it('labels prod as US and prod-eu as EU', () => {
+    expect(regionLabelForBaseUrl('https://developer-api.amplitude.com')).toBe(
+      'US',
+    );
+    expect(
+      regionLabelForBaseUrl('https://developer-api.eu.amplitude.com'),
+    ).toBe('EU');
+  });
+
+  it('returns undefined for internal envs', () => {
+    expect(regionLabelForBaseUrl('http://localhost:3036')).toBeUndefined();
+    expect(
+      regionLabelForBaseUrl('https://developer-api.stag2.amplitude.com'),
+    ).toBeUndefined();
   });
 });
 
@@ -342,6 +377,149 @@ describe('runLogout', () => {
       runLogout({ all: true, profile: 'staging' }, { path: seeded() }),
     ).rejects.toThrow(/not both/);
   });
+
+  it('clears the pending login for the profile being logged out', async () => {
+    const path = seeded();
+    const pendingPath = join(dirname(path), 'pending.json');
+    savePending(
+      setPending(
+        setPending(
+          emptyPending(),
+          'staging',
+          pendingEntry('https://developer-api.stag2.amplitude.com'),
+        ),
+        'amplitude',
+        pendingEntry('https://developer-api.amplitude.com'),
+      ),
+      pendingPath,
+    );
+    await runLogout(
+      { profile: 'staging' },
+      { path, pendingPath, stdout: () => {} },
+    );
+    const after = loadPending(pendingPath);
+    expect(after.pending.staging).toBeUndefined();
+    expect(after.pending.amplitude).toBeDefined();
+  });
+
+  it('--all clears every pending login alongside the profiles', async () => {
+    const path = seeded();
+    const pendingPath = join(dirname(path), 'pending.json');
+    savePending(
+      setPending(
+        emptyPending(),
+        'amplitude',
+        pendingEntry('https://developer-api.amplitude.com'),
+      ),
+      pendingPath,
+    );
+    await runLogout(
+      { all: true, yes: true },
+      { path, pendingPath, isTTY: false, stdout: () => {} },
+    );
+    expect(Object.keys(loadPending(pendingPath).pending)).toEqual([]);
+  });
+
+  it('cancels a pending login for a profile with no stored credential yet', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'amp-logout-pending-cancel-'));
+    dirs.push(dir);
+    const path = join(dir, 'credentials.json');
+    const pendingPath = join(dir, 'pending.json');
+    saveStore(emptyStore(), path);
+    savePending(
+      setPending(
+        emptyPending(),
+        'default',
+        pendingEntry('https://developer-api.amplitude.com'),
+      ),
+      pendingPath,
+    );
+    const out: string[] = [];
+    await runLogout(
+      { profile: 'default' },
+      { path, pendingPath, stdout: (l) => out.push(l) },
+    );
+    expect(getPending(loadPending(pendingPath), 'default')).toBeUndefined();
+    expect(out.join('\n')).toMatch(/Canceled the in-progress login/);
+  });
+
+  it('bare logout cancels a solitary in-progress login with no default set', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'amp-logout-bare-pending-'));
+    dirs.push(dir);
+    const path = join(dir, 'credentials.json');
+    const pendingPath = join(dir, 'pending.json');
+    // Cold `login start`: a pending entry exists but store.default is unset.
+    saveStore(emptyStore(), path);
+    savePending(
+      setPending(
+        emptyPending(),
+        'default',
+        pendingEntry('https://developer-api.amplitude.com'),
+      ),
+      pendingPath,
+    );
+    const out: string[] = [];
+    await runLogout({}, { path, pendingPath, stdout: (l) => out.push(l) });
+    expect(getPending(loadPending(pendingPath), 'default')).toBeUndefined();
+    expect(out.join('\n')).toMatch(/Canceled the in-progress login/);
+  });
+
+  it('bare logout selects the sole live login, ignoring an expired sibling', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'amp-logout-live-plus-expired-'));
+    dirs.push(dir);
+    const path = join(dir, 'credentials.json');
+    const pendingPath = join(dir, 'pending.json');
+    saveStore(emptyStore(), path);
+    let store = emptyPending();
+    store = setPending(
+      store,
+      'live',
+      pendingEntry('https://developer-api.amplitude.com'),
+    );
+    store = setPending(store, 'stale', {
+      ...pendingEntry('https://developer-api.amplitude.com'),
+      device_code: 'STALE',
+      expires_at: '2000-01-01T00:00:00Z',
+    });
+    savePending(store, pendingPath);
+    const out: string[] = [];
+    await runLogout(
+      {},
+      {
+        path,
+        pendingPath,
+        now: () => Date.parse('2026-07-16T00:00:00Z'),
+        stdout: (l) => out.push(l),
+      },
+    );
+    const after = loadPending(pendingPath);
+    expect(getPending(after, 'live')).toBeUndefined();
+    expect(getPending(after, 'stale')?.device_code).toBe('STALE');
+    expect(out.join('\n')).toMatch(/Canceled the in-progress login/);
+  });
+
+  it('--all clears pending even when there are no profiles', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'amp-logout-pending-only-'));
+    dirs.push(dir);
+    const path = join(dir, 'credentials.json');
+    const pendingPath = join(dir, 'pending.json');
+    saveStore(emptyStore(), path);
+    savePending(
+      setPending(
+        emptyPending(),
+        'work',
+        pendingEntry('https://developer-api.amplitude.com'),
+      ),
+      pendingPath,
+    );
+    const out: string[] = [];
+    await runLogout(
+      { all: true },
+      { path, pendingPath, stdout: (l) => out.push(l) },
+    );
+    expect(Object.keys(loadPending(pendingPath).pending)).toEqual([]);
+    expect(out.join('\n')).toMatch(/Cleared 1 in-progress login/);
+  });
 });
 
 describe('maskToken', () => {
@@ -391,6 +569,42 @@ describe('runAuthStatus', () => {
     expect(text).toMatch(/Expires: {2}in 2h 0m/);
     expect(text).not.toContain('eyJ.jwt');
     expect(process.exitCode).not.toBe(1);
+  });
+
+  it('shows the Region line for a prod profile', () => {
+    const out: string[] = [];
+    runAuthStatus(
+      {},
+      {
+        store: statusStore(),
+        now: () => NOW,
+        env: {},
+        stdout: (l) => out.push(l),
+      },
+    );
+    expect(out.join('\n')).toContain(
+      'Region:   US (https://app.amplitude.com/)',
+    );
+  });
+
+  it('omits the Region line for an internal-env profile', () => {
+    const store = setDefault(
+      setProfile(
+        emptyStore(),
+        'staging',
+        oauthProfile(
+          'https://developer-api.stag2.amplitude.com',
+          '2026-06-23T14:00:00.000Z',
+        ),
+      ),
+      'staging',
+    );
+    const out: string[] = [];
+    runAuthStatus(
+      {},
+      { store, now: () => NOW, env: {}, stdout: (l) => out.push(l) },
+    );
+    expect(out.join('\n')).not.toContain('Region:');
   });
 
   it('emits plain text without ANSI when stdout is not a TTY', () => {

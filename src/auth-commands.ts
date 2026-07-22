@@ -2,13 +2,25 @@
 import { text } from 'node:stream/consumers';
 
 import { type FlagValue, isFlagEnabled, stringFlag } from './args';
-import { personalAccessTokenSetupUrl, resolveOrgUrl } from './auth-guidance';
 import {
+  personalAccessTokenSetupUrl,
+  resolveAppOrigin,
+  resolveOrgUrl,
+} from './auth-guidance';
+import {
+  type AnonymousRequest,
   type DeviceFlowOptions,
   createAnonymousRequest,
+  generatePkcePair,
+  pollDeviceTokenBounded,
   requestDeviceToken,
 } from './authToken';
-import { ENV_BASE_URLS, resolveEnvBaseUrl } from './config';
+import { getOrCreateDeviceId } from './cli-state';
+import {
+  assertRegionAndEnvNotBothSet,
+  ENV_BASE_URLS,
+  resolveNamedBaseUrl,
+} from './config';
 import {
   resolveAuthFromFlags,
   selectProfileFromFlags,
@@ -29,7 +41,24 @@ import {
   setDefault,
   setProfile,
 } from './credential-store';
-import type { TokenResponse } from './oauthResponseSchemas';
+import { toOAuthError } from './oauthError';
+import {
+  deviceAuthorizationResponseSchema,
+  type TokenResponse,
+} from './oauthResponseSchemas';
+import {
+  emptyPending,
+  gcExpiredPending,
+  getPending,
+  isPendingExpired,
+  loadPending,
+  type PendingEntry,
+  type PendingStore,
+  pendingPath as defaultPendingPath,
+  removePending,
+  savePending,
+  setPending,
+} from './pending-store';
 import { askSecret, confirm } from './prompt';
 import { DEFAULT_SCOPES } from './scopes';
 import { terminal, terminalForStdout } from './terminal';
@@ -73,26 +102,557 @@ export function oauthCredentialFromToken(
 export function loginBaseUrl(args: {
   baseUrlFlag?: string;
   envFlag?: string;
+  regionFlag?: string;
   existing?: Profile;
 }): string {
+  assertRegionAndEnvNotBothSet(args);
   if (args.baseUrlFlag) {
     return args.baseUrlFlag.replace(/\/$/, '');
   }
-  if (args.envFlag) {
-    return resolveEnvBaseUrl(args.envFlag);
+  const named = resolveNamedBaseUrl({
+    envFlag: args.envFlag,
+    regionFlag: args.regionFlag,
+  });
+  if (named) {
+    return named;
   }
   if (args.existing) {
     return args.existing.base_url;
   }
-  throw new Error(
-    'Creating a profile requires --env <name> or --base-url <url>.',
+  throw new Error('Creating a profile requires --region <us|eu>.');
+}
+
+/**
+ * The profile name a create-or-reauth verb targets: an explicit `--profile`,
+ * else the active pointer (`store.default`), else the implicit `default`
+ * (materialized on first login). Throws when relying on a *set* pointer whose
+ * profile is gone (an orphaned hand-edited default) so the caller matches the
+ * resolver's "No such profile" wording rather than falling into loginBaseUrl's
+ * create-time "requires --env". A cold store (unset pointer) falls through to
+ * `default` and create-mode.
+ */
+export function targetProfileName(
+  store: CredentialStore,
+  requestedName: string | undefined,
+): string {
+  if (requestedName !== undefined) {
+    assertValidProfileName(requestedName);
+    return requestedName;
+  }
+  if (store.default) {
+    if (!getProfile(store, store.default)) {
+      throw new Error(
+        `No such profile: ${store.default}. Run \`amp auth list\`.`,
+      );
+    }
+    return store.default;
+  }
+  return 'default';
+}
+
+/**
+ * Wraps a phase response in the `{ status, message, data | error }` envelope
+ * every agent-driven auth verb emits. `status` is always a string enum;
+ * secrets (`device_code`, `code_verifier`) must never be passed in `data`.
+ */
+export function authFlowJson(
+  payload: {
+    status:
+      | 'verification_required'
+      | 'pending'
+      | 'authorized'
+      | 'expired'
+      | 'error';
+    message: string;
+    data?: Record<string, unknown>;
+    error?: Record<string, unknown>;
+  },
+  isTTY: boolean,
+): string {
+  return isTTY ? JSON.stringify(payload, null, 2) : JSON.stringify(payload);
+}
+
+export interface AuthStartDeps {
+  path?: string;
+  pendingPath?: string;
+  now?: () => number;
+  deviceId?: () => string;
+  stdout?: (line: string) => void;
+  request?: AnonymousRequest;
+  isTTY?: boolean;
+}
+
+/**
+ * `amp auth login start` — device-flow phase 1. Requests a device
+ * authorization, stashes the secret `device_code`/`code_verifier` in the
+ * pending-logins store (never emitted), and prints the JSON envelope an agent
+ * relays to the human: the `user_code` to confirm and the poll command to run
+ * next.
+ */
+export async function runAuthLoginStart(
+  flags: Record<string, FlagValue>,
+  deps: AuthStartDeps = {},
+): Promise<void> {
+  const now = deps.now ?? (() => Date.now());
+  const emit = deps.stdout ?? ((line) => console.log(line));
+  const pPath = deps.pendingPath ?? defaultPendingPath();
+  const isTTY = deps.isTTY ?? Boolean(process.stdout.isTTY);
+  const toJson = (payload: Parameters<typeof authFlowJson>[0]): string =>
+    authFlowJson(payload, isTTY);
+
+  // Machine verb: any validation/parse failure must still be a JSON envelope,
+  // never a thrown prose error to stderr.
+  try {
+    const store = loadStore(deps.path);
+    const profileName = targetProfileName(
+      store,
+      stringFlag(flags, ['profile']),
+    );
+    const existing = getProfile(store, profileName);
+    const baseUrl = loginBaseUrl({
+      baseUrlFlag: stringFlag(flags, ['base-url']),
+      envFlag: stringFlag(flags, ['env']),
+      regionFlag: stringFlag(flags, ['region']),
+      existing,
+    });
+
+    if (
+      existing &&
+      existing.base_url !== baseUrl &&
+      !isFlagEnabled(flags.force)
+    ) {
+      emit(
+        toJson({
+          status: 'error',
+          message: `Profile "${profileName}" targets ${existing.base_url}; refusing to silently retarget it to ${baseUrl}. Use a different --profile, or pass --force to overwrite.`,
+          error: { error_code: 'profile_target_conflict' },
+        }),
+      );
+      process.exitCode = 1;
+      return;
+    }
+
+    const request =
+      deps.request ??
+      createAnonymousRequest(baseUrl, (deps.deviceId ?? getOrCreateDeviceId)());
+    const { codeVerifier, codeChallenge } = generatePkcePair();
+    const response = await request('POST', '/v1/auth/device-authorization', {
+      code_challenge: codeChallenge,
+      code_challenge_method: 'S256',
+      scope: DEFAULT_SCOPES,
+    });
+    if (response.status < 200 || response.status >= 300) {
+      const oauthError = toOAuthError(response.body);
+      const detail = oauthError.error_description ?? oauthError.error_hint;
+      emit(
+        toJson({
+          status: 'error',
+          message: `Could not start device authorization: ${detail ?? oauthError.error}.`,
+          error: {
+            error_code: oauthError.error,
+            detail: detail ?? undefined,
+            status: response.status,
+          },
+        }),
+      );
+      process.exitCode = 1;
+      return;
+    }
+    const parsed = deviceAuthorizationResponseSchema.safeParse(response.body);
+    if (!parsed.success) {
+      emit(
+        toJson({
+          status: 'error',
+          message:
+            'The authorization server returned an unexpected device-authorization response.',
+          error: { error_code: 'unexpected_response' },
+        }),
+      );
+      process.exitCode = 1;
+      return;
+    }
+    const device = parsed.data;
+    const expiresAt = new Date(now() + device.expires_in * 1000).toISOString();
+    const entry: PendingEntry = {
+      device_code: device.device_code,
+      code_verifier: codeVerifier,
+      base_url: baseUrl,
+      expires_at: expiresAt,
+      interval: device.interval ?? 5,
+      started_at: new Date(now()).toISOString(),
+    };
+    // Every start mints a fresh code; we never resume (a stale or errored code
+    // must never trap the user). Opportunistically GC expired entries on the way
+    // in, so abandoned logins don't accumulate. After GC, any remaining entry for
+    // this profile is a still-live code being overwritten — flag it so the agent
+    // steers the human to the new code, not one they may already have open.
+    const pending = gcExpiredPending(loadPending(pPath), now());
+    const supersededPriorLogin = pending.pending[profileName] !== undefined;
+    savePending(setPending(pending, profileName, entry), pPath);
+
+    const verificationUrl =
+      device.verification_uri_complete ?? device.verification_uri;
+    const pollCmd = `amp auth login poll --profile ${profileName} --json`;
+    const supersedeNote = supersededPriorLogin
+      ? ' This replaces an earlier in-progress code for this profile — have the user use this one.'
+      : '';
+    emit(
+      toJson({
+        status: 'verification_required',
+        message: `Ask the user to open ${verificationUrl} and confirm code ${device.user_code}, then run \`${pollCmd}\` until it reports authorized. Each poll blocks up to ~${DEFAULT_POLL_TIMEOUT_SECONDS}s by default (pass \`--timeout <seconds>\`, or \`--timeout 0\` for a single check).${supersedeNote}`,
+        data: {
+          user_code: device.user_code,
+          verification_uri: device.verification_uri,
+          verification_uri_complete: verificationUrl,
+          expires_at: expiresAt,
+          expires_in_seconds: device.expires_in,
+          region: regionLabelForBaseUrl(baseUrl)?.toLowerCase(),
+          profile: profileName,
+          scopes: DEFAULT_SCOPES.split(' '),
+        },
+      }),
+    );
+  } catch (error) {
+    emit(
+      toJson({
+        status: 'error',
+        message: error instanceof Error ? error.message : String(error),
+        error: {
+          error_code: 'start_failed',
+          detail: error instanceof Error ? error.message : undefined,
+        },
+      }),
+    );
+    process.exitCode = 1;
+  }
+}
+
+/**
+ * Resolves which profile `amp auth login poll` targets: an explicit
+ * `--profile`, else the sole in-flight pending login, else the store's active
+ * default (when it has a pending entry). Returns an error when there's nothing
+ * to poll, or when more than one pending login exists and none of the above
+ * disambiguates it (we never guess a profile out of several live logins).
+ */
+export function resolvePollProfile(
+  pending: PendingStore,
+  explicit: string | undefined,
+  storeDefault: string | undefined,
+  now: number,
+):
+  | { name: string }
+  | {
+      error: string;
+      code: 'no_pending_login' | 'ambiguous_pending_login';
+    } {
+  if (explicit) {
+    return { name: explicit };
+  }
+  // Only non-expired entries are in-flight. Expired ones are removed lazily
+  // (when poll targets them), so a leftover stale entry must not shadow the live
+  // login or manufacture false ambiguity when --profile is omitted.
+  const live = Object.keys(pending.pending).filter(
+    (name) => !isPendingExpired(pending.pending[name], now),
   );
+  if (live.length === 1) {
+    return { name: live[0] };
+  }
+  if (storeDefault && live.includes(storeDefault)) {
+    return { name: storeDefault };
+  }
+  if (live.length === 0) {
+    return {
+      error: `No login in progress. Start one with \`${loginStartRestartHint()}\`.`,
+      code: 'no_pending_login',
+    };
+  }
+  return {
+    error: `Ambiguous: pending logins for ${live.join(', ')}. Pass --profile <name>.`,
+    code: 'ambiguous_pending_login',
+  };
+}
+
+/**
+ * The `amp auth login start` command to suggest in a restart hint. Derives
+ * `--region <us|eu>` from a pending entry's `base_url` when known (via
+ * `regionLabelForBaseUrl`); falls back to the generic `<us|eu>` placeholder
+ * when there's no entry to derive from, or its base_url isn't a recognized
+ * region (e.g. an internal/dev host).
+ */
+function loginStartRestartHint(baseUrl?: string): string {
+  const region = baseUrl && regionLabelForBaseUrl(baseUrl)?.toLowerCase();
+  return `amp auth login start --region ${region ?? '<us|eu>'} --json`;
+}
+
+export interface AuthPollDeps extends AuthStartDeps {
+  sleep?: (seconds: number) => Promise<void>;
+}
+
+const DEFAULT_POLL_TIMEOUT_SECONDS = 25;
+
+/**
+ * Parses `--timeout` into whole seconds: omitted falls back to the default,
+ * an explicit value must be a finite non-negative integer (0 means single-shot).
+ * Returns `undefined` on invalid input rather than throwing, so the caller can
+ * emit an error envelope instead of crashing the process.
+ */
+function parseTimeoutSeconds(raw: string | undefined): number | undefined {
+  if (raw === undefined) {
+    return DEFAULT_POLL_TIMEOUT_SECONDS;
+  }
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || !Number.isInteger(parsed) || parsed < 0) {
+    return undefined;
+  }
+  return parsed;
+}
+
+/**
+ * `amp auth login poll` — device-flow phase 2. Resolves the in-flight
+ * profile (see `resolvePollProfile`), then makes one bounded poll attempt
+ * against `/v1/auth/token`: `authorized` saves + activates the profile and
+ * clears the pending entry; `pending` reports back (exit 75) for the agent to
+ * retry; `expired`/`error` clear the pending entry and exit non-zero. Never
+ * emits the pending entry's secret `device_code`/`code_verifier`.
+ */
+export async function runAuthLoginPoll(
+  flags: Record<string, FlagValue>,
+  deps: AuthPollDeps = {},
+): Promise<void> {
+  const now = deps.now ?? (() => Date.now());
+  const emit = deps.stdout ?? ((line) => console.log(line));
+  const sleep =
+    deps.sleep ??
+    ((seconds: number) =>
+      new Promise<void>((resolve) => setTimeout(resolve, seconds * 1000)));
+  const pPath = deps.pendingPath ?? defaultPendingPath();
+  const isTTY = deps.isTTY ?? Boolean(process.stdout.isTTY);
+  const toJson = (payload: Parameters<typeof authFlowJson>[0]): string =>
+    authFlowJson(payload, isTTY);
+
+  // Machine verb: any unexpected failure must still be a JSON envelope.
+  try {
+    const store = loadStore(deps.path);
+    const pending = loadPending(pPath);
+    const resolved = resolvePollProfile(
+      pending,
+      stringFlag(flags, ['profile']),
+      store.default,
+      now(),
+    );
+    if ('error' in resolved) {
+      emit(
+        toJson({
+          status: 'error',
+          message: resolved.error,
+          error: { error_code: resolved.code },
+        }),
+      );
+      process.exitCode = 1;
+      return;
+    }
+
+    const name = resolved.name;
+    const entry = getPending(pending, name);
+    if (!entry) {
+      emit(
+        toJson({
+          status: 'error',
+          message: `No pending login for "${name}". Start one with \`${loginStartRestartHint()}\`.`,
+          error: { error_code: 'no_pending_login' },
+        }),
+      );
+      process.exitCode = 1;
+      return;
+    }
+
+    const clearPending = (): void => {
+      const current = loadPending(pPath);
+      // A concurrent `start` may have superseded our entry with a fresh
+      // device_code; only clear the row we were actually polling, never a
+      // newer in-progress login.
+      if (getPending(current, name)?.device_code !== entry.device_code) {
+        return;
+      }
+      savePending(removePending(current, name), pPath);
+    };
+
+    if (isPendingExpired(entry, now())) {
+      clearPending();
+      emit(
+        toJson({
+          status: 'expired',
+          message: `The device code expired before confirmation. Start over with \`${loginStartRestartHint(entry.base_url)}\`.`,
+        }),
+      );
+      process.exitCode = 1;
+      return;
+    }
+
+    const timeoutRaw = stringFlag(flags, ['timeout']);
+    const timeoutSeconds = parseTimeoutSeconds(timeoutRaw);
+    if (timeoutSeconds === undefined) {
+      emit(
+        toJson({
+          status: 'error',
+          message: `Invalid --timeout "${timeoutRaw}". Must be a non-negative integer number of seconds.`,
+          error: { error_code: 'invalid_timeout' },
+        }),
+      );
+      process.exitCode = 1;
+      return;
+    }
+    const request =
+      deps.request ??
+      createAnonymousRequest(
+        entry.base_url,
+        (deps.deviceId ?? getOrCreateDeviceId)(),
+      );
+
+    const result = await pollDeviceTokenBounded({
+      request,
+      deviceCode: entry.device_code,
+      codeVerifier: entry.code_verifier,
+      intervalSeconds: entry.interval,
+      codeExpiresAtMs: Date.parse(entry.expires_at),
+      timeoutSeconds,
+      now,
+      sleep,
+    });
+
+    if (result.status === 'authorized') {
+      const profile: Profile = {
+        base_url: entry.base_url,
+        credential: oauthCredentialFromToken(result.token, now()),
+        saved_at: new Date(now()).toISOString(),
+        store: 'file',
+      };
+      // Re-load right before the write: a concurrent auth may have saved to
+      // the store during the poll's long wait; the stale `store` would clobber it.
+      saveStore(
+        setDefault(setProfile(loadStore(deps.path), name, profile), name),
+        deps.path,
+      );
+      // Profile is now authenticated, so any pending code for it is moot —
+      // clear unconditionally (unlike the error/expired paths, which guard on
+      // device_code to avoid nuking a fresh start). Otherwise a code a
+      // concurrent `start` minted mid-poll would linger and make later polls
+      // misreport `pending` for an already-authenticated profile.
+      savePending(removePending(loadPending(pPath), name), pPath);
+      emit(
+        toJson({
+          status: 'authorized',
+          message: `Logged in; profile "${name}" activated. Confirm with \`amp context --json\`.`,
+          data: {
+            profile: name,
+            base_url: entry.base_url,
+            region: regionLabelForBaseUrl(entry.base_url)?.toLowerCase(),
+            token_expires_at:
+              profile.credential.type === 'oauth'
+                ? profile.credential.expires_at
+                : undefined,
+            scopes: result.token.scope
+              ? result.token.scope.split(' ')
+              : undefined,
+          },
+        }),
+      );
+      return;
+    }
+
+    if (result.status === 'pending') {
+      // Persist a slow_down-raised interval so the next poll subprocess honors it
+      // (RFC 8628 §3.5 — the raised interval applies to all subsequent requests).
+      // Only onto the row we actually polled: a concurrent `start` may have
+      // superseded it, and this slow_down was raised against the old code, so it
+      // must not inflate the fresh code's interval (nor clobber its device_code).
+      const fresh = loadPending(pPath);
+      const current = getPending(fresh, name);
+      if (
+        current &&
+        current.device_code === entry.device_code &&
+        current.interval !== result.interval
+      ) {
+        savePending(
+          setPending(fresh, name, { ...current, interval: result.interval }),
+          pPath,
+        );
+      }
+      emit(
+        toJson({
+          status: 'pending',
+          message: `Not confirmed yet. Re-run \`amp auth login poll --profile ${name} --json\` immediately — it blocks up to ~${timeoutSeconds}s internally; no sleep needed.`,
+          data: {
+            expires_at: entry.expires_at,
+            poll_waits_seconds: timeoutSeconds,
+          },
+        }),
+      );
+      process.exitCode = 75;
+      return;
+    }
+
+    clearPending();
+    if (result.status === 'expired') {
+      emit(
+        toJson({
+          status: 'expired',
+          message: `The device code expired before confirmation. Start over with \`${loginStartRestartHint(entry.base_url)}\`.`,
+        }),
+      );
+    } else {
+      const detail = result.error.description ?? result.error.hint;
+      emit(
+        toJson({
+          status: 'error',
+          message: `Authorization failed: ${detail ?? result.error.code}. Start over with \`${loginStartRestartHint(entry.base_url)}\`.`,
+          error: {
+            error_code: result.error.code,
+            detail: detail ?? undefined,
+          },
+        }),
+      );
+    }
+    process.exitCode = 1;
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    emit(
+      toJson({
+        status: 'error',
+        message: `${detail} The pending login is preserved — re-run the poll command to retry.`,
+        error: {
+          error_code: 'poll_failed',
+          detail: error instanceof Error ? error.message : undefined,
+        },
+      }),
+    );
+    process.exitCode = 1;
+  }
+}
+
+/**
+ * Drops any in-flight `login start` entry for `name`. Completing auth
+ * out-of-band (interactive `login`, `pat`) strands the device-flow code the
+ * agent started; without this a later `login poll` would keep hammering the
+ * abandoned code and reporting `pending` until it expired. No write when
+ * there's nothing pending for the profile.
+ */
+function clearPendingLogin(pendingPath: string, name: string): void {
+  const pending = loadPending(pendingPath);
+  if (!getPending(pending, name)) {
+    return;
+  }
+  savePending(removePending(pending, name), pendingPath);
 }
 
 export interface AuthLoginDeps {
   requestToken?: (options: DeviceFlowOptions) => Promise<TokenResponse>;
   now?: () => number;
   path?: string;
+  pendingPath?: string;
+  // Resolves the stable install device_id. Injected so tests don't touch the
+  // real state file; defaults to reading/minting from ~/.amplitude/amp/state.json.
+  deviceId?: () => string;
   stdout?: (line: string) => void;
   stderr?: (line: string) => void;
   confirm?: (message: string) => Promise<boolean>;
@@ -100,8 +660,9 @@ export interface AuthLoginDeps {
 
 /**
  * `amp auth login` — runs the device flow, saves the token as an OAuth profile,
- * and activates it (announcing the switch). Requires an explicit `--profile`;
- * creating a profile also requires `--env`/`--base-url`.
+ * and activates it (announcing the switch). `--profile` is optional: omitting
+ * it targets the active pointer, else the implicit `default` profile (see
+ * `targetProfileName`). Creating a profile also requires `--env`/`--base-url`.
  */
 export async function runAuthLogin(
   flags: Record<string, FlagValue>,
@@ -112,41 +673,26 @@ export async function runAuthLogin(
   const emitStderr = deps.stderr ?? ((line) => console.error(line));
   const confirmOverwrite = deps.confirm ?? confirm;
   const requestToken = deps.requestToken ?? requestDeviceToken;
+  const resolveDeviceId = deps.deviceId ?? getOrCreateDeviceId;
 
   const store = loadStore(deps.path);
 
-  // No --profile re-auths the active profile in place (force-explicit applies to
-  // *creating* a profile, not refreshing one — the default's env+name are already
-  // recorded). With no default there's nothing to refresh, so require both flags.
-  // Validate the user-supplied name only; a stored default was already validated
-  // when it was created.
-  const requestedName = stringFlag(flags, ['profile']);
-  if (requestedName !== undefined) {
-    assertValidProfileName(requestedName);
-  }
-  const profileName = requestedName ?? store.default;
-  if (!profileName) {
-    throw new Error(
-      'No default profile to re-authenticate. Run `amp auth login --profile <name> --env <env>`.',
-    );
-  }
-
+  const profileName = targetProfileName(store, stringFlag(flags, ['profile']));
   const existing = getProfile(store, profileName);
 
-  // Orphan default: the name came from the store's `default` but that profile is
-  // gone (e.g. a hand-edited file). The user meant to refresh, not create, so
-  // match the resolver's "No such profile" instead of falling into
-  // loginBaseUrl's misleading "creating a profile requires --env" error. A
-  // user-supplied --profile with no match is the legitimate create path.
-  if (requestedName === undefined && !existing) {
-    throw new Error(`No such profile: ${profileName}. Run \`amp auth list\`.`);
-  }
-
+  const regionFlag = stringFlag(flags, ['region']);
+  const baseUrlFlag = stringFlag(flags, ['base-url']);
   const baseUrl = loginBaseUrl({
-    baseUrlFlag: stringFlag(flags, ['base-url']),
+    baseUrlFlag,
     envFlag: stringFlag(flags, ['env']),
+    regionFlag,
     existing,
   });
+  if (regionFlag && !baseUrlFlag) {
+    emitStdout(
+      `Authenticating to ${resolveAppOrigin({ apiBaseUrl: baseUrl })}/`,
+    );
+  }
 
   // Reusing a name for a different target is almost always a mistake — confirm
   // before clobbering. Same target is a silent refresh.
@@ -162,7 +708,7 @@ export async function runAuthLogin(
   const token = await requestToken({
     flow: stringFlag(flags, ['flow']) ?? 'device',
     scope: stringFlag(flags, ['scope']) ?? DEFAULT_SCOPES,
-    request: createAnonymousRequest(baseUrl),
+    request: createAnonymousRequest(baseUrl, resolveDeviceId()),
     stderr: emitStderr,
   });
 
@@ -178,6 +724,7 @@ export async function runAuthLogin(
     setDefault(setProfile(store, profileName, profile), profileName),
     deps.path,
   );
+  clearPendingLogin(deps.pendingPath ?? defaultPendingPath(), profileName);
 
   const verb = existing ? 'updated' : 'created';
   const wasNote =
@@ -225,6 +772,7 @@ async function readWithToken(
 
 export interface AuthPatDeps {
   path?: string;
+  pendingPath?: string;
   now?: () => number;
   stdout?: (line: string) => void;
   confirm?: (message: string) => Promise<boolean>;
@@ -235,8 +783,10 @@ export interface AuthPatDeps {
 /**
  * `amp auth pat --with-token` — save a supplied Personal Access Token as a
  * profile and activate it. The token is read from stdin when piped, or a masked
- * prompt at a TTY. Force-explicit like login: a new profile needs --profile and
- * --env/--base-url; re-auth of an existing profile reuses its recorded env.
+ * prompt at a TTY. `--profile` is optional: omitting it targets the active
+ * pointer, else the implicit `default` profile (see `targetProfileName`).
+ * Creating a profile still requires `--env`/`--base-url`; re-auth of an
+ * existing profile reuses its recorded env.
  *
  * `--with-token` is mandatory: it makes the supply-an-existing-PAT path
  * explicit and keeps the bare `amp auth pat` verb reserved.
@@ -251,23 +801,26 @@ export async function runAuthPat(
     );
   }
 
-  const profileName = stringFlag(flags, ['profile']);
-  if (!profileName) {
-    throw new Error('`amp auth pat` requires --profile <name>.');
-  }
-  assertValidProfileName(profileName);
-
   const now = deps.now ?? (() => Date.now());
   const emitStdout = deps.stdout ?? ((line) => console.log(line));
   const confirmOverwrite = deps.confirm ?? confirm;
 
   const store = loadStore(deps.path);
+  const profileName = targetProfileName(store, stringFlag(flags, ['profile']));
   const existing = getProfile(store, profileName);
+  const regionFlag = stringFlag(flags, ['region']);
+  const baseUrlFlag = stringFlag(flags, ['base-url']);
   const baseUrl = loginBaseUrl({
-    baseUrlFlag: stringFlag(flags, ['base-url']),
+    baseUrlFlag,
     envFlag: stringFlag(flags, ['env']),
+    regionFlag,
     existing,
   });
+  if (regionFlag && !baseUrlFlag) {
+    emitStdout(
+      `Authenticating to ${resolveAppOrigin({ apiBaseUrl: baseUrl })}/`,
+    );
+  }
 
   // Reusing a name for a different target is almost always a mistake — confirm
   // before clobbering. Same target is a silent refresh.
@@ -300,6 +853,7 @@ export async function runAuthPat(
     setDefault(setProfile(store, profileName, profile), profileName),
     deps.path,
   );
+  clearPendingLogin(deps.pendingPath ?? defaultPendingPath(), profileName);
 
   const verb = existing ? 'updated' : 'created';
   const wasNote =
@@ -315,6 +869,7 @@ export async function runAuthPat(
 
 interface ProfileCommandDeps {
   path?: string;
+  pendingPath?: string;
   now?: () => number;
   stdout?: (line: string) => void;
   confirm?: (message: string) => Promise<boolean>;
@@ -329,6 +884,17 @@ export function envLabel(baseUrl: string): string {
     }
   }
   return baseUrl;
+}
+
+/** US/EU label for `auth status`, shown only for prod/prod-eu profiles. */
+export function regionLabelForBaseUrl(baseUrl: string): string | undefined {
+  if (baseUrl === ENV_BASE_URLS.prod) {
+    return 'US';
+  }
+  if (baseUrl === ENV_BASE_URLS['prod-eu']) {
+    return 'EU';
+  }
+  return undefined;
 }
 
 function humanizeDuration(ms: number): string {
@@ -429,7 +995,8 @@ export function runAuthUse(
 
 /**
  * `amp logout [--profile <name> | --all]` — remove a profile, or wipe the whole
- * store with `--all`. Target resolution is `--profile` > default > error. Clears
+ * store with `--all`. Target resolution is `--profile` > default > a solitary
+ * in-progress login > error. Clears
  * `default` if it pointed at the removed profile and never auto-promotes a
  * survivor (the active identity only changes on an explicit command), so
  * logging out the default leaves no default set.
@@ -440,6 +1007,8 @@ export async function runLogout(
 ): Promise<void> {
   const emitStdout = deps.stdout ?? ((line) => console.log(line));
   const confirmLogout = deps.confirm ?? confirm;
+  const now = deps.now ?? (() => Date.now());
+  const pPath = deps.pendingPath ?? defaultPendingPath();
   const store = loadStore(deps.path);
 
   if (isFlagEnabled(flags.all)) {
@@ -447,54 +1016,99 @@ export async function runLogout(
       throw new Error('Pass either --profile <name> or --all, not both.');
     }
     const count = Object.keys(store.profiles).length;
-    if (count === 0) {
+    const pendingCount = Object.keys(loadPending(pPath).pending).length;
+    if (count === 0 && pendingCount === 0) {
       emitStdout('No profiles to remove.');
       return;
     }
 
-    const decision = logoutAllGateDecision({
-      isTTY: deps.isTTY ?? Boolean(process.stdin.isTTY && process.stdout.isTTY),
-      yes: isFlagEnabled(flags.yes),
-    });
-    if (decision === 'block') {
-      throw new Error(
-        'Pass --yes to remove every stored profile with `amp logout --all`.',
-      );
-    }
-    if (decision === 'confirm') {
-      const approved = await confirmLogout(
-        `Remove all ${count} profile${count === 1 ? '' : 's'}? Stored credentials cannot be recovered.`,
-      );
-      if (!approved) {
-        throw new Error('Aborted.');
+    // Gate protects stored credentials; only apply it when there are profiles
+    // to remove. An in-flight pending login is transient, so clearing it alone
+    // needs no confirmation.
+    if (count > 0) {
+      const decision = logoutAllGateDecision({
+        isTTY:
+          deps.isTTY ?? Boolean(process.stdin.isTTY && process.stdout.isTTY),
+        yes: isFlagEnabled(flags.yes),
+      });
+      if (decision === 'block') {
+        throw new Error(
+          'Pass --yes to remove every stored profile with `amp logout --all`.',
+        );
+      }
+      if (decision === 'confirm') {
+        const approved = await confirmLogout(
+          `Remove all ${count} profile${count === 1 ? '' : 's'}? Stored credentials cannot be recovered.`,
+        );
+        if (!approved) {
+          throw new Error('Aborted.');
+        }
       }
     }
 
     saveStore(emptyStore(), deps.path);
+    savePending(emptyPending(), pPath);
     emitStdout(
       terminal.success(
-        `Removed all ${count} profile${count === 1 ? '' : 's'}. No credentials remain — run \`amp auth login\`.`,
+        count > 0
+          ? `Removed all ${count} profile${count === 1 ? '' : 's'}. No credentials remain — run \`amp auth login\`.`
+          : `Cleared ${pendingCount} in-progress login${pendingCount === 1 ? '' : 's'}.`,
       ),
     );
     return;
   }
 
-  const target = stringFlag(flags, ['profile']) ?? store.default;
+  const pending = loadPending(pPath);
+  // A cold `login start` leaves a pending entry but no store default yet, so
+  // fall back to a solitary in-progress login — otherwise bare `logout` can't
+  // cancel it, though `logout --profile <name>` can. Only live entries count
+  // (expired ones are GC'd lazily), matching how `login poll` disambiguates.
+  const livePending = Object.keys(pending.pending).filter(
+    (name) => !isPendingExpired(pending.pending[name], now()),
+  );
+  const target =
+    stringFlag(flags, ['profile']) ??
+    store.default ??
+    (livePending.length === 1 ? livePending[0] : undefined);
 
   if (!target) {
     throw new Error(
       'No profile to log out of. Pass --profile <name> or set a default with `amp auth use`.',
     );
   }
-  if (!getProfile(store, target)) {
+  const hasProfile = getProfile(store, target) !== undefined;
+  const hasPending = getPending(pending, target) !== undefined;
+  // A `start`ed-but-never-completed login has a pending entry with no stored
+  // profile yet (e.g. first-time `default`). `logout --profile <name>` must be
+  // able to cancel it, so only error when there's neither a profile nor a
+  // pending login to remove.
+  if (!hasProfile && !hasPending) {
     const known = Object.keys(store.profiles);
     throw new Error(
       `No such profile: ${target}.${known.length ? ` Known: ${known.join(', ')}.` : ''}`,
     );
   }
 
-  const wasDefault = store.default === target;
-  const next = removeProfile(store, target);
+  // Drop any in-flight login for this profile — a logout shouldn't leave its
+  // device-flow secrets behind. Re-read immediately before the write so a
+  // `login start` for another profile that landed since the snapshot above
+  // isn't clobbered (same reload-before-mutate rule the poll paths follow).
+  if (hasPending) {
+    savePending(removePending(loadPending(pPath), target), pPath);
+  }
+  if (!hasProfile) {
+    emitStdout(
+      terminal.success(`Canceled the in-progress login for "${target}".`),
+    );
+    return;
+  }
+
+  // Re-read before the write for the same reason as the pending clear above:
+  // another auth for a different profile may have landed since the snapshot at
+  // the top, and removing `target` from a stale store would clobber it.
+  const current = loadStore(deps.path);
+  const wasDefault = current.default === target;
+  const next = removeProfile(current, target);
   saveStore(next, deps.path);
 
   if (wasDefault) {
@@ -585,6 +1199,12 @@ export function runAuthStatus(
     emitProfileRows(auth.profile, profile);
   }
 
+  const region = regionLabelForBaseUrl(auth.baseUrl);
+  if (region) {
+    emitStdout(
+      `Region:   ${region} (${resolveAppOrigin({ apiBaseUrl: auth.baseUrl })}/)`,
+    );
+  }
   emitStdout(`Base URL: ${styled.dim(auth.baseUrl)}`);
   emitStdout(`Token:    ${maskToken(auth.token)}`);
 }

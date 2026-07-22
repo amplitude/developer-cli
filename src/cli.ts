@@ -4,13 +4,14 @@ import { type FlagValue, isFlagEnabled, parseArgs } from './args';
 import {
   runAuthList,
   runAuthLogin,
+  runAuthLoginPoll,
+  runAuthLoginStart,
   runAuthPat,
   runAuthStatus,
   runAuthToken,
   runAuthUse,
   runLogout,
 } from './auth-commands';
-import { DEFAULT_API_BASE_URL } from './config';
 import {
   findOperation,
   formatVersion,
@@ -49,19 +50,42 @@ export async function main(): Promise<void> {
   }
 
   if (command.length === 0) {
-    printGlobalHelp(DEFAULT_API_BASE_URL);
+    printGlobalHelp();
     return;
   }
 
   if (isHelpRequested(command, flags)) {
     const topic = command[0] === 'help' ? command.slice(1) : command;
-    printCommandHelp(topic, DEFAULT_API_BASE_URL);
+    printCommandHelp(topic);
     return;
   }
 
   if (command[0] === 'auth') {
+    if (
+      command.length === 3 &&
+      command[1] === 'login' &&
+      command[2] === 'start'
+    ) {
+      await runAuthLoginStart(flags);
+      return;
+    }
+    if (
+      command.length === 3 &&
+      command[1] === 'login' &&
+      command[2] === 'poll'
+    ) {
+      await runAuthLoginPoll(flags);
+      return;
+    }
     if (command.length === 2 && command[1] === 'login') {
-      await runAuthLogin(flags);
+      const isInteractive = Boolean(
+        process.stdin.isTTY && process.stdout.isTTY,
+      );
+      if (!isInteractive) {
+        await runAuthLoginStart(flags);
+      } else {
+        await runAuthLogin(flags);
+      }
       return;
     }
     if (command.length === 2 && command[1] === 'pat') {
