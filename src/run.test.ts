@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { CliError } from './cli-error';
 import { CLI_OPERATIONS, type CliOperation } from './generated/cli-manifest';
 import { deleteGateDecision, runOperation } from './run';
 
@@ -172,6 +173,22 @@ describe('runOperation', () => {
     expect(init.headers.Authorization).toBe('Bearer PAT=amp_secret');
   });
 
+  it('validates flags before resolving credentials: a missing required flag surfaces usage_error even with an unresolvable profile', async () => {
+    const error: unknown = await runOperation(operation(['events', 'get']), {
+      profile: '__nope__',
+      event: 'signup',
+      // --project omitted: should fail validation before touching auth.
+    }).catch((caught: unknown) => caught);
+
+    expect(error).toBeInstanceOf(CliError);
+    if (!(error instanceof CliError)) {
+      throw new Error('Expected a CliError.');
+    }
+    expect(error.errorCode).toBe('usage_error');
+    expect(error.exitCode).toBe(2);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it('throws a formatted error on non-2xx responses', async () => {
     fetchMock.mockResolvedValue(
       jsonResponse(403, { detail: 'insufficient scope' }),
@@ -184,6 +201,48 @@ describe('runOperation', () => {
         event: 'signup',
       }),
     ).rejects.toThrow(/403/);
+  });
+
+  it('throws a CliError with exitCode 3 for a 403 insufficient_scope response', async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse(403, {
+        error_code: 'insufficient_scope',
+        title: 'Forbidden',
+        detail: 'Missing scope write:flags',
+      }),
+    );
+
+    const error: unknown = await runOperation(operation(['events', 'get']), {
+      token: 'amp_test',
+      project: '187520',
+      event: 'signup',
+    }).catch((caught: unknown) => caught);
+
+    expect(error).toBeInstanceOf(CliError);
+    if (!(error instanceof CliError)) {
+      throw new Error('Expected a CliError.');
+    }
+    expect(error.errorCode).toBe('insufficient_scope');
+    expect(error.exitCode).toBe(3);
+    expect(error.httpStatus).toBe(403);
+  });
+
+  it('throws a transport CliError when the fetch call rejects', async () => {
+    fetchMock.mockRejectedValue(new TypeError('fetch failed'));
+
+    const error: unknown = await runOperation(operation(['events', 'get']), {
+      token: 'amp_test',
+      project: '187520',
+      event: 'signup',
+    }).catch((caught: unknown) => caught);
+
+    expect(error).toBeInstanceOf(CliError);
+    if (!(error instanceof CliError)) {
+      throw new Error('Expected a CliError.');
+    }
+    expect(error.errorCode).toBe('transport_error');
+    expect(error.exitCode).toBe(5);
+    expect(error.message).toMatch(/Could not reach the API/);
   });
 
   it('blocks a DELETE without --yes in a non-interactive shell', async () => {

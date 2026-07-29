@@ -27,6 +27,8 @@ tags:
     description: Event-property taxonomy operations (scoped to an event).
   - name: Taxonomy User Properties
     description: User-property taxonomy operations (scoped to a project).
+  - name: Analytics
+    description: Saved chart discovery and query operations.
   - name: Feature Flags
     description: Feature flag configuration and rollout operations.
   - name: Auth
@@ -920,6 +922,175 @@ paths:
           $ref: '#/components/responses/Problem'
         '500':
           $ref: '#/components/responses/Problem'
+  /v1/projects/{project_id}/charts:
+    get:
+      tags:
+        - Analytics
+      operationId: listCharts
+      summary: List charts
+      description: |
+        Returns saved charts in the project. Results are paginated with cursor-based
+        pagination. Chart definitions are omitted; use GET chart with
+        `include_definition=true` to retrieve a read-only definition.
+
+        Pagination uses an opaque numeric cursor (offset into the current sorted
+        search result set). Each list query can access at most **10,000** matching
+        charts from the search index; pages beyond that window return fewer items
+        and `next_cursor: null` even when more charts may exist in the project.
+        Use filters (`q`, `chart_type`) to narrow large projects.
+
+        Sortable fields are `updated_at` and `name`; prefix with `-` for descending.
+        Defaults to `-updated_at` (most recently updated first). `created_at` is not
+        supported in this API version.
+      x-required-scopes:
+        - read:analytics
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Query'
+        - $ref: '#/components/parameters/ChartType'
+        - $ref: '#/components/parameters/Sort'
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                  - pagination
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Chart'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+        '400':
+          $ref: '#/components/responses/ValidationProblem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '500':
+          $ref: '#/components/responses/Problem'
+  /v1/projects/{project_id}/charts/{chart_id}:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+      - $ref: '#/components/parameters/ChartId'
+    get:
+      tags:
+        - Analytics
+      operationId: getChart
+      summary: Get chart
+      description: |
+        Returns chart metadata. The chart definition is omitted by default. Set
+        `include_definition=true` to include a read-only definition object. The
+        definition shape is unstable and not intended for authoring.
+      x-required-scopes:
+        - read:analytics
+      parameters:
+        - $ref: '#/components/parameters/IncludeDefinition'
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Chart'
+        '400':
+          $ref: '#/components/responses/ValidationProblem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '500':
+          $ref: '#/components/responses/Problem'
+  /v1/projects/{project_id}/charts/{chart_id}/query:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+      - $ref: '#/components/parameters/ChartId'
+    post:
+      tags:
+        - Analytics
+      operationId: queryChart
+      summary: Query chart
+      description: |
+        Computes and returns normalized results for a saved chart. v1 supports
+        `event_segmentation`, `sessions`, `funnels`, and `retention` chart types;
+        other chart types return `422` with `error_code: unsupported_chart_type`.
+        Results reflect the authenticated caller's project access and chart
+        permissions.
+
+        This POST computes a result and does not mutate state. It is therefore a
+        read operation and does not require an `Idempotency-Key`.
+
+        Omitting `time_range` uses the chart's saved range; if the chart has no
+        saved range, the server defaults to the last 30 days.
+
+        Query is synchronous with bounded defaults. Expensive queries may return
+        `504` when exceeding the server timeout; async query jobs are planned for
+        a follow-up slice. Retryable responses (`429`, `502`, `504`) populate
+        `retry_after_seconds` in the problem body when a delay is advised.
+      x-required-scopes:
+        - read:analytics
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChartQueryRequest'
+      responses:
+        '200':
+          description: Query completed successfully.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/AnalyticsResult'
+        '400':
+          $ref: '#/components/responses/ValidationProblem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '422':
+          description: |
+            Chart type is not supported for public query in this version. The
+            request was understood but cannot be processed. Returned with
+            `error_code: unsupported_chart_type`; `detail` names the chart type
+            and the currently supported set.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '429':
+          $ref: '#/components/responses/Problem'
+        '500':
+          $ref: '#/components/responses/Problem'
+        '502':
+          $ref: '#/components/responses/Problem'
+        '504':
+          description: Query exceeded the synchronous timeout.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
   /v1/projects/{project_id}/flags:
     get:
       tags:
@@ -1179,7 +1350,11 @@ components:
       name: cursor
       in: query
       required: false
-      description: Cursor token from previous list response.
+      description: |
+        Opaque cursor from `pagination.next_cursor` on the previous response.
+        Numeric offsets are capped by the underlying search index (10,000 results
+        per query). Well-formed pagination stops before that window; requests whose
+        cursor would exceed it return 400 `pagination_not_supported`.
       schema:
         type:
           - string
@@ -1198,10 +1373,10 @@ components:
       name: sort
       in: query
       required: false
-      description: Comma-separated sort fields. Prefix with `-` for descending.
+      description: Sort field. Prefix with `-` for descending. Supported values are `updated_at` and `name`.
       schema:
         type: string
-        example: '-created_at,name'
+        example: '-updated_at'
     Query:
       name: q
       in: query
@@ -1262,6 +1437,33 @@ components:
       schema:
         type: string
         minLength: 1
+    ChartId:
+      name: chart_id
+      in: path
+      required: true
+      description: Saved chart identifier.
+      schema:
+        type: string
+        minLength: 1
+    ChartType:
+      name: chart_type
+      in: query
+      required: false
+      description: |
+        Filter list results to a specific chart type. Use `unknown` to return charts
+        whose type is not represented by a public API value.
+      schema:
+        $ref: '#/components/schemas/ChartType'
+    IncludeDefinition:
+      name: include_definition
+      in: query
+      required: false
+      description: |
+        When true, include the read-only chart definition on GET chart. The definition
+        shape is unstable and not intended for authoring.
+      schema:
+        type: boolean
+        default: false
     ExperimentId:
       name: experiment_id
       in: path
@@ -1316,6 +1518,10 @@ components:
           type:
             - string
             - 'null'
+          description: |
+            Cursor for the next page, or `null` on the last page. Chart list
+            responses may stop before all project charts are enumerated because
+            the search backend caps each query at 10,000 sorted hits.
         has_more:
           type: boolean
     ProblemDetails:
@@ -1566,6 +1772,186 @@ components:
         - enum
         - any
         - null
+    Chart:
+      type: object
+      required:
+        - id
+        - object
+        - project_id
+        - name
+        - chart_type
+        - created_at
+        - updated_at
+        - url
+        - archived
+      properties:
+        id:
+          type: string
+          description: Stable chart identifier.
+        object:
+          type: string
+          const: chart
+          description: Resource-type discriminator. Always `chart`.
+        project_id:
+          type: string
+          pattern: ^[0-9]+$
+        name:
+          type: string
+        description:
+          type:
+            - string
+            - 'null'
+        chart_type:
+          $ref: '#/components/schemas/ChartType'
+        created_at:
+          type:
+            - string
+            - 'null'
+          format: date-time
+          description: ISO-8601 creation time, or `null` when unavailable.
+        updated_at:
+          type:
+            - string
+            - 'null'
+          format: date-time
+          description: ISO-8601 last-modified time, or `null` when unavailable.
+        created_by:
+          type:
+            - string
+            - 'null'
+          description: |
+            Chart creator. The creator's email when available, otherwise a login
+            identifier; `null` when the creator cannot be resolved.
+        url:
+          type: string
+          format: uri
+          description: Deep link to the chart in the Amplitude UI.
+        archived:
+          type: boolean
+          description: Whether the chart is archived.
+        definition:
+          type: object
+          additionalProperties: true
+          description: |
+            Read-only chart definition. Returned only when `include_definition=true`
+            on GET chart. Shape is unstable and may change between API versions;
+            not intended for authoring.
+    ChartType:
+      type: string
+      description: |
+        Public chart type discriminator (snake_case). All values may appear on
+        list/get; query returns `422` (`unsupported_chart_type`) for types outside
+        the v1 supported matrix.
+
+        Unsupported or unrecognized chart types are surfaced as `unknown`.
+
+        New chart types may be added over time. Clients should treat `unknown` as
+        "a chart type this API version does not model yet".
+      enum:
+        - event_segmentation
+        - sessions
+        - funnels
+        - retention
+        - composition
+        - revenue_ltv
+        - stickiness
+        - data_table
+        - engagement_matrix
+        - metric_explorer
+        - growth_accounting
+        - impact
+        - users
+        - unknown
+    ChartQueryRequest:
+      type: object
+      description: |
+        v1 query parameters. Filter and group-by overrides are not supported in v1.
+      properties:
+        time_range:
+          $ref: '#/components/schemas/TimeRange'
+        timezone:
+          type: string
+          description: IANA timezone identifier (e.g. `America/New_York`).
+          example: America/New_York
+        exclude_incomplete_datapoints:
+          type: boolean
+          default: false
+          description: |
+            When true, excludes the current incomplete interval from results.
+        group_by_limit:
+          type: integer
+          minimum: 1
+          maximum: 1000
+          default: 10
+          description: Maximum number of breakdown groups returned per series.
+        time_series_limit:
+          type: integer
+          minimum: 0
+          maximum: 1000
+          default: 100
+          description: |
+            Maximum number of time buckets per series. `0` collapses each series to
+            a single scalar aggregate.
+      additionalProperties: false
+    AnalyticsResult:
+      type: object
+      required:
+        - id
+        - object
+        - source_type
+        - source_id
+        - project_id
+        - computed_at
+        - timezone
+        - result_kind
+        - metric_semantics
+        - data
+        - metadata
+        - warnings
+      properties:
+        id:
+          type: string
+          description: Identifier for this query execution.
+        object:
+          type: string
+          const: analytics_result
+          description: Resource-type discriminator. Always `analytics_result`.
+        source_type:
+          type: string
+          enum:
+            - chart
+          description: |
+            Source artifact type. v1 supports `chart` only. `dashboard` and `query`
+            are reserved for future slices.
+        source_id:
+          type: string
+          description: Identifier of the source chart.
+        project_id:
+          type: string
+          pattern: ^[0-9]+$
+        computed_at:
+          type: string
+          format: date-time
+        timezone:
+          type: string
+          description: IANA timezone used for computation.
+        result_kind:
+          $ref: '#/components/schemas/ResultKind'
+        metric_semantics:
+          $ref: '#/components/schemas/MetricSemantics'
+        data:
+          $ref: '#/components/schemas/AnalyticsResultData'
+        metadata:
+          $ref: '#/components/schemas/AnalyticsResultMetadata'
+        warnings:
+          type: array
+          items:
+            type: string
+          description: Non-fatal issues encountered during query execution.
+        truncated:
+          oneOf:
+            - $ref: '#/components/schemas/TruncationInfo'
+            - type: 'null'
     FeatureFlag:
       allOf:
         - $ref: '#/components/schemas/FeatureFlagBase'
@@ -1738,6 +2124,193 @@ components:
           type: string
         id_token:
           type: string
+    TimeRange:
+      type: object
+      required:
+        - start
+        - end
+      properties:
+        start:
+          type: string
+          format: date
+          description: Inclusive start date (project timezone unless `timezone` is set on query).
+        end:
+          type: string
+          format: date
+          description: Inclusive end date.
+      additionalProperties: false
+    ResultKind:
+      type: string
+      description: |
+        High-level shape of the normalized result payload. Adapters set this
+        explicitly per supported chart type; `unknown` means the server could not
+        classify the result shape safely.
+      enum:
+        - timeseries
+        - scalar
+        - funnel
+        - retention
+        - table
+        - unknown
+    RecommendedAggregate:
+      type: string
+      description: |
+        Recommended aggregation method for downstream consumers. Non-additive metrics
+        (e.g. unique users) must not be summed across intervals. `unknown` is used
+        when the adapter cannot determine a safe aggregate; treat values as
+        non-additive in that case.
+      enum:
+        - sum
+        - last
+        - mean
+        - deduped_total
+        - none
+        - unknown
+    MetricSemantics:
+      type: object
+      required:
+        - additive
+        - recommended_aggregate
+      properties:
+        additive:
+          type: boolean
+          description: |
+            When false, values must not be summed across time intervals or groups
+            without understanding deduplication semantics.
+        recommended_aggregate:
+          $ref: '#/components/schemas/RecommendedAggregate'
+        notes:
+          type:
+            - string
+            - 'null'
+          description: Human-readable guidance for interpreting values.
+    ResultDimension:
+      type: object
+      required:
+        - id
+        - label
+        - role
+      properties:
+        id:
+          type: string
+        label:
+          type: string
+        role:
+          type: string
+          enum:
+            - time
+            - segment
+            - breakdown
+            - step
+          description: Role of this dimension in the result.
+    ResultPoint:
+      type: object
+      required:
+        - x
+        - 'y'
+      properties:
+        x:
+          description: Dimension value (typically an ISO date or category label).
+          oneOf:
+            - type: string
+            - type: number
+        'y':
+          type:
+            - number
+            - 'null'
+          description: Metric value at this point.
+        complete:
+          type: boolean
+          description: |
+            When false, the interval is incomplete (current bucket). Only present
+            when `exclude_incomplete_datapoints` is false.
+    ResultSeries:
+      type: object
+      required:
+        - id
+        - label
+        - points
+      properties:
+        id:
+          type: string
+        label:
+          type: string
+        points:
+          type: array
+          items:
+            $ref: '#/components/schemas/ResultPoint'
+        aggregate:
+          type: object
+          description: Optional pre-computed aggregate for the series.
+          properties:
+            value:
+              type:
+                - number
+                - 'null'
+            method:
+              type: string
+          required:
+            - value
+            - method
+    AnalyticsResultData:
+      type: object
+      description: |
+        Normalized result payload. Populated fields depend on `result_kind`.
+        Timeseries and funnel results use `dimensions` and `series`. Table results
+        use `columns` and `rows`.
+      properties:
+        dimensions:
+          type: array
+          items:
+            $ref: '#/components/schemas/ResultDimension'
+        series:
+          type: array
+          items:
+            $ref: '#/components/schemas/ResultSeries'
+        columns:
+          type: array
+          items:
+            type: string
+          description: Column headers for table-shaped results.
+        rows:
+          type: array
+          items:
+            type: array
+            items:
+              oneOf:
+                - type: string
+                - type: number
+                - type: boolean
+                - type: 'null'
+    AnalyticsResultMetadata:
+      type: object
+      description: Echo of effective query parameters and chart context.
+      properties:
+        chart_type:
+          $ref: '#/components/schemas/ChartType'
+        chart_name:
+          type: string
+        time_range:
+          $ref: '#/components/schemas/TimeRange'
+        exclude_incomplete_datapoints:
+          type: boolean
+        group_by_limit:
+          type: integer
+        time_series_limit:
+          type: integer
+      additionalProperties: true
+    TruncationInfo:
+      type: object
+      properties:
+        group_by_limit:
+          type: integer
+          description: Applied group-by limit when breakdown was truncated.
+        time_series_limit:
+          type: integer
+          description: Applied time-series limit when buckets were truncated.
+        reason:
+          type: string
+          description: Human-readable explanation of truncation.
     RolloutWeights:
       type: object
       additionalProperties:

@@ -2,11 +2,14 @@ import { randomUUID } from 'node:crypto';
 
 import {
   type FlagValue,
+  apiGlobalOptionAliases,
   flagValue,
   hasFlag,
   isMissingRequiredValue,
+  nearestAlias,
   stringFlag,
 } from './args';
+import { usageError } from './cli-error';
 import type { CliBodyProperty, CliOperation } from './generated/cli-manifest';
 import { jsonRecordSchema } from './schemas';
 
@@ -53,11 +56,11 @@ function parseScalar(
     if (value === 'false') {
       return false;
     }
-    throw new Error(`Expected boolean value, got ${value}.`);
+    throw usageError(`Expected boolean value, got ${value}.`);
   }
 
   if (typeof value === 'boolean') {
-    throw new Error(`Expected ${type} value, got ${value}.`);
+    throw usageError(`Expected ${type} value, got ${value}.`);
   }
 
   if (type === 'integer' || type === 'number') {
@@ -66,12 +69,23 @@ function parseScalar(
       !Number.isFinite(parsed) ||
       (type === 'integer' && !Number.isInteger(parsed))
     ) {
-      throw new Error(`Expected ${type} value, got ${value}.`);
+      throw usageError(`Expected ${type} value, got ${value}.`);
     }
     return parsed;
   }
 
   return value;
+}
+
+// A raw JSON.parse throws a SyntaxError, which escapes as a generic error/exit
+// 1; a malformed inline JSON value is a local input mistake, so classify it as
+// a usage error (exit 2) that names the flag it came from.
+function parseJsonFlag(raw: string, label: string): unknown {
+  try {
+    return JSON.parse(raw);
+  } catch {
+    throw usageError(`${label} must be valid JSON.`);
+  }
 }
 
 function parseBodyValue(
@@ -87,14 +101,14 @@ function parseBodyValue(
   }
 
   if (property.enum && !property.enum.includes(value)) {
-    throw new Error(
+    throw usageError(
       `Invalid --${property.aliases[0]} ${value}. Allowed: ${property.enum.join(', ')}.`,
     );
   }
 
   if (property.type === 'array') {
     if (value.startsWith('[')) {
-      return JSON.parse(value) as QueryValue[];
+      return parseJsonFlag(value, `--${property.aliases[0]}`) as QueryValue[];
     }
     return value
       .split(',')
@@ -103,7 +117,10 @@ function parseBodyValue(
   }
 
   if (property.type === 'object') {
-    return JSON.parse(value) as Record<string, unknown>;
+    return parseJsonFlag(value, `--${property.aliases[0]}`) as Record<
+      string,
+      unknown
+    >;
   }
 
   return parseScalar(value, property.type, property.nullable);
@@ -117,12 +134,12 @@ function parseBodyJson(
     return {};
   }
   if (raw.trim() === '') {
-    throw new Error('--body-json must be a JSON object.');
+    throw usageError('--body-json must be a JSON object.');
   }
 
-  const result = jsonRecordSchema.safeParse(JSON.parse(raw));
+  const result = jsonRecordSchema.safeParse(parseJsonFlag(raw, '--body-json'));
   if (!result.success) {
-    throw new Error('--body-json must be a JSON object.');
+    throw usageError('--body-json must be a JSON object.');
   }
 
   return result.data;
@@ -142,14 +159,70 @@ function withQuery(path: string, query: Record<string, QueryValue>): string {
   return queryString ? `${path}?${queryString}` : path;
 }
 
+function allowedAliases(operation: CliOperation): Set<string> {
+  const aliases = new Set<string>(apiGlobalOptionAliases());
+  for (const parameter of operation.parameters) {
+    for (const alias of parameter.aliases) {
+      aliases.add(alias);
+    }
+  }
+  for (const property of operation.body) {
+    for (const alias of property.aliases) {
+      aliases.add(alias);
+    }
+  }
+  return aliases;
+}
+
+/**
+ * Flags parse successfully against the global commander option set even when
+ * they belong to a different command (all flags are defined globally, see
+ * args.ts). Left unchecked, a flag meant for another command — e.g. --key on
+ * `flags list` — parses fine and is then silently dropped by the loop below,
+ * which only reads this operation's own parameters/body. Reject anything not
+ * valid for the resolved command before that can happen.
+ *
+ * Shared by both dispatch paths: API operations (via {@link assertKnownFlags},
+ * allowed = globals ∪ the operation's manifest-declared flags) and the
+ * bespoke auth/logout commands in cli.ts (allowed = globals ∪ that command's
+ * catalog-declared flags), so both reject a misplaced/unknown flag the same
+ * way instead of the auth/logout path silently dropping it.
+ */
+export function assertFlagsAllowed(
+  allowed: Set<string>,
+  commandLabel: string,
+  flags: Record<string, FlagValue>,
+): void {
+  for (const key of Object.keys(flags)) {
+    if (allowed.has(key)) {
+      continue;
+    }
+
+    const suggestion = nearestAlias(key, allowed);
+    const hint = suggestion ? ` Did you mean --${suggestion}?` : '';
+    throw usageError(`Unknown flag --${key} for \`${commandLabel}\`.${hint}`);
+  }
+}
+
+export function assertKnownFlags(
+  operation: CliOperation,
+  flags: Record<string, FlagValue>,
+): void {
+  assertFlagsAllowed(
+    allowedAliases(operation),
+    `amp ${operation.command.join(' ')}`,
+    flags,
+  );
+}
+
 export function buildRequest(
   operation: CliOperation,
   flags: Record<string, FlagValue>,
-  authorizationHeader: string,
 ): BuiltRequest {
+  assertKnownFlags(operation, flags);
+
   const headers: Record<string, string> = {
     Accept: 'application/json',
-    Authorization: authorizationHeader,
   };
   const query: Record<string, QueryValue> = {};
   let path = operation.path;
@@ -161,12 +234,14 @@ export function buildRequest(
       isMissingRequiredValue(raw) &&
       parameter.in !== 'header'
     ) {
-      throw new Error(`Missing --${parameter.aliases[0]} <${parameter.name}>.`);
+      throw usageError(
+        `Missing --${parameter.aliases[0]} <${parameter.name}>.`,
+      );
     }
 
     if (parameter.in === 'path') {
       if (typeof raw === 'boolean') {
-        throw new Error(`Expected --${parameter.aliases[0]} to have a value.`);
+        throw usageError(`Expected --${parameter.aliases[0]} to have a value.`);
       }
       path = path.replace(`{${parameter.name}}`, encodeURIComponent(raw ?? ''));
     } else if (parameter.in === 'query' && raw !== undefined) {
@@ -180,14 +255,14 @@ export function buildRequest(
       } else if (typeof raw === 'string') {
         headers[parameter.name] = raw;
       } else if (raw !== undefined) {
-        throw new Error(`Expected --${parameter.aliases[0]} to have a value.`);
+        throw usageError(`Expected --${parameter.aliases[0]} to have a value.`);
       }
     }
   }
 
   const body = parseBodyJson(flags);
   if (operation.body.length === 0 && Object.keys(body).length > 0) {
-    throw new Error(
+    throw usageError(
       `\`amp ${operation.command.join(' ')}\` does not accept a request body.`,
     );
   }
@@ -195,14 +270,14 @@ export function buildRequest(
   for (const property of operation.body) {
     const raw = flagValue(flags, property.aliases);
     if (property.required && raw === '') {
-      throw new Error(`Missing --${property.aliases[0]} <${property.name}>.`);
+      throw usageError(`Missing --${property.aliases[0]} <${property.name}>.`);
     }
     if (
       property.required &&
       raw === undefined &&
       !hasFlag(flags, ['body-json'])
     ) {
-      throw new Error(`Missing --${property.aliases[0]} <${property.name}>.`);
+      throw usageError(`Missing --${property.aliases[0]} <${property.name}>.`);
     }
 
     if (raw !== undefined) {

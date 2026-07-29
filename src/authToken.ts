@@ -5,6 +5,8 @@ import { setTimeout as delay } from 'node:timers/promises';
 import open from 'open';
 import { z } from 'zod';
 
+import { usageError } from './cli-error';
+import { CLI_VERSION } from './help';
 import { toOAuthError } from './oauthError';
 import {
   type DeviceAuthorizationResponse,
@@ -36,7 +38,7 @@ function parseResponse<Schema extends z.ZodType>(
     return result.data;
   }
 
-  throw new Error(
+  throw new Error( // plain-error-ok: device-flow errors are caught and re-emitted as a JSON envelope by `auth login start`/`poll`; only the interactive TTY `auth login` surfaces them as prose.
     `The authorization server returned an unexpected ${description} response.`,
   );
 }
@@ -73,13 +75,13 @@ export function formatVerificationPrompt(
   device: DeviceAuthorizationResponse,
 ): string {
   return [
-    'To authorize, confirm this code in your browser:',
+    'To authorize, confirm this code:',
     '',
     `  ${device.user_code}`,
     '',
     'At the following url:',
     '',
-    `  ${verificationUrl(device)}`,
+    verificationUrl(device),
   ].join('\n');
 }
 
@@ -265,7 +267,7 @@ export async function pollForToken({
       // RFC 8628 §3.5: slow_down permanently raises the interval by 5s.
       interval += 5;
     } else if (code !== 'authorization_pending') {
-      throw new Error(oauthErrorMessage(body));
+      throw new Error(oauthErrorMessage(body)); // plain-error-ok: device-flow errors are caught and re-emitted as a JSON envelope by `auth login start`/`poll`; only the interactive TTY `auth login` surfaces them as prose.
     }
 
     // Give up only after a poll has just come back pending/slow_down and the
@@ -273,10 +275,100 @@ export async function pollForToken({
     // attempt that lands on the deadline still runs and can return a token the
     // user approved during the preceding sleep.
     if (deadline && deadlineMs !== undefined && deadline.now() >= deadlineMs) {
-      throw new Error('The device code has expired before approval.');
+      throw new Error('The device code has expired before approval.'); // plain-error-ok: device-flow errors are caught and re-emitted as a JSON envelope by `auth login start`/`poll`; only the interactive TTY `auth login` surfaces them as prose.
     }
 
     await sleep(interval);
+  }
+}
+
+export type PollDeviceResult =
+  | { status: 'authorized'; token: TokenResponse }
+  // `interval` is the current poll interval (raised by any `slow_down`), so the
+  // caller can persist it — RFC 8628 §3.5 requires the raised interval to apply
+  // to all subsequent requests, including later poll invocations.
+  | { status: 'pending'; interval: number }
+  | { status: 'expired' }
+  | {
+      status: 'error';
+      error: { code: string; description?: string; hint?: string };
+    };
+
+// RFC 6749 §5.2 transient errors — retry within the bounded window rather than
+// giving up. `server_error` is also the fallback for a non-RFC/non-JSON body
+// (see toOAuthError), so a transient token-endpoint blip never destroys a valid
+// device code.
+const TRANSIENT_OAUTH_ERRORS = new Set([
+  'server_error',
+  'temporarily_unavailable',
+]);
+
+interface PollDeviceBoundedOptions {
+  request: AnonymousRequest;
+  deviceCode: string;
+  codeVerifier: string;
+  intervalSeconds: number;
+  codeExpiresAtMs: number;
+  timeoutSeconds: number;
+  now: () => number;
+  sleep: (seconds: number) => Promise<void>;
+}
+
+// Bounded variant of pollForToken: instead of throwing on deadline, returns a
+// result union so the caller can distinguish "my bounded timeout elapsed but
+// the code is still valid" (pending — safe to resume polling later) from "the
+// device code itself expired" (expired — the user must restart the flow).
+export async function pollDeviceTokenBounded(
+  options: PollDeviceBoundedOptions,
+): Promise<PollDeviceResult> {
+  let interval = options.intervalSeconds;
+  const timeoutDeadlineMs = options.now() + options.timeoutSeconds * 1000;
+
+  for (;;) {
+    const { status, body } = await options.request('POST', '/v1/auth/token', {
+      grant_type: DEVICE_CODE_GRANT_TYPE,
+      device_code: options.deviceCode,
+      code_verifier: options.codeVerifier,
+    });
+
+    if (isOk(status)) {
+      return {
+        status: 'authorized',
+        token: parseResponse(tokenResponseSchema, body, 'token'),
+      };
+    }
+
+    const oauthError = toOAuthError(body);
+    if (oauthError.error === 'slow_down') {
+      // RFC 8628 §3.5: slow_down permanently raises the interval by 5s.
+      interval += 5;
+    } else if (
+      oauthError.error !== 'authorization_pending' &&
+      !TRANSIENT_OAUTH_ERRORS.has(oauthError.error)
+    ) {
+      return oauthError.error === 'expired_token'
+        ? { status: 'expired' }
+        : {
+            status: 'error',
+            error: {
+              code: oauthError.error,
+              description: oauthError.error_description ?? undefined,
+              hint: oauthError.error_hint ?? undefined,
+            },
+          };
+    }
+
+    if (options.now() >= options.codeExpiresAtMs) {
+      return { status: 'expired' };
+    }
+    // Only sleep + re-poll when a full RFC interval still fits before the
+    // deadline. Otherwise return pending now: sleeping the interval would
+    // overshoot the caller's --timeout budget, and a shorter sleep would poll
+    // faster than the interval RFC 8628 §3.5 mandates.
+    if (options.now() + interval * 1000 >= timeoutDeadlineMs) {
+      return { status: 'pending', interval };
+    }
+    await options.sleep(interval);
   }
 }
 
@@ -294,7 +386,10 @@ export type AnonymousRequest = (
 // error page) degrades to the raw text rather than throwing a parse error.
 export function createAnonymousRequest(baseUrl: string): AnonymousRequest {
   return async (method, path, body) => {
-    const headers: Record<string, string> = { Accept: 'application/json' };
+    const headers: Record<string, string> = {
+      Accept: 'application/json',
+      'User-Agent': `amp-cli/${CLI_VERSION}`,
+    };
     if (body !== undefined) {
       headers['Content-Type'] = 'application/json';
     }
@@ -308,7 +403,7 @@ export function createAnonymousRequest(baseUrl: string): AnonymousRequest {
     try {
       response = await fetch(`${baseUrl}${path}`, init);
     } catch {
-      throw new Error(`Could not reach the API at ${baseUrl}.`);
+      throw new Error(`Could not reach the API at ${baseUrl}.`); // plain-error-ok: device-flow errors are caught and re-emitted as a JSON envelope by `auth login start`/`poll`; only the interactive TTY `auth login` surfaces them as prose.
     }
 
     const text = await response.text();
@@ -352,11 +447,11 @@ export async function requestDeviceToken(
   options: DeviceFlowOptions,
 ): Promise<TokenResponse> {
   if (!options.flow) {
-    throw new Error('Missing --flow. The only supported value is "device".');
+    throw usageError('Missing --flow. The only supported value is "device".');
   }
 
   if (options.flow !== 'device') {
-    throw new Error(
+    throw usageError(
       `Unsupported --flow "${options.flow}". The only supported value is "device".`,
     );
   }
@@ -380,7 +475,7 @@ export async function requestDeviceToken(
   );
 
   if (!isOk(deviceResponse.status)) {
-    throw new Error(oauthErrorMessage(deviceResponse.body));
+    throw new Error(oauthErrorMessage(deviceResponse.body)); // plain-error-ok: device-flow errors are caught and re-emitted as a JSON envelope by `auth login start`/`poll`; only the interactive TTY `auth login` surfaces them as prose.
   }
 
   const deviceAuthorization = parseResponse(

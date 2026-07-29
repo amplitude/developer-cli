@@ -1,5 +1,10 @@
 import { type FlagValue, stringFlag } from './args';
-import { DEFAULT_API_BASE_URL, resolveEnvBaseUrl } from './config';
+import { authError } from './cli-error';
+import {
+  assertRegionAndEnvNotBothSet,
+  DEFAULT_API_BASE_URL,
+  resolveNamedBaseUrl,
+} from './config';
 import {
   type CredentialStore,
   type Profile,
@@ -83,8 +88,9 @@ export function tokenFromProfile(
   const oauth = oauthCredentialSchema.safeParse(profile.credential);
   if (oauth.success) {
     if (isExpired(oauth.data.expires_at, now)) {
-      throw new Error(
+      throw authError(
         `Stored token for profile "${name}" has expired. Run \`amp auth login\`.`,
+        'invalid_token',
       );
     }
     return oauth.data.access_token;
@@ -95,8 +101,9 @@ export function tokenFromProfile(
     return pat.data.pat;
   }
 
-  throw new Error(
+  throw authError(
     `Profile "${name}" uses an unsupported credential type "${profile.credential.type}". Update the CLI.`,
+    'invalid_token',
   );
 }
 
@@ -182,33 +189,38 @@ export function resolveAuth(input: ResolveInput = {}): ResolvedAuth {
   const name =
     trimmed(input.profileFlag) ?? trimmed(env.AMP_PROFILE) ?? store.default;
   if (name) {
-    throw new Error(`No such profile: ${name}. Run \`amp auth list\`.`);
+    throw authError(`No such profile: ${name}. Run \`amp auth list\`.`);
   }
   // "no profiles at all" vs "profiles exist but none is active" (e.g. just
   // after logging out the default) — the suggested fix differs.
   if (Object.keys(store.profiles).length > 0) {
-    throw new Error(
+    throw authError(
       'No active profile. Run `amp auth use <name>` to pick one (`amp auth list`), or `amp auth login`.',
     );
   }
-  throw new Error('No credentials. Run `amp auth login`.');
+  throw authError('No credentials. Run `amp auth login`.');
 }
 
 /**
  * The base-url override carried by the request flags: explicit `--base-url`
- * wins, else `--env` is mapped through the friendly-name table. Mirrors
- * `loginBaseUrl`'s precedence so a command and a login agree on what an env
- * name means.
+ * wins, else `--region`/`--env` is mapped through resolveNamedBaseUrl. Mirrors
+ * `loginBaseUrl`'s precedence so a command and a login agree on what a region
+ * or env name means.
  */
 function baseUrlOverrideFromFlags(
   flags: Record<string, FlagValue>,
 ): string | undefined {
+  const envFlag = stringFlag(flags, ['env']);
+  const regionFlag = stringFlag(flags, ['region']);
+  assertRegionAndEnvNotBothSet({ envFlag, regionFlag });
   const baseUrl = stringFlag(flags, ['base-url']);
   if (baseUrl) {
     return baseUrl;
   }
-  const env = stringFlag(flags, ['env']);
-  return env ? resolveEnvBaseUrl(env) : undefined;
+  return resolveNamedBaseUrl({
+    envFlag,
+    regionFlag,
+  });
 }
 
 /**

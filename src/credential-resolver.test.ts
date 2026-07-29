@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
+import { CliError } from './cli-error';
 import {
   authorizationHeaderForToken,
   resolveAuth,
+  resolveAuthFromFlags,
 } from './credential-resolver';
 import {
   type CredentialStore,
@@ -110,6 +112,23 @@ describe('resolveAuth', () => {
     ).toThrow(/nope/);
   });
 
+  it('throws a structured CliError with an auth hint on an unknown profile', () => {
+    try {
+      resolveAuth({
+        profileFlag: 'nope',
+        env: {},
+        store: emptyStore(),
+        now: NOW,
+      });
+      expect.unreachable('resolveAuth should have thrown');
+    } catch (error) {
+      if (!(error instanceof CliError)) throw error;
+      expect(error.errorCode).toBe('authentication_required');
+      expect(error.exitCode).toBe(3);
+      expect(error.hint).toBeTruthy();
+    }
+  });
+
   it('throws when the selected oauth token has expired', () => {
     expect(() =>
       resolveAuth({
@@ -118,6 +137,22 @@ describe('resolveAuth', () => {
         now: NOW,
       }),
     ).toThrow(/expired/i);
+  });
+
+  it('throws a structured CliError with an invalid_token code when the stored token has expired', () => {
+    try {
+      resolveAuth({
+        env: {},
+        store: oauthStore('p', 'https://prod', PAST),
+        now: NOW,
+      });
+      expect.unreachable('resolveAuth should have thrown');
+    } catch (error) {
+      if (!(error instanceof CliError)) throw error;
+      expect(error.errorCode).toBe('invalid_token');
+      expect(error.exitCode).toBe(3);
+      expect(error.hint).toBeTruthy();
+    }
   });
 
   it('returns a PAT credential as its raw token', () => {
@@ -142,10 +177,40 @@ describe('resolveAuth', () => {
     );
   });
 
+  it('throws a structured CliError with an invalid_token code for an unsupported credential type', () => {
+    let store = setProfile(emptyStore(), 'sa', {
+      base_url: 'https://prod',
+      credential: { type: 'service_account', client_id: 'c' },
+      saved_at: '2026-06-23T00:00:00.000Z',
+    });
+    store = setDefault(store, 'sa');
+    try {
+      resolveAuth({ env: {}, store, now: NOW });
+      expect.unreachable('resolveAuth should have thrown');
+    } catch (error) {
+      if (!(error instanceof CliError)) throw error;
+      expect(error.errorCode).toBe('invalid_token');
+      expect(error.exitCode).toBe(3);
+      expect(error.hint).toBeTruthy();
+    }
+  });
+
   it('errors with login guidance when the store is empty', () => {
     expect(() =>
       resolveAuth({ env: {}, store: emptyStore(), now: NOW }),
     ).toThrow(/No credentials\. Run `amp auth login`/);
+  });
+
+  it('throws a structured CliError with an authentication_required code when the store is empty', () => {
+    try {
+      resolveAuth({ env: {}, store: emptyStore(), now: NOW });
+      expect.unreachable('resolveAuth should have thrown');
+    } catch (error) {
+      if (!(error instanceof CliError)) throw error;
+      expect(error.errorCode).toBe('authentication_required');
+      expect(error.exitCode).toBe(3);
+      expect(error.hint).toBeTruthy();
+    }
   });
 
   it('points to `auth use` when profiles exist but none is active', () => {
@@ -158,6 +223,23 @@ describe('resolveAuth', () => {
     expect(() => resolveAuth({ env: {}, store, now: NOW })).toThrow(
       /No active profile.*amp auth use/s,
     );
+  });
+
+  it('throws a structured CliError with an authentication_required code when no profile is active', () => {
+    const store = setProfile(emptyStore(), 'p', {
+      base_url: 'https://prod',
+      credential: { type: 'pat', pat: 'amp_x' },
+      saved_at: '2026-06-23T00:00:00.000Z',
+    });
+    try {
+      resolveAuth({ env: {}, store, now: NOW });
+      expect.unreachable('resolveAuth should have thrown');
+    } catch (error) {
+      if (!(error instanceof CliError)) throw error;
+      expect(error.errorCode).toBe('authentication_required');
+      expect(error.exitCode).toBe(3);
+      expect(error.hint).toBeTruthy();
+    }
   });
 
   it('raw-token path defaults base_url and honors AMP_API_BASE_URL', () => {
@@ -173,6 +255,34 @@ describe('resolveAuth', () => {
         now: NOW,
       }).baseUrl,
     ).toBe('https://dev.example.com');
+  });
+});
+
+describe('resolveAuthFromFlags', () => {
+  it('resolves --region into the base URL', () => {
+    const r = resolveAuthFromFlags(
+      { region: 'eu' },
+      { store: oauthStore('p', 'https://prod', FUTURE), now: NOW },
+    );
+    expect(r.baseUrl).toBe('https://developer-api.eu.amplitude.com');
+  });
+
+  it('throws when both --region and --env are given', () => {
+    expect(() =>
+      resolveAuthFromFlags(
+        { region: 'eu', env: 'staging' },
+        { store: oauthStore('p', 'https://prod', FUTURE), now: NOW },
+      ),
+    ).toThrow('Pass either --region or --env, not both.');
+  });
+
+  it('throws when both --region and --env are given even though --base-url would win', () => {
+    expect(() =>
+      resolveAuthFromFlags(
+        { region: 'us', env: 'staging', 'base-url': 'http://localhost:3036' },
+        { store: oauthStore('p', 'https://prod', FUTURE), now: NOW },
+      ),
+    ).toThrow('Pass either --region or --env, not both.');
   });
 });
 

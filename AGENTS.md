@@ -95,3 +95,41 @@ readability; agents want minimal characters.
   never cost correctness).
 - Human-only adornments (spinners, prompts, ANSI codes) leaking into
   non-interactive output.
+
+## Conventions for changing commands (and how they're enforced)
+
+The rubric: the CLI optimizes for the agent characteristics that underpin
+MCP — self-describing, semantic-not-prescriptive, structured/typed, uniform,
+progressive, actionable-failure, stable-identity, explicit — expressed
+CLI-natively rather than as a bolt-on protocol.
+
+**Edit / add / remove a command checklist** — each item names the guard that
+enforces it:
+
+- API commands come from the OpenAPI spec → regenerate (`pnpm generate:cli`);
+  the manifest is the source of truth, never hand-edit `src/generated/**`.
+  (`verify:generated`)
+- Auth/meta commands are hand-authored in `catalog.ts`'s `AUTH_COMMANDS`, kept
+  in sync with the routing in `cli.ts`. (`catalog.test.ts` parity;
+  `auth-flag-coverage.test.ts` proves handlers only read declared/global
+  flags, so the misplaced-flag reject can't false-positive)
+- Every catalog command appears in help + JSON.
+  (`help-drift.test.ts`/`help-json-drift.test.ts`)
+- Only authoritative/sourced fields belong in the catalog — no invented state
+  (e.g. no method-derived `destructive`). Adding a serialized field trips
+  `catalog-shape.test.ts`. Scopes come from the OpenAPI `x-required-scopes`
+  extension.
+- Describe behavior semantically; no audience-targeting or scripted recipes in
+  summaries, descriptions, hints, or help. (`semantic-copy.test.ts`)
+- Reader-aware output: prose at a TTY, JSON when piped or with `--json`
+  (`shouldUseJsonOutput`/`formatJsonOutput`).
+- Failures: a structured JSON error on stderr plus a differentiated exit code
+  via `CliError` — never a bare `Error` for a user-facing failure. Sanctioned
+  exceptions (e.g. a TTY-only cancellation) carry a `// plain-error-ok: <reason>`
+  marker on the throw. (exit-code map in `error-contract.test.ts`; every
+  `throw new Error(` without that marker fails `cli-error-usage.test.ts`)
+  - Exception: the device-flow verbs `auth login start`/`poll` always emit
+    their `{status,message,…}` envelope on **stdout** (it is the command's
+    primary output, relayed to the user), signalling failure via the exit code;
+    `poll` uses exit 75 for a still-`pending` authorization. A thrown `CliError`
+    on these paths keeps its own `error_code`/exit code.

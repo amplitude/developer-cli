@@ -1,6 +1,10 @@
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { resolveBaseUrl } from './config';
+import {
+  resolveBaseUrl,
+  resolveNamedBaseUrl,
+  resolveRegionBaseUrl,
+} from './config';
 
 function restoreEnvValue(key: string, value: string | undefined): void {
   if (value === undefined) {
@@ -35,5 +39,46 @@ describe('resolveBaseUrl', () => {
     expect(() => resolveBaseUrl({ 'base-url': true })).toThrowError(
       'Expected --base-url to have a value.',
     );
+  });
+});
+
+describe('resolveRegionBaseUrl', () => {
+  it('maps us and eu to the prod / prod-eu hosts', () => {
+    expect(resolveRegionBaseUrl('us')).toBe(
+      'https://developer-api.amplitude.com',
+    );
+    expect(resolveRegionBaseUrl('eu')).toBe(
+      'https://developer-api.eu.amplitude.com',
+    );
+  });
+
+  it('throws on an unknown region', () => {
+    expect(() => resolveRegionBaseUrl('apac')).toThrow(
+      'Unknown --region "apac". Known: us, eu.',
+    );
+  });
+});
+
+describe('resolveNamedBaseUrl', () => {
+  it('resolves --region', () => {
+    expect(resolveNamedBaseUrl({ regionFlag: 'us' })).toBe(
+      'https://developer-api.amplitude.com',
+    );
+  });
+
+  it('resolves --env', () => {
+    expect(resolveNamedBaseUrl({ envFlag: 'staging' })).toBe(
+      'https://developer-api.stag2.amplitude.com',
+    );
+  });
+
+  it('returns undefined when neither is given', () => {
+    expect(resolveNamedBaseUrl({})).toBeUndefined();
+  });
+
+  it('throws when both --region and --env are given', () => {
+    expect(() =>
+      resolveNamedBaseUrl({ regionFlag: 'us', envFlag: 'staging' }),
+    ).toThrow('Pass either --region or --env, not both.');
   });
 });

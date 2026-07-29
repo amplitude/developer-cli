@@ -34,8 +34,12 @@ function cellValue(value: unknown): string {
   return String(value);
 }
 
-function normalizeCell(value: string): string {
+export function normalizeWhitespace(value: string): string {
   return value.replace(/\s+/g, ' ').trim();
+}
+
+function normalizeCell(value: string): string {
+  return normalizeWhitespace(value);
 }
 
 function maxWidth(column: string): number {
