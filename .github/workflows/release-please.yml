@@ -20,11 +20,13 @@ jobs:
       # Mint a GitHub App installation token so release-please's PRs trigger
       # downstream workflows (GITHUB_TOKEN-authored events do not, by design,
       # which would leave required checks unrun and the Release PR BLOCKED).
+      # Org secrets (shared with Amplitude-TypeScript / wizard release automation).
+      # Infra must grant amplitude/developer-cli access to these org secrets.
       - uses: actions/create-github-app-token@df432ceedc7162793a195dd1713ff69aefc7379e # v2.0.6
         id: app-token
         with:
-          app-id: ${{ secrets.RELEASE_PLEASE_APP_ID }}
-          private-key: ${{ secrets.RELEASE_PLEASE_APP_PRIVATE_KEY }}
+          app-id: ${{ secrets.AMPLITUDE_DEV_EXP_APP_ID }}
+          private-key: ${{ secrets.AMPLITUDE_DEV_EXP_PRIVATE_KEY }}
 
       - uses: googleapis/release-please-action@16a9c90856f42705d54a6fda1823352bdc62cf38 # v4.4.0
         id: release
@@ -38,7 +40,7 @@ jobs:
     runs-on: ubuntu-24.04
     needs: release-please
     if: needs.release-please.outputs.releases_created == 'true'
-    environment: npm-publish
+    environment: npm-release
     steps:
       - name: Checkout the repository
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -55,8 +57,8 @@ jobs:
       - name: Set up Node
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          # Match build.yml and package.json engines (^22.22.0).
-          node-version: 22
+          # Node 24 ships npm 11.5+ required for OIDC Trusted Publishing (no NPM_TOKEN).
+          node-version: 24
           registry-url: https://registry.npmjs.org
 
       - name: Install dependencies
@@ -66,11 +68,9 @@ jobs:
         run: pnpm build
 
       # Authenticates to npm via OIDC Trusted Publishing (id-token: write at the
-      # workflow level). The Trusted Publisher for @amplitude/developer-cli must
-      # be configured at
-      # https://www.npmjs.com/package/@amplitude/developer-cli/access to trust
-      # repo=amplitude/developer-cli, workflow=release-please.yml,
-      # environment=npm-publish. No NPM_TOKEN required.
+      # workflow level). Infra configures the Trusted Publisher for
+      # @amplitude/developer-cli to trust repo=amplitude/developer-cli,
+      # workflow=release-please.yml, environment=npm-release. No NPM_TOKEN.
       #
       # Pre-1.0 we publish to the `beta` dist-tag so `latest` stays unset until
       # we promote at 1.0. Drop `--tag beta` when cutting 1.0.0.
