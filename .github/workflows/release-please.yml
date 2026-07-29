@@ -14,14 +14,17 @@ permissions:
 jobs:
   release-please:
     runs-on: ubuntu-24.04
+    # AMPLITUDE_DEV_EXP_* live on the npm-release environment (same as
+    # Amplitude-TypeScript publish-v2.yml), not repo/org secrets.
+    environment: npm-release
     outputs:
       releases_created: ${{ steps.release.outputs.releases_created }}
     steps:
       # Mint a GitHub App installation token so release-please's PRs trigger
       # downstream workflows (GITHUB_TOKEN-authored events do not, by design,
       # which would leave required checks unrun and the Release PR BLOCKED).
-      # Org secrets (shared with Amplitude-TypeScript / wizard release automation).
-      # Infra must grant amplitude/developer-cli access to these org secrets.
+      # Requires AMPLITUDE_DEV_EXP_APP_ID + AMPLITUDE_DEV_EXP_PRIVATE_KEY on the
+      # npm-release environment (infra copies from Amplitude-TypeScript).
       - uses: actions/create-github-app-token@df432ceedc7162793a195dd1713ff69aefc7379e # v2.0.6
         id: app-token
         with:
