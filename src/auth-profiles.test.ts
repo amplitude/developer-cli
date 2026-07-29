@@ -1,6 +1,6 @@
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 
 import { afterEach, describe, expect, it } from 'vitest';
 
@@ -10,11 +10,14 @@ import {
   formatProfileList,
   logoutAllGateDecision,
   maskToken,
+  regionLabelForBaseUrl,
+  runAuthList,
   runAuthStatus,
   runAuthToken,
   runAuthUse,
   runLogout,
 } from './auth-commands';
+import { CliError } from './cli-error';
 import {
   type CredentialStore,
   CURRENT_VERSION,
@@ -24,8 +27,24 @@ import {
   setDefault,
   setProfile,
 } from './credential-store';
+import {
+  emptyPending,
+  getPending,
+  loadPending,
+  savePending,
+  setPending,
+} from './pending-store';
 
 const NOW = Date.parse('2026-06-23T12:00:00.000Z');
+
+const pendingEntry = (baseUrl: string) => ({
+  device_code: 'DC',
+  code_verifier: 'CV',
+  base_url: baseUrl,
+  expires_at: '2999-01-01T00:00:00Z',
+  interval: 5,
+  started_at: '2026-07-15T00:00:00.000Z',
+});
 
 function oauthProfile(baseUrl: string, expiresAt: string) {
   return {
@@ -51,6 +70,24 @@ describe('envLabel', () => {
     expect(envLabel('https://custom.example.com')).toBe(
       'https://custom.example.com',
     );
+  });
+});
+
+describe('regionLabelForBaseUrl', () => {
+  it('labels prod as US and prod-eu as EU', () => {
+    expect(regionLabelForBaseUrl('https://developer-api.amplitude.com')).toBe(
+      'US',
+    );
+    expect(
+      regionLabelForBaseUrl('https://developer-api.eu.amplitude.com'),
+    ).toBe('EU');
+  });
+
+  it('returns undefined for internal envs', () => {
+    expect(regionLabelForBaseUrl('http://localhost:3036')).toBeUndefined();
+    expect(
+      regionLabelForBaseUrl('https://developer-api.stag2.amplitude.com'),
+    ).toBeUndefined();
   });
 });
 
@@ -115,6 +152,105 @@ describe('formatProfileList', () => {
 
   it('guides login when empty', () => {
     expect(formatProfileList(emptyStore(), NOW)).toMatch(/amp auth login/);
+  });
+});
+
+describe('runAuthList', () => {
+  const dirs: string[] = [];
+  afterEach(() => {
+    for (const dir of dirs) {
+      rmSync(dir, { force: true, recursive: true });
+    }
+    dirs.length = 0;
+  });
+
+  function seeded(): string {
+    const dir = mkdtempSync(join(tmpdir(), 'amp-list-'));
+    dirs.push(dir);
+    const path = join(dir, 'credentials.json');
+    let store: CredentialStore = setProfile(
+      emptyStore(),
+      'amplitude',
+      oauthProfile(
+        'https://developer-api.amplitude.com',
+        '2026-06-23T14:05:00.000Z',
+      ),
+    );
+    store = setProfile(store, 'ci', {
+      base_url: 'https://developer-api.stag2.amplitude.com',
+      credential: { type: 'pat', pat: 'amp_ci' },
+      saved_at: '2026-06-23T00:00:00.000Z',
+      store: 'file',
+    });
+    store = setDefault(store, 'amplitude');
+    saveStore(store, path);
+    return path;
+  }
+
+  it('renders the table at a TTY, unchanged', () => {
+    const path = seeded();
+    const out: string[] = [];
+    runAuthList(
+      {},
+      { path, now: () => NOW, isTTY: true, stdout: (l) => out.push(l) },
+    );
+    expect(out).toEqual([formatProfileList(loadStore(path), NOW)]);
+  });
+
+  it('emits the profiles envelope on stdout, non-TTY', () => {
+    const path = seeded();
+    const out: string[] = [];
+    runAuthList(
+      {},
+      { path, now: () => NOW, isTTY: false, stdout: (l) => out.push(l) },
+    );
+
+    expect(out).toHaveLength(1);
+    const payload = JSON.parse(out[0]);
+    expect(payload.default).toBe('amplitude');
+    expect(payload.profiles).toEqual([
+      {
+        name: 'amplitude',
+        type: 'oauth',
+        base_url: 'https://developer-api.amplitude.com',
+        region: 'us',
+        expires_at: '2026-06-23T14:05:00.000Z',
+        is_default: true,
+      },
+      {
+        name: 'ci',
+        type: 'pat',
+        base_url: 'https://developer-api.stag2.amplitude.com',
+        is_default: false,
+      },
+    ]);
+  });
+
+  it('emits the JSON envelope at a TTY when --json is passed', () => {
+    const path = seeded();
+    const out: string[] = [];
+    runAuthList(
+      { json: true },
+      { path, now: () => NOW, isTTY: true, stdout: (l) => out.push(l) },
+    );
+    const payload = JSON.parse(out.join(''));
+    expect(Array.isArray(payload.profiles)).toBe(true);
+    expect(payload.default).toBe('amplitude');
+  });
+
+  it('reports an empty store as {profiles:[],default:null}, exit 0', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'amp-list-empty-'));
+    dirs.push(dir);
+    const path = join(dir, 'credentials.json');
+    saveStore(emptyStore(), path);
+    const out: string[] = [];
+    const original = process.exitCode;
+    runAuthList(
+      {},
+      { path, now: () => NOW, isTTY: false, stdout: (l) => out.push(l) },
+    );
+    expect(JSON.parse(out.join(''))).toEqual({ profiles: [], default: null });
+    expect(process.exitCode).toBe(original);
   });
 });
 
@@ -342,6 +478,149 @@ describe('runLogout', () => {
       runLogout({ all: true, profile: 'staging' }, { path: seeded() }),
     ).rejects.toThrow(/not both/);
   });
+
+  it('clears the pending login for the profile being logged out', async () => {
+    const path = seeded();
+    const pendingPath = join(dirname(path), 'pending.json');
+    savePending(
+      setPending(
+        setPending(
+          emptyPending(),
+          'staging',
+          pendingEntry('https://developer-api.stag2.amplitude.com'),
+        ),
+        'amplitude',
+        pendingEntry('https://developer-api.amplitude.com'),
+      ),
+      pendingPath,
+    );
+    await runLogout(
+      { profile: 'staging' },
+      { path, pendingPath, stdout: () => {} },
+    );
+    const after = loadPending(pendingPath);
+    expect(after.pending.staging).toBeUndefined();
+    expect(after.pending.amplitude).toBeDefined();
+  });
+
+  it('--all clears every pending login alongside the profiles', async () => {
+    const path = seeded();
+    const pendingPath = join(dirname(path), 'pending.json');
+    savePending(
+      setPending(
+        emptyPending(),
+        'amplitude',
+        pendingEntry('https://developer-api.amplitude.com'),
+      ),
+      pendingPath,
+    );
+    await runLogout(
+      { all: true, yes: true },
+      { path, pendingPath, isTTY: false, stdout: () => {} },
+    );
+    expect(Object.keys(loadPending(pendingPath).pending)).toEqual([]);
+  });
+
+  it('cancels a pending login for a profile with no stored credential yet', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'amp-logout-pending-cancel-'));
+    dirs.push(dir);
+    const path = join(dir, 'credentials.json');
+    const pendingPath = join(dir, 'pending.json');
+    saveStore(emptyStore(), path);
+    savePending(
+      setPending(
+        emptyPending(),
+        'default',
+        pendingEntry('https://developer-api.amplitude.com'),
+      ),
+      pendingPath,
+    );
+    const out: string[] = [];
+    await runLogout(
+      { profile: 'default' },
+      { path, pendingPath, stdout: (l) => out.push(l) },
+    );
+    expect(getPending(loadPending(pendingPath), 'default')).toBeUndefined();
+    expect(out.join('\n')).toMatch(/Canceled the in-progress login/);
+  });
+
+  it('bare logout cancels a solitary in-progress login with no default set', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'amp-logout-bare-pending-'));
+    dirs.push(dir);
+    const path = join(dir, 'credentials.json');
+    const pendingPath = join(dir, 'pending.json');
+    // Cold `login start`: a pending entry exists but store.default is unset.
+    saveStore(emptyStore(), path);
+    savePending(
+      setPending(
+        emptyPending(),
+        'default',
+        pendingEntry('https://developer-api.amplitude.com'),
+      ),
+      pendingPath,
+    );
+    const out: string[] = [];
+    await runLogout({}, { path, pendingPath, stdout: (l) => out.push(l) });
+    expect(getPending(loadPending(pendingPath), 'default')).toBeUndefined();
+    expect(out.join('\n')).toMatch(/Canceled the in-progress login/);
+  });
+
+  it('bare logout selects the sole live login, ignoring an expired sibling', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'amp-logout-live-plus-expired-'));
+    dirs.push(dir);
+    const path = join(dir, 'credentials.json');
+    const pendingPath = join(dir, 'pending.json');
+    saveStore(emptyStore(), path);
+    let store = emptyPending();
+    store = setPending(
+      store,
+      'live',
+      pendingEntry('https://developer-api.amplitude.com'),
+    );
+    store = setPending(store, 'stale', {
+      ...pendingEntry('https://developer-api.amplitude.com'),
+      device_code: 'STALE',
+      expires_at: '2000-01-01T00:00:00Z',
+    });
+    savePending(store, pendingPath);
+    const out: string[] = [];
+    await runLogout(
+      {},
+      {
+        path,
+        pendingPath,
+        now: () => Date.parse('2026-07-16T00:00:00Z'),
+        stdout: (l) => out.push(l),
+      },
+    );
+    const after = loadPending(pendingPath);
+    expect(getPending(after, 'live')).toBeUndefined();
+    expect(getPending(after, 'stale')?.device_code).toBe('STALE');
+    expect(out.join('\n')).toMatch(/Canceled the in-progress login/);
+  });
+
+  it('--all clears pending even when there are no profiles', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'amp-logout-pending-only-'));
+    dirs.push(dir);
+    const path = join(dir, 'credentials.json');
+    const pendingPath = join(dir, 'pending.json');
+    saveStore(emptyStore(), path);
+    savePending(
+      setPending(
+        emptyPending(),
+        'work',
+        pendingEntry('https://developer-api.amplitude.com'),
+      ),
+      pendingPath,
+    );
+    const out: string[] = [];
+    await runLogout(
+      { all: true },
+      { path, pendingPath, stdout: (l) => out.push(l) },
+    );
+    expect(Object.keys(loadPending(pendingPath).pending)).toEqual([]);
+    expect(out.join('\n')).toMatch(/Cleared 1 in-progress login/);
+  });
 });
 
 describe('maskToken', () => {
@@ -380,6 +659,7 @@ describe('runAuthStatus', () => {
         store: statusStore(),
         now: () => NOW,
         env: {},
+        isTTY: true,
         stdout: (l) => out.push(l),
       },
     );
@@ -393,7 +673,7 @@ describe('runAuthStatus', () => {
     expect(process.exitCode).not.toBe(1);
   });
 
-  it('emits plain text without ANSI when stdout is not a TTY', () => {
+  it('shows the Region line for a prod profile', () => {
     const out: string[] = [];
     runAuthStatus(
       {},
@@ -401,18 +681,42 @@ describe('runAuthStatus', () => {
         store: statusStore(),
         now: () => NOW,
         env: {},
-        isTTY: false,
+        isTTY: true,
         stdout: (l) => out.push(l),
       },
     );
-    const text = out.join('\n');
-
-    expect(text).toMatch(/Auth status/);
-    expect(text).toMatch(/Source: {3}default profile amplitude/);
-    expect(text).not.toContain(`${String.fromCharCode(0x1b)}[`);
+    expect(out.join('\n')).toContain(
+      'Region:   US (https://app.amplitude.com/)',
+    );
   });
 
-  it('exits non-zero with guidance when nothing resolves', () => {
+  it('omits the Region line for an internal-env profile', () => {
+    const store = setDefault(
+      setProfile(
+        emptyStore(),
+        'staging',
+        oauthProfile(
+          'https://developer-api.stag2.amplitude.com',
+          '2026-06-23T14:00:00.000Z',
+        ),
+      ),
+      'staging',
+    );
+    const out: string[] = [];
+    runAuthStatus(
+      {},
+      {
+        store,
+        now: () => NOW,
+        env: {},
+        isTTY: true,
+        stdout: (l) => out.push(l),
+      },
+    );
+    expect(out.join('\n')).not.toContain('Region:');
+  });
+
+  it('exits non-zero with guidance when nothing resolves, at a TTY', () => {
     const out: string[] = [];
     runAuthStatus(
       {},
@@ -420,12 +724,14 @@ describe('runAuthStatus', () => {
         store: emptyStore(),
         now: () => NOW,
         env: {},
+        isTTY: true,
         stdout: (l) => out.push(l),
       },
     );
 
     expect(out.join('\n')).toMatch(/amp auth login/);
-    expect(process.exitCode).toBe(1);
+    // Same exit code as the JSON path for the same failure (authentication_required → 3).
+    expect(process.exitCode).toBe(3);
   });
 
   it('announces AMP_TOKEN when it is in effect', () => {
@@ -436,6 +742,7 @@ describe('runAuthStatus', () => {
         store: statusStore(),
         now: () => NOW,
         env: { AMP_TOKEN: 'env-token' },
+        isTTY: true,
         stdout: (l) => out.push(l),
       },
     );
@@ -446,7 +753,7 @@ describe('runAuthStatus', () => {
     expect(process.exitCode).not.toBe(1);
   });
 
-  it('still shows the profile row (Expires: expired) and exits non-zero for an expired credential', () => {
+  it('still shows the profile row (Expires: expired) and exits non-zero for an expired credential, at a TTY', () => {
     const store = setDefault(
       setProfile(
         emptyStore(),
@@ -461,7 +768,13 @@ describe('runAuthStatus', () => {
     const out: string[] = [];
     runAuthStatus(
       {},
-      { store, now: () => NOW, env: {}, stdout: (l) => out.push(l) },
+      {
+        store,
+        now: () => NOW,
+        env: {},
+        isTTY: true,
+        stdout: (l) => out.push(l),
+      },
     );
     const text = out.join('\n');
 
@@ -470,7 +783,165 @@ describe('runAuthStatus', () => {
     expect(text).toMatch(/Expires: {2}expired/);
     expect(text).toMatch(/expired/i);
     expect(text).not.toContain('eyJ.jwt');
-    expect(process.exitCode).toBe(1);
+    // An expired token resolves to invalid_token → exit 3, same as the JSON path.
+    expect(process.exitCode).toBe(3);
+  });
+
+  describe('JSON output (non-TTY or --json)', () => {
+    it('emits the authenticated envelope on stdout for the default profile, non-TTY', () => {
+      const out: string[] = [];
+      runAuthStatus(
+        {},
+        {
+          store: statusStore(),
+          now: () => NOW,
+          env: {},
+          isTTY: false,
+          stdout: (l) => out.push(l),
+        },
+      );
+
+      expect(out).toHaveLength(1);
+      const payload = JSON.parse(out[0]);
+      expect(payload).toEqual({
+        authenticated: true,
+        source: 'default profile amplitude',
+        profile: 'amplitude',
+        type: 'oauth',
+        base_url: 'https://developer-api.amplitude.com',
+        expires_at: '2026-06-23T14:00:00.000Z',
+        token: maskToken('eyJ.jwt'),
+      });
+      expect(out.join('\n')).not.toContain('eyJ.jwt');
+      expect(process.exitCode).not.toBe(1);
+    });
+
+    it('emits the JSON envelope at a TTY when --json is passed', () => {
+      const out: string[] = [];
+      runAuthStatus(
+        { json: true },
+        {
+          store: statusStore(),
+          now: () => NOW,
+          env: {},
+          isTTY: true,
+          stdout: (l) => out.push(l),
+        },
+      );
+
+      const payload = JSON.parse(out.join(''));
+      expect(payload.authenticated).toBe(true);
+      expect(payload.type).toBe('oauth');
+    });
+
+    it('omits expires_at for a pat profile and labels its type', () => {
+      const store = setDefault(
+        setProfile(emptyStore(), 'ci', {
+          base_url: 'https://developer-api.amplitude.com',
+          credential: { type: 'pat', pat: 'amp_x' },
+          saved_at: '2026-06-23T00:00:00.000Z',
+          store: 'file',
+        }),
+        'ci',
+      );
+      const out: string[] = [];
+      runAuthStatus(
+        {},
+        {
+          store,
+          now: () => NOW,
+          env: {},
+          isTTY: false,
+          stdout: (l) => out.push(l),
+        },
+      );
+
+      const payload = JSON.parse(out.join(''));
+      expect(payload.type).toBe('pat');
+      expect(payload).not.toHaveProperty('expires_at');
+    });
+
+    it('reports type "token" and no profile when AMP_TOKEN shadows the store', () => {
+      const out: string[] = [];
+      runAuthStatus(
+        {},
+        {
+          store: statusStore(),
+          now: () => NOW,
+          env: { AMP_TOKEN: 'env-token-value' },
+          isTTY: false,
+          stdout: (l) => out.push(l),
+        },
+      );
+
+      const payload = JSON.parse(out.join(''));
+      expect(payload.authenticated).toBe(true);
+      expect(payload.source).toBe('AMP_TOKEN env var');
+      expect(payload).not.toHaveProperty('profile');
+      expect(payload.type).toBe('token');
+      expect(payload.token).toBe(maskToken('env-token-value'));
+      expect(payload).not.toHaveProperty('expires_at');
+    });
+
+    it('does not print to stdout and propagates a CliError when nothing resolves, non-TTY', () => {
+      const out: string[] = [];
+      let thrown: unknown;
+      try {
+        runAuthStatus(
+          {},
+          {
+            store: emptyStore(),
+            now: () => NOW,
+            env: {},
+            isTTY: false,
+            stdout: (l) => out.push(l),
+          },
+        );
+      } catch (error) {
+        thrown = error;
+      }
+
+      expect(out).toHaveLength(0);
+      expect(thrown).toBeInstanceOf(CliError);
+      const cliError = thrown as CliError;
+      expect(cliError.errorCode).toBe('authentication_required');
+      expect(cliError.exitCode).toBe(3);
+    });
+
+    it('propagates an invalid_token CliError (not prose) for an expired stored credential, non-TTY', () => {
+      const store = setDefault(
+        setProfile(
+          emptyStore(),
+          'amplitude',
+          oauthProfile(
+            'https://developer-api.amplitude.com',
+            '2026-06-23T10:00:00.000Z',
+          ),
+        ),
+        'amplitude',
+      );
+      const out: string[] = [];
+      let thrown: unknown;
+      try {
+        runAuthStatus(
+          {},
+          {
+            store,
+            now: () => NOW,
+            env: {},
+            isTTY: false,
+            stdout: (l) => out.push(l),
+          },
+        );
+      } catch (error) {
+        thrown = error;
+      }
+
+      expect(out).toHaveLength(0);
+      expect(thrown).toBeInstanceOf(CliError);
+      expect((thrown as CliError).errorCode).toBe('invalid_token');
+      expect((thrown as CliError).exitCode).toBe(3);
+    });
   });
 });
 

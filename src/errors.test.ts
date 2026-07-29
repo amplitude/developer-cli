@@ -1,50 +1,40 @@
 import { describe, expect, it } from 'vitest';
 
-import { formatApiError } from './errors';
+import { asProblem, hintForErrorCode } from './errors';
 
-describe('formatApiError', () => {
-  it('formats RFC 7807 problem responses with hints', () => {
-    const message = formatApiError(403, 'Forbidden', {
+describe('asProblem', () => {
+  it('recognizes an RFC 7807 problem body', () => {
+    const problem = asProblem({
       title: 'Insufficient scope',
-      detail: 'Token missing required scopes.',
       error_code: 'insufficient_scope',
     });
-
-    expect(message).toContain('Insufficient scope (403 Forbidden)');
-    expect(message).toContain('Token missing required scopes.');
-    expect(message).toContain('amp context');
+    expect(problem?.title).toBe('Insufficient scope');
   });
 
-  it('includes validation errors when present', () => {
-    const message = formatApiError(400, 'Bad Request', {
-      title: 'Validation failed',
-      error_code: 'validation_error',
-      validation_errors: [
-        { field: 'event_type', message: 'Required', code: 'required' },
-      ],
-    });
-
-    expect(message).toContain('event_type: Required');
-    expect(message).toContain('amp help');
+  it('returns undefined for a non-problem body', () => {
+    expect(asProblem({ message: 'boom' })).toBeUndefined();
+    expect(asProblem('<html>gateway unavailable</html>')).toBeUndefined();
+    expect(asProblem(null)).toBeUndefined();
   });
+});
 
-  it('falls back to JSON for unknown error bodies', () => {
-    const message = formatApiError(500, 'Internal Server Error', {
-      message: 'boom',
-    });
-
-    expect(message).toContain('500 Internal Server Error');
-    expect(message).toContain('"boom"');
-  });
-
-  it('prints non-JSON error bodies directly', () => {
-    const message = formatApiError(
-      502,
-      'Bad Gateway',
-      '<html>gateway unavailable</html>',
+describe('hintForErrorCode', () => {
+  it('returns a remediation hint for known error codes', () => {
+    expect(hintForErrorCode('insufficient_scope')).toMatch(/amp context/);
+    expect(hintForErrorCode('validation_error')).toMatch(
+      /amp <command> --help/,
     );
+  });
 
-    expect(message).toContain('502 Bad Gateway');
-    expect(message).toContain('<html>gateway unavailable</html>');
+  it('keeps the auth hint semantic — no audience-targeting or scripted recipe', () => {
+    const hint = hintForErrorCode('authentication_required');
+    expect(hint).toMatch(/amp auth login/);
+    expect(hint).not.toMatch(/Agents\/CI|Interactive:|login start` then/);
+    expect(hintForErrorCode('invalid_token')).toBe(hint);
+  });
+
+  it('returns undefined for unknown error codes', () => {
+    expect(hintForErrorCode('something_new')).toBeUndefined();
+    expect(hintForErrorCode(undefined)).toBeUndefined();
   });
 });

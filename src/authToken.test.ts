@@ -7,6 +7,7 @@ import {
   createAnonymousRequest,
   formatVerificationPrompt,
   generatePkcePair,
+  pollDeviceTokenBounded,
   pollForToken,
   requestDeviceToken,
   runAuthTokenCommand,
@@ -413,6 +414,10 @@ describe('createAnonymousRequest', () => {
     const [url, init] = fetchMock.mock.calls[0];
     expect(url).toBe('https://api.test/v1/auth/token');
     expect(init?.headers).not.toHaveProperty('Authorization');
+    // Identifies the API client to the server for analytics.
+    expect(new Headers(init?.headers).get('user-agent')).toMatch(
+      /^amp-cli\/\S+$/,
+    );
   });
 
   it('throws a readable error when the API is unreachable', async () => {
@@ -444,6 +449,161 @@ describe('createAnonymousRequest', () => {
     expect(result).toEqual({
       status: 502,
       body: '<html>502 Bad Gateway</html>',
+    });
+  });
+});
+
+const noSleep = async () => {};
+const token = { access_token: 'at', token_type: 'bearer', expires_in: 3600 };
+
+describe('pollDeviceTokenBounded', () => {
+  it('returns authorized when the exchange succeeds', async () => {
+    const res = await pollDeviceTokenBounded({
+      request: async () => ({ status: 200, body: token }),
+      deviceCode: 'dc',
+      codeVerifier: 'cv',
+      intervalSeconds: 1,
+      codeExpiresAtMs: 10_000,
+      timeoutSeconds: 5,
+      now: () => 0,
+      sleep: noSleep,
+    });
+    expect(res).toEqual({ status: 'authorized', token });
+  });
+
+  it('returns pending when the bounded timeout elapses but the code is still valid', async () => {
+    let t = 0;
+    const res = await pollDeviceTokenBounded({
+      request: async () => ({
+        status: 400,
+        body: { error: 'authorization_pending' },
+      }),
+      deviceCode: 'dc',
+      codeVerifier: 'cv',
+      intervalSeconds: 1,
+      codeExpiresAtMs: 1_000_000,
+      timeoutSeconds: 2,
+      now: () => (t += 1000),
+      sleep: noSleep,
+    });
+    expect(res).toEqual({ status: 'pending', interval: 1 });
+  });
+
+  it('stops polling once a full interval no longer fits the timeout budget', async () => {
+    // Clock advances only by what we sleep, so wall-clock == sum(sleeps).
+    const sleeps: number[] = [];
+    let calls = 0;
+    const res = await pollDeviceTokenBounded({
+      request: async () => {
+        calls += 1;
+        return { status: 400, body: { error: 'authorization_pending' } };
+      },
+      deviceCode: 'dc',
+      codeVerifier: 'cv',
+      intervalSeconds: 5,
+      codeExpiresAtMs: 1_000_000,
+      timeoutSeconds: 12,
+      now: () => sleeps.reduce((sum, s) => sum + s, 0) * 1000,
+      sleep: (s) => {
+        sleeps.push(s);
+        return Promise.resolve();
+      },
+    });
+    // Polls at t=0 and t=5 (each +5s still fits the 12s budget), then at t=10 a
+    // further 5s sleep would overshoot to 15s — so it returns pending instead of
+    // sleeping past --timeout. Total slept 10s, never exceeding the budget.
+    expect(res).toEqual({ status: 'pending', interval: 5 });
+    expect(sleeps).toEqual([5, 5]);
+    expect(calls).toBe(3);
+  });
+
+  it('retries transient server_error within the window (pending, not error)', async () => {
+    let t = 0;
+    const res = await pollDeviceTokenBounded({
+      request: async () => ({ status: 500, body: { error: 'server_error' } }),
+      deviceCode: 'dc',
+      codeVerifier: 'cv',
+      intervalSeconds: 1,
+      codeExpiresAtMs: 1_000_000,
+      timeoutSeconds: 2,
+      now: () => (t += 1000),
+      sleep: noSleep,
+    });
+    expect(res).toEqual({ status: 'pending', interval: 1 });
+  });
+
+  it('raises the interval on slow_down and reports it on pending', async () => {
+    let t = 0;
+    const res = await pollDeviceTokenBounded({
+      request: async () => ({ status: 400, body: { error: 'slow_down' } }),
+      deviceCode: 'dc',
+      codeVerifier: 'cv',
+      intervalSeconds: 1,
+      codeExpiresAtMs: 1_000_000,
+      timeoutSeconds: 2,
+      now: () => (t += 1000),
+      sleep: noSleep,
+    });
+    expect(res).toEqual({ status: 'pending', interval: 6 });
+  });
+
+  it('returns expired when the device code lifetime passes', async () => {
+    let t = 0;
+    const res = await pollDeviceTokenBounded({
+      request: async () => ({
+        status: 400,
+        body: { error: 'authorization_pending' },
+      }),
+      deviceCode: 'dc',
+      codeVerifier: 'cv',
+      intervalSeconds: 1,
+      codeExpiresAtMs: 1500,
+      timeoutSeconds: 999,
+      now: () => (t += 1000),
+      sleep: noSleep,
+    });
+    expect(res).toEqual({ status: 'expired' });
+  });
+
+  it('returns error on access_denied', async () => {
+    const res = await pollDeviceTokenBounded({
+      request: async () => ({ status: 400, body: { error: 'access_denied' } }),
+      deviceCode: 'dc',
+      codeVerifier: 'cv',
+      intervalSeconds: 1,
+      codeExpiresAtMs: 10_000,
+      timeoutSeconds: 5,
+      now: () => 0,
+      sleep: noSleep,
+    });
+    expect(res.status).toBe('error');
+  });
+
+  it('preserves the structured OAuth error on a non-expired_token error', async () => {
+    const res = await pollDeviceTokenBounded({
+      request: async () => ({
+        status: 400,
+        body: {
+          error: 'access_denied',
+          error_description: 'The user denied the request.',
+          error_hint: 'Ask the user to approve the code.',
+        },
+      }),
+      deviceCode: 'dc',
+      codeVerifier: 'cv',
+      intervalSeconds: 1,
+      codeExpiresAtMs: 10_000,
+      timeoutSeconds: 5,
+      now: () => 0,
+      sleep: noSleep,
+    });
+    expect(res).toEqual({
+      status: 'error',
+      error: {
+        code: 'access_denied',
+        description: 'The user denied the request.',
+        hint: 'Ask the user to approve the code.',
+      },
     });
   });
 });

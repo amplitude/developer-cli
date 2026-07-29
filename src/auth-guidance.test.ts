@@ -36,7 +36,7 @@ describe('auth guidance', () => {
         apiBaseUrl: 'https://developer-api.eu.amplitude.com',
       }),
     ).toBe(
-      'https://eu.amplitude.com/analytics/amplitude/settings/profile/personal-access-tokens',
+      'https://app.eu.amplitude.com/analytics/amplitude/settings/profile/personal-access-tokens',
     );
   });
 
@@ -69,7 +69,7 @@ describe('auth guidance', () => {
         apiBaseUrl: 'https://developer-api.eu.amplitude.com',
       }),
     ).toContain(
-      'https://eu.amplitude.com/analytics/amplitude/settings/profile/personal-access-tokens',
+      'https://app.eu.amplitude.com/analytics/amplitude/settings/profile/personal-access-tokens',
     );
   });
 

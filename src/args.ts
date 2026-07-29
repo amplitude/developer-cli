@@ -1,5 +1,7 @@
 import { Command, CommanderError, Option } from 'commander';
+import { distance } from 'fastest-levenshtein';
 
+import { usageError } from './cli-error';
 import { CLI_OPERATIONS } from './generated/cli-manifest';
 
 export type FlagValue = boolean | string;
@@ -11,27 +13,75 @@ export interface ParsedArgs {
 
 type ValueRequirement = 'optional' | 'required';
 
-interface CliOptionDefinition {
+interface ParseableOption {
   aliases: string[];
   valueRequirement: ValueRequirement;
 }
 
+interface CliOptionDefinition extends ParseableOption {
+  // Whether this global is meaningful on generated API commands. Auth-flow-only
+  // flags (--flow, --scope, --with-token, --timeout, --all, --force, --open)
+  // must stay globally *parseable* so the bespoke auth/logout handlers can read
+  // them, but they are not honored by the API request path — accepting them
+  // there would silently drop the flag and mislead the caller. See
+  // apiGlobalOptionAliases().
+  onApiCommands: boolean;
+}
+
 const GLOBAL_OPTIONS: CliOptionDefinition[] = [
-  { aliases: ['token'], valueRequirement: 'required' },
-  { aliases: ['base-url'], valueRequirement: 'required' },
-  { aliases: ['body-json'], valueRequirement: 'required' },
-  { aliases: ['json'], valueRequirement: 'optional' },
-  { aliases: ['yes'], valueRequirement: 'optional' },
-  { aliases: ['open'], valueRequirement: 'optional' },
-  { aliases: ['flow'], valueRequirement: 'required' },
-  { aliases: ['scope'], valueRequirement: 'required' },
-  { aliases: ['profile'], valueRequirement: 'required' },
-  { aliases: ['env'], valueRequirement: 'required' },
-  { aliases: ['with-token'], valueRequirement: 'optional' },
-  { aliases: ['all'], valueRequirement: 'optional' },
-  { aliases: ['help', 'h'], valueRequirement: 'optional' },
-  { aliases: ['version', 'v'], valueRequirement: 'optional' },
+  { aliases: ['token'], valueRequirement: 'required', onApiCommands: true },
+  { aliases: ['base-url'], valueRequirement: 'required', onApiCommands: true },
+  { aliases: ['body-json'], valueRequirement: 'required', onApiCommands: true },
+  { aliases: ['json'], valueRequirement: 'optional', onApiCommands: true },
+  { aliases: ['yes'], valueRequirement: 'optional', onApiCommands: true },
+  { aliases: ['open'], valueRequirement: 'optional', onApiCommands: false },
+  { aliases: ['flow'], valueRequirement: 'required', onApiCommands: false },
+  { aliases: ['scope'], valueRequirement: 'required', onApiCommands: false },
+  { aliases: ['profile'], valueRequirement: 'required', onApiCommands: true },
+  { aliases: ['env'], valueRequirement: 'required', onApiCommands: true },
+  { aliases: ['region'], valueRequirement: 'required', onApiCommands: true },
+  { aliases: ['timeout'], valueRequirement: 'required', onApiCommands: false },
+  {
+    aliases: ['with-token'],
+    valueRequirement: 'optional',
+    onApiCommands: false,
+  },
+  { aliases: ['all'], valueRequirement: 'optional', onApiCommands: false },
+  { aliases: ['force'], valueRequirement: 'optional', onApiCommands: false },
+  { aliases: ['dry-run'], valueRequirement: 'optional', onApiCommands: true },
+  { aliases: ['help', 'h'], valueRequirement: 'optional', onApiCommands: true },
+  {
+    aliases: ['version', 'v'],
+    valueRequirement: 'optional',
+    onApiCommands: true,
+  },
 ];
+
+// `--dry-run` is defined per-operation in the manifest (only DELETE
+// operations declare a `dry_run` parameter), but `run.ts`'s delete gate reads
+// it unconditionally on every DELETE command — including ones that don't
+// support it, to produce a specific "does not support --dry-run" error. It
+// must stay globally parseable so that check can run before flag validation.
+
+/** Every flag alias accepted on any command, regardless of the resolved operation. */
+export function globalOptionAliases(): string[] {
+  return [...new Set(GLOBAL_OPTIONS.flatMap((option) => option.aliases))];
+}
+
+/**
+ * Global aliases meaningful on generated API commands. Excludes the
+ * auth-flow-only globals, so `amp projects list --timeout 5` is rejected as an
+ * unknown flag instead of silently accepted-and-dropped.
+ */
+export function apiGlobalOptionAliases(): string[] {
+  return [
+    ...new Set(
+      GLOBAL_OPTIONS.filter((option) => option.onApiCommands).flatMap(
+        (option) => option.aliases,
+      ),
+    ),
+  ];
+}
 
 function attributeName(alias: string): string {
   return alias.replace(/-([a-z])/g, (_, letter: string) =>
@@ -54,7 +104,7 @@ function defineOption(
   program.addOption(new Option(flags).hideHelp());
 }
 
-function optionDefinitions(): CliOptionDefinition[] {
+function optionDefinitions(): ParseableOption[] {
   const byAlias = new Map<string, ValueRequirement>();
 
   for (const option of GLOBAL_OPTIONS) {
@@ -105,6 +155,52 @@ function createParser(): Command {
   return program;
 }
 
+// Relative similarity (not a raw edit-distance cutoff) so short aliases like
+// --yes or --all don't become coincidental "did you mean" matches for an
+// unrelated short flag — mirrors commander's own suggestSimilar heuristic.
+const MIN_SUGGESTION_SIMILARITY = 0.4;
+
+/** Closest candidate to `flag` by relative similarity, for "did you mean" hints. */
+export function nearestAlias(
+  flag: string,
+  candidates: Iterable<string>,
+): string | undefined {
+  let best: string | undefined;
+  let bestSimilarity = MIN_SUGGESTION_SIMILARITY;
+
+  for (const candidate of candidates) {
+    if (candidate.length <= 1) {
+      continue;
+    }
+
+    const dist = distance(flag, candidate);
+    const length = Math.max(flag.length, candidate.length);
+    const similarity = (length - dist) / length;
+    if (similarity > bestSimilarity) {
+      bestSimilarity = similarity;
+      best = candidate;
+    }
+  }
+
+  return best;
+}
+
+function withUnknownOptionSuggestion(error: CommanderError): string {
+  const message = error.message.replace(/^error: /, '');
+  const match =
+    error.code === 'commander.unknownOption'
+      ? /^unknown option '(-[^']+)'/.exec(message)
+      : null;
+
+  if (!match) {
+    return message;
+  }
+
+  const knownAliases = optionDefinitions().map((option) => option.aliases[0]);
+  const suggestion = nearestAlias(match[1].replace(/^--?/, ''), knownAliases);
+  return suggestion ? `${message} Did you mean --${suggestion}?` : message;
+}
+
 export function parseArgs(argv: string[]): ParsedArgs {
   const flags: Record<string, FlagValue> = {};
   const program = createParser();
@@ -114,7 +210,7 @@ export function parseArgs(argv: string[]): ParsedArgs {
     program.parse(normalizedArgv, { from: 'user' });
   } catch (error) {
     if (error instanceof CommanderError) {
-      throw new Error(error.message.replace(/^error: /, ''));
+      throw usageError(withUnknownOptionSuggestion(error));
     }
     throw error;
   }
@@ -152,7 +248,7 @@ export function stringFlag(
 ): string | undefined {
   const value = flagValue(flags, aliases);
   if (value === true) {
-    throw new Error(`Expected --${aliases[0]} to have a value.`);
+    throw usageError(`Expected --${aliases[0]} to have a value.`);
   }
   return typeof value === 'string' ? value : undefined;
 }

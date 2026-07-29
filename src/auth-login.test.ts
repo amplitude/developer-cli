@@ -1,6 +1,6 @@
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 
 import { afterEach, describe, expect, it } from 'vitest';
 
@@ -16,6 +16,12 @@ import {
   saveStore,
 } from './credential-store';
 import type { TokenResponse } from './oauthResponseSchemas';
+import {
+  getPending,
+  loadPending,
+  savePending,
+  setPending,
+} from './pending-store';
 
 const NOW = Date.parse('2026-06-23T12:00:00.000Z');
 
@@ -53,6 +59,28 @@ describe('loginBaseUrl', () => {
     );
   });
 
+  it('maps --region', () => {
+    expect(loginBaseUrl({ regionFlag: 'us' })).toBe(
+      'https://developer-api.amplitude.com',
+    );
+  });
+
+  it('throws when both --region and --env are given', () => {
+    expect(() =>
+      loginBaseUrl({ regionFlag: 'us', envFlag: 'staging' }),
+    ).toThrow('Pass either --region or --env, not both.');
+  });
+
+  it('throws when both --region and --env are given even though --base-url would win', () => {
+    expect(() =>
+      loginBaseUrl({
+        regionFlag: 'us',
+        envFlag: 'staging',
+        baseUrlFlag: 'http://localhost:3036',
+      }),
+    ).toThrow('Pass either --region or --env, not both.');
+  });
+
   it('reuses an existing profile base_url on re-auth', () => {
     expect(
       loginBaseUrl({
@@ -65,8 +93,15 @@ describe('loginBaseUrl', () => {
     ).toBe('https://prod');
   });
 
-  it('errors creating a profile without --env/--base-url (force-explicit)', () => {
-    expect(() => loginBaseUrl({})).toThrow(/requires --env|--base-url/);
+  it('errors creating a profile without --region (hidden --env/--base-url stay out of the message)', () => {
+    expect(() => loginBaseUrl({})).toThrow(/requires --region <us\|eu>/);
+    try {
+      loginBaseUrl({});
+    } catch (error) {
+      const message = String(error);
+      expect(message).not.toContain('--env');
+      expect(message).not.toContain('--base-url');
+    }
   });
 
   it('errors on an unknown --env', () => {
@@ -90,9 +125,14 @@ describe('runAuthLogin', () => {
     return join(dir, 'credentials.json');
   }
 
+  function pendingPathFor(path: string): string {
+    return join(dirname(path), 'pending.json');
+  }
+
   function deps(path: string, out: string[]) {
     return {
       path,
+      pendingPath: pendingPathFor(path),
       now: () => NOW,
       stdout: (line: string) => out.push(line),
       stderr: () => {},
@@ -143,10 +183,23 @@ describe('runAuthLogin', () => {
     expect(out.join('\n')).toMatch(/updated and set as default\./);
   });
 
-  it('errors when neither --profile nor a default profile exists', async () => {
-    await expect(
-      runAuthLogin({ env: 'prod' }, deps(tempPath(), [])),
-    ).rejects.toThrow(/No default profile/);
+  it('creates the implicit "default" profile when --profile is omitted', async () => {
+    const path = tempPath();
+    const out: string[] = [];
+    await runAuthLogin({ env: 'prod' }, deps(path, out));
+
+    const store = loadStore(path);
+    expect(store.default).toBe('default');
+    expect(getProfile(store, 'default')?.base_url).toBe(
+      'https://developer-api.amplitude.com',
+    );
+    expect(out.join('\n')).toMatch(/created and set as default/);
+  });
+
+  it('errors asking for --region on a cold bare login', async () => {
+    await expect(runAuthLogin({}, deps(tempPath(), []))).rejects.toThrow(
+      /requires --region/,
+    );
   });
 
   it('errors with "No such profile" when the stored default is orphaned', async () => {
@@ -164,16 +217,51 @@ describe('runAuthLogin', () => {
     );
   });
 
-  it('rejects the reserved name "default"', async () => {
-    await expect(
-      runAuthLogin({ profile: 'default', env: 'prod' }, deps(tempPath(), [])),
-    ).rejects.toThrow(/reserved/);
+  it('accepts an explicit --profile default', async () => {
+    const path = tempPath();
+    const out: string[] = [];
+    await runAuthLogin({ profile: 'default', env: 'prod' }, deps(path, out));
+    expect(loadStore(path).default).toBe('default');
+    expect(out.join('\n')).toMatch(/created and set as default/);
   });
 
   it('rejects an invalid profile name', async () => {
     await expect(
       runAuthLogin({ profile: 'bad name', env: 'prod' }, deps(tempPath(), [])),
     ).rejects.toThrow(/Invalid profile name/);
+  });
+
+  it('announces the region when --region is used', async () => {
+    const path = tempPath();
+    const out: string[] = [];
+    await runAuthLogin({ profile: 'amplitude', region: 'us' }, deps(path, out));
+    expect(out.join('\n')).toContain(
+      'Authenticating to https://app.amplitude.com/',
+    );
+  });
+
+  it('does not announce a region when --env is used', async () => {
+    const path = tempPath();
+    const out: string[] = [];
+    await runAuthLogin({ profile: 'amplitude', env: 'prod' }, deps(path, out));
+    expect(out.join('\n')).not.toContain('Authenticating to');
+  });
+
+  it('does not announce a region when --base-url wins over --region', async () => {
+    const path = tempPath();
+    const out: string[] = [];
+    await runAuthLogin(
+      {
+        profile: 'amplitude',
+        region: 'us',
+        'base-url': 'http://localhost:3036',
+      },
+      deps(path, out),
+    );
+    expect(out.join('\n')).not.toContain('Authenticating to');
+    expect(getProfile(loadStore(path), 'amplitude')?.base_url).toBe(
+      'http://localhost:3036',
+    );
   });
 
   it('aborts a re-login to a different target when not confirmed', async () => {
@@ -192,6 +280,25 @@ describe('runAuthLogin', () => {
     );
   });
 
+  it('skips the overwrite confirm and retargets when --force is passed', async () => {
+    const path = tempPath();
+    await runAuthLogin({ profile: 'p', env: 'prod' }, deps(path, []));
+
+    await runAuthLogin(
+      { profile: 'p', env: 'staging', force: true },
+      {
+        ...deps(path, []),
+        confirm: () => {
+          throw new Error('confirm must not be called when --force is passed');
+        },
+      },
+    );
+
+    expect(loadStore(path).profiles.p?.base_url).toBe(
+      'https://developer-api.stag2.amplitude.com',
+    );
+  });
+
   it('requests the full default scope set when --scope is absent', async () => {
     const path = tempPath();
     const scopes: Array<string | undefined> = [];
@@ -205,7 +312,7 @@ describe('runAuthLogin', () => {
 
     await runAuthLogin({ profile: 'amplitude', env: 'prod' }, capturing);
     expect(scopes[0]).toBe(
-      'mcp:read mcp:write read:flags read:projects read:taxonomy write:flags write:taxonomy',
+      'mcp:read mcp:write read:analytics read:flags read:projects read:taxonomy write:flags write:taxonomy',
     );
   });
 
@@ -225,5 +332,47 @@ describe('runAuthLogin', () => {
       capturing,
     );
     expect(scopes[0]).toBe('read:projects');
+  });
+
+  it('clears a stranded login-start entry for the profile it authenticates', async () => {
+    const path = tempPath();
+    const pendingPath = pendingPathFor(path);
+    savePending(
+      setPending(loadPending(pendingPath), 'amplitude', {
+        device_code: 'abandoned',
+        code_verifier: 'cv',
+        base_url: 'https://developer-api.amplitude.com',
+        expires_at: new Date(NOW + 600_000).toISOString(),
+        interval: 5,
+        started_at: new Date(NOW).toISOString(),
+      }),
+      pendingPath,
+    );
+
+    await runAuthLogin({ profile: 'amplitude', env: 'prod' }, deps(path, []));
+
+    expect(getPending(loadPending(pendingPath), 'amplitude')).toBeUndefined();
+  });
+
+  it('leaves another profile’s pending login untouched', async () => {
+    const path = tempPath();
+    const pendingPath = pendingPathFor(path);
+    savePending(
+      setPending(loadPending(pendingPath), 'other', {
+        device_code: 'other-code',
+        code_verifier: 'cv',
+        base_url: 'https://developer-api.amplitude.com',
+        expires_at: new Date(NOW + 600_000).toISOString(),
+        interval: 5,
+        started_at: new Date(NOW).toISOString(),
+      }),
+      pendingPath,
+    );
+
+    await runAuthLogin({ profile: 'amplitude', env: 'prod' }, deps(path, []));
+
+    expect(getPending(loadPending(pendingPath), 'other')?.device_code).toBe(
+      'other-code',
+    );
   });
 });

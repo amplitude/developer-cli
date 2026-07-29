@@ -41,36 +41,37 @@ npx @amplitude/developer-cli help
 
 ## Authentication
 
-Run `amp auth login` to authenticate via the OAuth device flow. Creating a
-profile is force-explicit — name it and pick its environment:
+Run `amp auth login` to authenticate via the OAuth device flow. Omit
+`--profile` and the CLI targets `default` — the implicit profile used when you
+don't name one. Picking a region stays explicit:
 
 ```bash
-amp auth login --profile prod --env prod        # device flow → save + activate
+amp auth login --region us                       # device flow → "default" profile
 amp auth status                                  # active credential, type, expiry
 amp context
 ```
 
-Profiles bind a credential to an environment (its `base_url`), so a staging
-token can never be sent to prod. Add more and switch between them:
+Profiles bind a credential to a region (its `base_url`), so an EU token can
+never be sent to prod. Name one explicitly when you want more than one:
 
 ```bash
-amp auth login --profile staging --env staging   # activates staging
+amp auth login --profile eu --region eu          # activates the EU profile
 amp auth use prod                                 # switch back (no re-auth)
 amp auth list                                     # * marks the active profile
-amp logout --profile staging                      # remove one
+amp logout --profile eu                           # remove one
 amp logout --all                                   # remove every profile
 ```
 
 A bare `amp auth login` re-authenticates the active profile in place. Profiles
 are saved to `~/.amplitude/amp/credentials.json` (0600).
 
-Prefer a Personal Access Token? `amp auth pat --with-token --profile <name> --env <env>`
-reads a PAT from stdin (or a masked prompt at a terminal) and saves it as a
-profile — same force-explicit create rule, same store, just a different
-credential type. `--with-token` is required.
+Prefer a Personal Access Token? `amp auth pat --with-token --region <us|eu>` reads a
+PAT from stdin (or a masked prompt at a terminal) and saves it as a profile —
+`--profile` optional (defaults to `default`), same force-explicit create rule,
+same store. `--with-token` is required.
 
 ```bash
-echo "$PAT" | amp auth pat --with-token --profile ci --env prod
+echo "$PAT" | amp auth pat --with-token --region us
 ```
 
 For CI or a one-off shell, set a raw token — it overrides stored profiles:
@@ -81,22 +82,6 @@ export AMP_TOKEN=amp_...        # amp_… is treated as a PAT, anything else a b
 
 `AMP_PROFILE` selects a stored profile by name; `amp auth token` prints the
 active access token to stdout (`TOKEN=$(amp auth token)`).
-
-## Base URL
-
-Defaults to production:
-
-```text
-https://developer-api.amplitude.com
-```
-
-Override for staging or a local server:
-
-```bash
-export AMP_API_BASE_URL=http://localhost:3036
-# or
-amp --base-url http://localhost:3036 context
-```
 
 ## Examples
 

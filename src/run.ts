@@ -1,10 +1,10 @@
 /* eslint-disable no-console */
 import { type FlagValue, isFlagEnabled } from './args';
+import { cliErrorFromResponse, transportError, usageError } from './cli-error';
 import {
   authorizationHeaderForToken,
   resolveAuthFromFlags,
 } from './credential-resolver';
-import { formatApiError } from './errors';
 import type { CliOperation } from './generated/cli-manifest';
 import {
   formatJsonOutput,
@@ -72,11 +72,11 @@ async function ensureDeleteAllowed(
 
   if (decision === 'block') {
     if (dryRunRequested && !dryRunSupported) {
-      throw new Error(
+      throw usageError(
         `\`amp ${operation.command.join(' ')}\` does not support --dry-run. Drop --dry-run and pass --yes to confirm a real delete, or run it in an interactive terminal.`,
       );
     }
-    throw new Error(
+    throw usageError(
       'Pass --yes to run a DELETE command, or use --dry-run if the command supports it.',
     );
   }
@@ -85,7 +85,7 @@ async function ensureDeleteAllowed(
     `This runs DELETE \`amp ${operation.command.join(' ')}\`. Continue?`,
   );
   if (!approved) {
-    throw new Error('Aborted.');
+    throw new Error('Aborted.'); // plain-error-ok: TTY-only user cancellation; unreachable non-interactively.
   }
 }
 
@@ -93,25 +93,27 @@ export async function runOperation(
   operation: CliOperation,
   flags: Record<string, FlagValue>,
 ): Promise<void> {
+  const request = buildRequest(operation, flags);
   await ensureDeleteAllowed(operation, flags);
-
   const auth = resolveAuthFromFlags(flags);
-  const request = buildRequest(
-    operation,
-    flags,
-    authorizationHeaderForToken(auth.token),
-  );
-  const response = await fetch(`${auth.baseUrl}${request.path}`, {
-    method: operation.method,
-    headers: request.headers,
-    body: request.body === undefined ? undefined : JSON.stringify(request.body),
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${auth.baseUrl}${request.path}`, {
+      method: operation.method,
+      headers: {
+        ...request.headers,
+        Authorization: authorizationHeaderForToken(auth.token),
+      },
+      body:
+        request.body === undefined ? undefined : JSON.stringify(request.body),
+    });
+  } catch {
+    throw transportError(`Could not reach the API at ${auth.baseUrl}.`);
+  }
   const parsed = parseResponseBody(await response.text());
 
   if (!response.ok) {
-    throw new Error(
-      formatApiError(response.status, response.statusText, parsed),
-    );
+    throw cliErrorFromResponse(response.status, response.statusText, parsed);
   }
 
   const isTTY = Boolean(process.stdout.isTTY);
