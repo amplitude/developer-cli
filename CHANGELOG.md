@@ -6,7 +6,7 @@
 ### Features
 
 * import amp CLI distribution ([#1](https://github.com/amplitude/developer-cli/issues/1)) ([976f4f7](https://github.com/amplitude/developer-cli/commit/976f4f7f258865ac78f27a8bda3c36956d27fc97))
-* sync developer-cli from amplitude/javascript@1b44da248692 ([#4](https://github.com/amplitude/developer-cli/issues/4)) ([ce7ed11](https://github.com/amplitude/developer-cli/commit/ce7ed11346b5ebd452d29f1a64a88c575628425e))
+* sync developer-cli from upstream ([#4](https://github.com/amplitude/developer-cli/issues/4)) ([ce7ed11](https://github.com/amplitude/developer-cli/commit/ce7ed11346b5ebd452d29f1a64a88c575628425e))
 
 
 ### Bug Fixes
