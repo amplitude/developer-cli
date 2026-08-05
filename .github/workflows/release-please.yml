@@ -75,7 +75,7 @@ jobs:
       # @amplitude/developer-cli to trust repo=amplitude/developer-cli,
       # workflow=release-please.yml, environment=npm-release. No NPM_TOKEN.
       #
-      # Pre-1.0 we publish to the `beta` dist-tag so `latest` stays unset until
-      # we promote at 1.0. Drop `--tag beta` when cutting 1.0.0.
+      # Default dist-tag is `latest` so `npm install @amplitude/developer-cli`
+      # and `npx @amplitude/developer-cli@latest` track each merged release.
       - name: Publish the package to npm registry
-        run: pnpm publish --access public --no-git-checks --provenance --tag beta
+        run: pnpm publish --access public --no-git-checks --provenance
