@@ -5,12 +5,14 @@ import {
   rmSync,
   writeFileSync,
 } from 'node:fs';
-import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
+import { debuglog } from 'node:util';
 
+import { lock } from 'proper-lockfile';
 import { z } from 'zod';
 
-import { usageError } from './cli-error';
+import { amplitudeDataFiles, amplitudeDataPath } from './amplitude-data-path';
+import { transportError, usageError } from './cli-error';
 
 /**
  * On-disk credential store for the `amp` CLI: a versioned file holding named
@@ -24,6 +26,19 @@ import { usageError } from './cli-error';
  */
 
 export const CURRENT_VERSION = 1;
+
+const debugLock = debuglog('amp');
+
+export function debugCredentialPersistenceError(
+  operation: string,
+  error: unknown,
+): void {
+  debugLock(
+    '%s: %s',
+    operation,
+    error instanceof Error ? error.message : String(error),
+  );
+}
 
 // Validates a user-supplied profile name at the *creation* boundary (login /
 // pat). Deliberately NOT enforced on the store's `profiles` key — load stays
@@ -108,7 +123,7 @@ export type Profile = z.infer<typeof profileSchema>;
 export type CredentialStore = z.infer<typeof storeSchema>;
 
 export function credentialsPath(override?: string): string {
-  return override ?? join(homedir(), '.amplitude', 'amp', 'credentials.json');
+  return amplitudeDataPath(amplitudeDataFiles.credentials, override);
 }
 
 export function emptyStore(): CredentialStore {
@@ -211,6 +226,182 @@ export function saveStore(
     rmSync(tempPath, { force: true });
     throw error;
   }
+}
+
+/**
+ * How long a lockfile may go un-refreshed before a peer treats it as abandoned
+ * and steals it. Must stay at least 2x REFRESH_TIMEOUT_MS (token-refresh.ts):
+ * a steal mid-exchange means two processes redeem the same refresh token, which
+ * trips Hydra's rotation reuse-detection and revokes the whole family. Enforced
+ * by a test. proper-lockfile re-stamps the mtime every `update` ms, so only a
+ * stall longer than this — a suspended laptop, an event loop starved by a fleet
+ * of parallel `amp` processes — can trigger it.
+ */
+export const CREDENTIAL_LOCK_STALE_MS = 20_000;
+
+// Keep re-stamping at the pre-existing cadence rather than letting it drift to
+// the `stale / 2` default, so the threshold above buys tolerance for a stall
+// instead of just spacing out the writes that prevent one.
+const CREDENTIAL_LOCK_UPDATE_MS = 5_000;
+
+interface CredentialLockRetryOptions {
+  retries: number;
+  factor: number;
+  minTimeout: number;
+  maxTimeout: number;
+}
+
+// ~22.5s of total waiting, which has to outlast CREDENTIAL_LOCK_STALE_MS: a
+// holder killed mid-write leaves its lockfile behind, and peers can only
+// reclaim it once it goes stale. Give up sooner and a hard crash turns every
+// queued command into a failure instead of a pause.
+const CREDENTIAL_LOCK_RETRIES: CredentialLockRetryOptions = {
+  retries: 28,
+  factor: 1.5,
+  minTimeout: 50,
+  maxTimeout: 1000,
+};
+
+// A completed rotation holds the only usable refresh token in memory. Give its
+// reconciliation a longer, still-bounded window without making routine lock
+// contention slower. 51 retries with the same backoff total ~45.46 seconds.
+const CREDENTIAL_LOCK_RECOVERY_RETRIES: CredentialLockRetryOptions = {
+  ...CREDENTIAL_LOCK_RETRIES,
+  retries: 51,
+};
+
+function retryBudgetMs(options: CredentialLockRetryOptions): number {
+  return Array.from({ length: options.retries }, (_, attempt) =>
+    Math.min(
+      options.minTimeout * options.factor ** attempt,
+      options.maxTimeout,
+    ),
+  ).reduce((total, timeout) => total + timeout, 0);
+}
+
+export const CREDENTIAL_LOCK_RETRY_BUDGET_MS = retryBudgetMs(
+  CREDENTIAL_LOCK_RETRIES,
+);
+export const CREDENTIAL_LOCK_RECOVERY_RETRY_BUDGET_MS = retryBudgetMs(
+  CREDENTIAL_LOCK_RECOVERY_RETRIES,
+);
+
+export interface CredentialLockState {
+  isCompromised(): boolean;
+}
+
+export interface CredentialLockOptions {
+  lock?: typeof lock;
+  retryMode?: 'normal' | 'rotation_recovery';
+  acquireError?: () => Error;
+}
+
+export interface UpdateStoreOptions extends CredentialLockOptions {
+  save?: typeof saveStore;
+  persistError?: () => Error;
+}
+
+/**
+ * Runs `fn` while holding a cross-process advisory lock on the store file, so
+ * concurrent writers (transparent refresh, login, logout) serialize instead of
+ * clobbering each other. A failed acquire surfaces as the caller-selected
+ * recovery error, or a retryable transport error by default. `options.lock` is
+ * a test seam.
+ *
+ * Only the parent directory is created up front — that is what the lockfile
+ * `mkdir` needs, and it destroys nothing if a peer is mid-write. The store file
+ * itself is deliberately left absent: seeding it here would be an *unlocked*
+ * write that could clobber a profile a peer just committed, and `loadStore`
+ * already reads a missing file as empty once we are inside the lock.
+ */
+export async function withCredentialLock<T>(
+  path: string,
+  fn: (state: CredentialLockState) => T | Promise<T>,
+  options: CredentialLockOptions = {},
+): Promise<T> {
+  const acquire = options.lock ?? lock;
+  const retries =
+    options.retryMode === 'rotation_recovery'
+      ? CREDENTIAL_LOCK_RECOVERY_RETRIES
+      : CREDENTIAL_LOCK_RETRIES;
+  mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
+  let compromiseError: Error | undefined;
+  let release: () => Promise<void>;
+  try {
+    release = await acquire(path, {
+      retries,
+      stale: CREDENTIAL_LOCK_STALE_MS,
+      update: CREDENTIAL_LOCK_UPDATE_MS,
+      realpath: false,
+      onCompromised: (error) => {
+        // proper-lockfile's default rethrows, but it calls this from its
+        // mtime-updater's fs callback — off our promise chain, so the throw is
+        // uncatchable and kills the CLI mid-refresh. Record the loss so a
+        // refresh can reconcile a completed rotation under a replacement
+        // lock instead of discarding the only usable token.
+        compromiseError ??= error;
+        debugLock('credentials lock ownership was lost: %s', error.message);
+      },
+    });
+  } catch (error) {
+    debugLock(
+      'could not acquire credentials lock: %s',
+      error instanceof Error ? error.message : String(error),
+    );
+    throw (
+      options.acquireError?.() ??
+      transportError('Could not access saved credentials; try again.')
+    );
+  }
+
+  const state: CredentialLockState = {
+    isCompromised() {
+      return compromiseError !== undefined;
+    },
+  };
+
+  try {
+    return await fn(state);
+  } finally {
+    // A compromised lock makes release() reject. That must not replace the
+    // operation result or expose internal recovery mechanics to the user.
+    try {
+      await release();
+    } catch (error) {
+      debugLock(
+        'could not release credentials lock: %s',
+        error instanceof Error ? error.message : String(error),
+      );
+    }
+  }
+}
+
+/**
+ * The one safe way to change the store: under the lock, reload the latest
+ * store, apply `mutate`, and persist the result — so a concurrent writer can't
+ * be clobbered by a stale snapshot. Do any slow work (network, prompts) BEFORE
+ * calling this so the locked section stays short. Returns the persisted store.
+ */
+export async function updateStore(
+  path: string | undefined,
+  mutate: (store: CredentialStore) => CredentialStore,
+  options: UpdateStoreOptions = {},
+): Promise<CredentialStore> {
+  const resolved = path ?? credentialsPath();
+  return withCredentialLock(
+    resolved,
+    () => {
+      const next = mutate(loadStore(resolved));
+      try {
+        (options.save ?? saveStore)(next, resolved);
+      } catch (error) {
+        debugCredentialPersistenceError('could not save credentials', error);
+        throw options.persistError?.() ?? error;
+      }
+      return next;
+    },
+    options,
+  );
 }
 
 export function getProfile(

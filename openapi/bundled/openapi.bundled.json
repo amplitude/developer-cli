@@ -52,6 +52,14 @@
       "description": "Feature flag configuration and rollout operations."
     },
     {
+      "name": "Destinations",
+      "description": "Destination (connection) catalog and CRUD operations."
+    },
+    {
+      "name": "Skills",
+      "description": "Skill documents for implementing Amplitude, intended for AI agents."
+    },
+    {
       "name": "Auth",
       "description": "OAuth device-flow and token endpoints (RFC 8628 / RFC 6749)."
     }
@@ -62,7 +70,7 @@
         "tags": ["Auth"],
         "operationId": "deviceAuthorization",
         "summary": "Start a device authorization request",
-        "description": "RFC 8628 device authorization endpoint. Initiates the device flow and returns a device_code, user_code, and verification URIs for the user to approve out of band, then poll the token endpoint.\n",
+        "description": "RFC 8628 device authorization endpoint. Initiates the device flow and returns a device_code, user_code, and verification URIs for the user to approve out of band, then poll the token endpoint. When `offline_access` is requested, `openid` is also required.\n",
         "x-required-scopes": [],
         "security": [],
         "requestBody": {
@@ -111,6 +119,9 @@
               }
             }
           },
+          "429": {
+            "$ref": "#/components/responses/RateLimitProblem"
+          },
           "500": {
             "description": "Server error (RFC 6749 §5.2 OAuth error).",
             "content": {
@@ -129,7 +140,7 @@
         "tags": ["Auth"],
         "operationId": "token",
         "summary": "Exchange a grant for tokens",
-        "description": "RFC 6749 §3.2 token endpoint. Supports the `device_code` grant (RFC 8628). Authenticated by the fixed confidential device-flow client (injected server-side). Does not require a Bearer token.\n",
+        "description": "RFC 6749 §3.2 token endpoint. Supports the `device_code` grant (RFC 8628) and the `refresh_token` grant. Authenticated by the fixed confidential device-flow client (injected server-side). Does not require a Bearer token.\n",
         "x-required-scopes": [],
         "security": [],
         "requestBody": {
@@ -178,6 +189,9 @@
               }
             }
           },
+          "429": {
+            "$ref": "#/components/responses/RateLimitProblem"
+          },
           "500": {
             "description": "Server error (RFC 6749 §5.2 OAuth error).",
             "content": {
@@ -197,7 +211,7 @@
         "operationId": "getContext",
         "summary": "Get authenticated context",
         "description": "Returns the authenticated principal and organization context.",
-        "x-required-scopes": ["read:projects"],
+        "x-required-scopes": ["projects:read"],
         "responses": {
           "200": {
             "description": "Successful response.",
@@ -284,6 +298,9 @@
           "403": {
             "$ref": "#/components/responses/Problem"
           },
+          "429": {
+            "$ref": "#/components/responses/RateLimitProblem"
+          },
           "500": {
             "$ref": "#/components/responses/Problem"
           }
@@ -296,7 +313,7 @@
         "operationId": "listProjects",
         "summary": "List projects",
         "description": "Returns projects visible to the authenticated principal.",
-        "x-required-scopes": ["read:projects"],
+        "x-required-scopes": ["projects:read"],
         "parameters": [
           {
             "$ref": "#/components/parameters/Cursor"
@@ -343,6 +360,373 @@
           "403": {
             "$ref": "#/components/responses/Problem"
           },
+          "429": {
+            "$ref": "#/components/responses/RateLimitProblem"
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
+    },
+    "/v1/events/check-recent-ingestion": {
+      "post": {
+        "tags": ["Analytics"],
+        "operationId": "checkRecentEventIngestionByApiKey",
+        "summary": "Check recent event ingestion with an ingestion API key",
+        "description": "Checks whether Amplitude received any events for the project associated\nwith the supplied ingestion API key during the preceding eight hours.\n\n`observed` means at least one event was received in the evaluated window.\n`not_observed` means no events were received. `inconclusive` means no events\nwere found, but the available data could not confirm their absence. Use the\nreturned window when reporting or comparing results.\n\nThe window uses server upload time: when Amplitude received each event,\nrather than the event time supplied by the sender.\n\nProvide `polling_timeout_seconds` to request server polling guidance.\nWhile another check is advised, successful responses include\n`poll_after_seconds`; its omission means clients should stop polling.\n",
+        "x-required-scopes": [],
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["api_key"],
+                "properties": {
+                  "api_key": {
+                    "type": "string",
+                    "pattern": "\\S",
+                    "description": "Ingestion API key for the Amplitude project to check."
+                  },
+                  "polling_timeout_seconds": {
+                    "$ref": "#/components/schemas/RecentEventIngestionPollingTimeoutSeconds"
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Recent event ingestion status for the evaluated window.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["data"],
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "required": ["status", "window"],
+                      "properties": {
+                        "status": {
+                          "type": "string",
+                          "enum": ["observed", "not_observed", "inconclusive"],
+                          "description": "`observed` when at least one event was received;\n`not_observed` when none were received; `inconclusive`\nwhen none were found but their absence could not be\nconfirmed.\n"
+                        },
+                        "poll_after_seconds": {
+                          "$ref": "#/components/schemas/RecentEventIngestionPollAfterSeconds"
+                        },
+                        "window": {
+                          "type": "object",
+                          "required": [
+                            "lookback_hours",
+                            "start",
+                            "end",
+                            "basis"
+                          ],
+                          "properties": {
+                            "lookback_hours": {
+                              "type": "integer",
+                              "const": 8,
+                              "description": "Number of hours evaluated."
+                            },
+                            "start": {
+                              "type": "string",
+                              "format": "date-time",
+                              "description": "Start of the evaluated window."
+                            },
+                            "end": {
+                              "type": "string",
+                              "format": "date-time",
+                              "description": "End of the evaluated window."
+                            },
+                            "basis": {
+                              "type": "string",
+                              "const": "server_upload_time",
+                              "description": "The window is based on when Amplitude received each\nevent.\n"
+                            }
+                          },
+                          "additionalProperties": false
+                        }
+                      },
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "example": {
+                  "data": {
+                    "status": "observed",
+                    "window": {
+                      "lookback_hours": 8,
+                      "start": "2026-09-03T09:00:00Z",
+                      "end": "2026-09-03T17:00:00Z",
+                      "basis": "server_upload_time"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationProblem"
+          },
+          "401": {
+            "description": "The supplied API key is invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                },
+                "example": {
+                  "type": "https://developer-api.amplitude.com/problems/invalid-api-key",
+                  "title": "Invalid API key",
+                  "status": 401,
+                  "detail": "The supplied API key is invalid.",
+                  "error_code": "invalid_api_key",
+                  "retryable": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The endpoint is unavailable.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                },
+                "example": {
+                  "type": "https://developer-api.amplitude.com/problems/operation-not-enabled",
+                  "title": "Endpoint unavailable",
+                  "status": 403,
+                  "detail": "This endpoint is unavailable.",
+                  "error_code": "operation_not_enabled",
+                  "retryable": false
+                }
+              }
+            }
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimitProblem"
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "502": {
+            "description": "The ingestion status could not be determined. Retryable responses use\n`unreliable_dataset_response` or `upstream_error` as the `error_code`.\n",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Endpoint not available.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                },
+                "example": {
+                  "type": "https://developer-api.amplitude.com/problems/operation-availability-unavailable",
+                  "title": "Endpoint not available",
+                  "status": 503,
+                  "detail": "This endpoint is not available.",
+                  "error_code": "operation_availability_unavailable",
+                  "retryable": true
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/skills": {
+      "get": {
+        "tags": ["Skills"],
+        "operationId": "listSkills",
+        "summary": "List available skills",
+        "description": "Returns the skills currently available for implementing Amplitude, with each skill's name and when-to-use description.",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Available skills.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["data"],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": ["name", "description"],
+                        "properties": {
+                          "name": {
+                            "type": "string",
+                            "description": "Identifier used to retrieve the skill."
+                          },
+                          "description": {
+                            "type": "string",
+                            "description": "When to use this skill."
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimitProblem"
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
+    },
+    "/v1/skills/{name}": {
+      "get": {
+        "tags": ["Skills"],
+        "operationId": "getSkill",
+        "summary": "Get a skill document",
+        "description": "Returns the requested skill document verbatim as markdown, including frontmatter.",
+        "security": [],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "description": "Skill identifier as listed by `GET /v1/skills`.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The requested skill document as markdown.",
+            "content": {
+              "text/markdown": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimitProblem"
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
+    },
+    "/v1/destination-types": {
+      "get": {
+        "tags": ["Destinations"],
+        "operationId": "listDestinationTypes",
+        "summary": "List destination partner types",
+        "x-required-scopes": ["destinations:read"],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Cursor"
+          },
+          {
+            "$ref": "#/components/parameters/Limit"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["data", "pagination"],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/DestinationType"
+                      }
+                    },
+                    "pagination": {
+                      "$ref": "#/components/schemas/Pagination"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimitProblem"
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
+    },
+    "/v1/destination-types/{partner}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/Partner"
+        }
+      ],
+      "get": {
+        "tags": ["Destinations"],
+        "operationId": "getDestinationType",
+        "summary": "Get destination partner type",
+        "x-required-scopes": ["destinations:read"],
+        "responses": {
+          "200": {
+            "description": "Successful response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["data"],
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/DestinationType"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimitProblem"
+          },
           "500": {
             "$ref": "#/components/responses/Problem"
           }
@@ -354,7 +738,7 @@
         "tags": ["Taxonomy Events"],
         "operationId": "listEvents",
         "summary": "List event taxonomy entries",
-        "x-required-scopes": ["read:taxonomy"],
+        "x-required-scopes": ["taxonomy:read"],
         "parameters": [
           {
             "$ref": "#/components/parameters/ProjectId"
@@ -401,6 +785,9 @@
           "403": {
             "$ref": "#/components/responses/Problem"
           },
+          "429": {
+            "$ref": "#/components/responses/RateLimitProblem"
+          },
           "500": {
             "$ref": "#/components/responses/Problem"
           }
@@ -410,7 +797,7 @@
         "tags": ["Taxonomy Events"],
         "operationId": "createEvent",
         "summary": "Create event taxonomy entry",
-        "x-required-scopes": ["write:taxonomy"],
+        "x-required-scopes": ["taxonomy:write"],
         "parameters": [
           {
             "$ref": "#/components/parameters/ProjectId"
@@ -468,8 +855,135 @@
           "409": {
             "$ref": "#/components/responses/Problem"
           },
+          "429": {
+            "$ref": "#/components/responses/RateLimitProblem"
+          },
           "500": {
             "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
+    },
+    "/v1/projects/{project_id}/events/check-recent-ingestion": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ProjectId"
+        }
+      ],
+      "post": {
+        "tags": ["Analytics"],
+        "operationId": "checkRecentEventIngestion",
+        "summary": "Check recent event ingestion",
+        "description": "Checks whether events reached an Amplitude project during a recent time\nwindow. Provide `event_type` to check one exact event type, or omit it to\ncheck for any event. The default lookback is 10 minutes. The returned\nwindow can begin up to five minutes earlier so the evaluation covers the\ncomplete starting interval.\n\n`observed` means at least one matching event was found. `not_observed`\nmeans no matching event was found in the evaluated window. `inconclusive`\nmeans no matching event was found, but complete recent data was not\navailable to confirm its absence. Use the returned window when reporting\nor comparing results.\n\nThis POST computes a result and does not mutate state, so it does not\nrequire an `Idempotency-Key`.\n\nProvide `polling_timeout_seconds` to request server polling guidance.\nWhile another check is advised, successful responses include\n`poll_after_seconds`; its omission means clients should stop polling.\n",
+        "x-required-scopes": ["analytics:read"],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecentEventIngestionCheckRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Ingestion check completed successfully.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["data"],
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/RecentEventIngestionCheck"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationProblem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "description": "The caller cannot use this operation. `operation_not_enabled` means the\noperation is not enabled for the caller's organization;\n`insufficient_scope` means the token lacks `analytics:read`.\n",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                },
+                "examples": {
+                  "operationNotEnabled": {
+                    "summary": "Endpoint unavailable",
+                    "value": {
+                      "type": "https://developer-api.amplitude.com/problems/operation-not-enabled",
+                      "title": "Endpoint unavailable",
+                      "status": 403,
+                      "detail": "This endpoint is unavailable for your organization.",
+                      "error_code": "operation_not_enabled",
+                      "retryable": false
+                    }
+                  },
+                  "insufficientScope": {
+                    "summary": "Missing required scope",
+                    "value": {
+                      "type": "https://developer-api.amplitude.com/problems/forbidden",
+                      "title": "Insufficient scope",
+                      "status": 403,
+                      "detail": "Token missing required scopes.",
+                      "error_code": "insufficient_scope",
+                      "retryable": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimitProblem"
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "502": {
+            "description": "The ingestion status could not be determined. Retryable responses use\n`event_type_not_queryable`, `unreliable_dataset_response`, or\n`upstream_error` as the `error_code`.\n",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Endpoint not available.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                },
+                "examples": {
+                  "endpointNotAvailable": {
+                    "summary": "Endpoint not available",
+                    "value": {
+                      "type": "https://developer-api.amplitude.com/problems/operation-availability-unavailable",
+                      "title": "Endpoint not available",
+                      "status": 503,
+                      "detail": "This endpoint is not available.",
+                      "error_code": "operation_availability_unavailable",
+                      "retryable": true
+                    }
+                  }
+                }
+              }
+            }
           }
         }
       }
@@ -487,7 +1001,7 @@
         "tags": ["Taxonomy Events"],
         "operationId": "getEvent",
         "summary": "Get event taxonomy entry",
-        "x-required-scopes": ["read:taxonomy"],
+        "x-required-scopes": ["taxonomy:read"],
         "responses": {
           "200": {
             "description": "Successful response.",
@@ -514,6 +1028,9 @@
           "404": {
             "$ref": "#/components/responses/Problem"
           },
+          "429": {
+            "$ref": "#/components/responses/RateLimitProblem"
+          },
           "500": {
             "$ref": "#/components/responses/Problem"
           }
@@ -523,7 +1040,7 @@
         "tags": ["Taxonomy Events"],
         "operationId": "updateEvent",
         "summary": "Update event taxonomy entry",
-        "x-required-scopes": ["write:taxonomy"],
+        "x-required-scopes": ["taxonomy:write"],
         "parameters": [
           {
             "$ref": "#/components/parameters/IdempotencyKey"
@@ -577,6 +1094,9 @@
           "404": {
             "$ref": "#/components/responses/Problem"
           },
+          "429": {
+            "$ref": "#/components/responses/RateLimitProblem"
+          },
           "500": {
             "$ref": "#/components/responses/Problem"
           }
@@ -586,7 +1106,7 @@
         "tags": ["Taxonomy Events"],
         "operationId": "deleteEvent",
         "summary": "Soft-delete event taxonomy entry",
-        "x-required-scopes": ["write:taxonomy"],
+        "x-required-scopes": ["taxonomy:write"],
         "parameters": [
           {
             "$ref": "#/components/parameters/DryRun"
@@ -611,6 +1131,9 @@
           "404": {
             "$ref": "#/components/responses/Problem"
           },
+          "429": {
+            "$ref": "#/components/responses/RateLimitProblem"
+          },
           "500": {
             "$ref": "#/components/responses/Problem"
           }
@@ -631,7 +1154,7 @@
         "operationId": "listEventProperties",
         "summary": "List event properties for an event",
         "description": "Returns properties bound to a specific event, including ingested-only\nproperties (those with `is_in_schema: false`). Use the `is_in_schema`\nflag to detect whether a `PATCH` will succeed before issuing it.\n",
-        "x-required-scopes": ["read:taxonomy"],
+        "x-required-scopes": ["taxonomy:read"],
         "parameters": [
           {
             "$ref": "#/components/parameters/Cursor"
@@ -678,6 +1201,9 @@
           "404": {
             "$ref": "#/components/responses/Problem"
           },
+          "429": {
+            "$ref": "#/components/responses/RateLimitProblem"
+          },
           "500": {
             "$ref": "#/components/responses/Problem"
           }
@@ -688,7 +1214,7 @@
         "operationId": "createEventProperty",
         "summary": "Create event property",
         "description": "Creates an event property and adds it to the project's tracking plan\n(`is_in_schema: true` after success). If the property already exists in\nthe schema, the existing resource is returned without modification.\nIf the property exists ingested-only (`is_in_schema: false`), this call\npromotes it into the schema with the metadata supplied here.\n",
-        "x-required-scopes": ["write:taxonomy"],
+        "x-required-scopes": ["taxonomy:write"],
         "parameters": [
           {
             "$ref": "#/components/parameters/IdempotencyKey"
@@ -773,6 +1299,9 @@
           "409": {
             "$ref": "#/components/responses/Problem"
           },
+          "429": {
+            "$ref": "#/components/responses/RateLimitProblem"
+          },
           "500": {
             "$ref": "#/components/responses/Problem"
           }
@@ -795,7 +1324,7 @@
         "tags": ["Taxonomy Event Properties"],
         "operationId": "getEventProperty",
         "summary": "Get event property",
-        "x-required-scopes": ["read:taxonomy"],
+        "x-required-scopes": ["taxonomy:read"],
         "responses": {
           "200": {
             "description": "Successful response.",
@@ -822,6 +1351,9 @@
           "404": {
             "$ref": "#/components/responses/Problem"
           },
+          "429": {
+            "$ref": "#/components/responses/RateLimitProblem"
+          },
           "500": {
             "$ref": "#/components/responses/Problem"
           }
@@ -832,7 +1364,7 @@
         "operationId": "updateEventProperty",
         "summary": "Update event property metadata",
         "description": "Updates metadata on an event property. Returns `422 not_in_schema` if\nthe property is ingested-only (`is_in_schema: false`); promote it via\n`POST` first. Field absent means leave unchanged; field with `null`\nclears (where allowed). `enum_values` and `classifications` replace the\narray entirely — there is no per-item add/remove.\n",
-        "x-required-scopes": ["write:taxonomy"],
+        "x-required-scopes": ["taxonomy:write"],
         "parameters": [
           {
             "$ref": "#/components/parameters/IdempotencyKey"
@@ -917,6 +1449,9 @@
               }
             }
           },
+          "429": {
+            "$ref": "#/components/responses/RateLimitProblem"
+          },
           "500": {
             "$ref": "#/components/responses/Problem"
           }
@@ -926,7 +1461,7 @@
         "tags": ["Taxonomy Event Properties"],
         "operationId": "deleteEventProperty",
         "summary": "Delete event property",
-        "x-required-scopes": ["write:taxonomy"],
+        "x-required-scopes": ["taxonomy:write"],
         "parameters": [
           {
             "$ref": "#/components/parameters/DryRun"
@@ -951,6 +1486,9 @@
           "404": {
             "$ref": "#/components/responses/Problem"
           },
+          "429": {
+            "$ref": "#/components/responses/RateLimitProblem"
+          },
           "500": {
             "$ref": "#/components/responses/Problem"
           }
@@ -967,7 +1505,7 @@
         "tags": ["Taxonomy User Properties"],
         "operationId": "listUserProperties",
         "summary": "List user properties for a project",
-        "x-required-scopes": ["read:taxonomy"],
+        "x-required-scopes": ["taxonomy:read"],
         "parameters": [
           {
             "$ref": "#/components/parameters/Cursor"
@@ -1014,6 +1552,9 @@
           "404": {
             "$ref": "#/components/responses/Problem"
           },
+          "429": {
+            "$ref": "#/components/responses/RateLimitProblem"
+          },
           "500": {
             "$ref": "#/components/responses/Problem"
           }
@@ -1024,7 +1565,7 @@
         "operationId": "createUserProperty",
         "summary": "Create user property",
         "description": "Creates a user property and adds it to the project's tracking plan.\nSame idempotency semantics as `createEventProperty`.\n",
-        "x-required-scopes": ["write:taxonomy"],
+        "x-required-scopes": ["taxonomy:write"],
         "parameters": [
           {
             "$ref": "#/components/parameters/IdempotencyKey"
@@ -1112,6 +1653,9 @@
           "409": {
             "$ref": "#/components/responses/Problem"
           },
+          "429": {
+            "$ref": "#/components/responses/RateLimitProblem"
+          },
           "500": {
             "$ref": "#/components/responses/Problem"
           }
@@ -1131,7 +1675,7 @@
         "tags": ["Taxonomy User Properties"],
         "operationId": "getUserProperty",
         "summary": "Get user property",
-        "x-required-scopes": ["read:taxonomy"],
+        "x-required-scopes": ["taxonomy:read"],
         "responses": {
           "200": {
             "description": "Successful response.",
@@ -1158,6 +1702,9 @@
           "404": {
             "$ref": "#/components/responses/Problem"
           },
+          "429": {
+            "$ref": "#/components/responses/RateLimitProblem"
+          },
           "500": {
             "$ref": "#/components/responses/Problem"
           }
@@ -1168,7 +1715,7 @@
         "operationId": "updateUserProperty",
         "summary": "Update user property metadata",
         "description": "Updates metadata on a user property. Returns `422 not_in_schema` if the\nproperty is ingested-only. Same patch semantics as `updateEventProperty`\n(field absent = unchanged, `null` = clear, arrays replace).\n\nOnly `display_name`, `description`, `is_hidden`, and `classifications`\nare mutable via PATCH today. Type/shape fields (`data_type`,\n`is_array_type`, `enum_values`, `regex`) are settable only at creation.\n`is_official` is read-only until TMS exposes a write path for it.\n",
-        "x-required-scopes": ["write:taxonomy"],
+        "x-required-scopes": ["taxonomy:write"],
         "parameters": [
           {
             "$ref": "#/components/parameters/IdempotencyKey"
@@ -1241,6 +1788,9 @@
               }
             }
           },
+          "429": {
+            "$ref": "#/components/responses/RateLimitProblem"
+          },
           "500": {
             "$ref": "#/components/responses/Problem"
           }
@@ -1250,7 +1800,7 @@
         "tags": ["Taxonomy User Properties"],
         "operationId": "deleteUserProperty",
         "summary": "Delete user property",
-        "x-required-scopes": ["write:taxonomy"],
+        "x-required-scopes": ["taxonomy:write"],
         "parameters": [
           {
             "$ref": "#/components/parameters/DryRun"
@@ -1275,6 +1825,9 @@
           "404": {
             "$ref": "#/components/responses/Problem"
           },
+          "429": {
+            "$ref": "#/components/responses/RateLimitProblem"
+          },
           "500": {
             "$ref": "#/components/responses/Problem"
           }
@@ -1287,7 +1840,7 @@
         "operationId": "listCharts",
         "summary": "List charts",
         "description": "Returns saved charts in the project. Results are paginated with cursor-based\npagination. Chart definitions are omitted; use GET chart with\n`include_definition=true` to retrieve a read-only definition.\n\nPagination uses an opaque numeric cursor (offset into the current sorted\nsearch result set). Each list query can access at most **10,000** matching\ncharts from the search index; pages beyond that window return fewer items\nand `next_cursor: null` even when more charts may exist in the project.\nUse filters (`q`, `chart_type`) to narrow large projects.\n\nSortable fields are `updated_at` and `name`; prefix with `-` for descending.\nDefaults to `-updated_at` (most recently updated first). `created_at` is not\nsupported in this API version.\n",
-        "x-required-scopes": ["read:analytics"],
+        "x-required-scopes": ["analytics:read"],
         "parameters": [
           {
             "$ref": "#/components/parameters/ProjectId"
@@ -1340,6 +1893,9 @@
           "403": {
             "$ref": "#/components/responses/Problem"
           },
+          "429": {
+            "$ref": "#/components/responses/RateLimitProblem"
+          },
           "500": {
             "$ref": "#/components/responses/Problem"
           }
@@ -1360,7 +1916,7 @@
         "operationId": "getChart",
         "summary": "Get chart",
         "description": "Returns chart metadata. The chart definition is omitted by default. Set\n`include_definition=true` to include a read-only definition object. The\ndefinition shape is unstable and not intended for authoring.\n",
-        "x-required-scopes": ["read:analytics"],
+        "x-required-scopes": ["analytics:read"],
         "parameters": [
           {
             "$ref": "#/components/parameters/IncludeDefinition"
@@ -1395,6 +1951,9 @@
           "404": {
             "$ref": "#/components/responses/Problem"
           },
+          "429": {
+            "$ref": "#/components/responses/RateLimitProblem"
+          },
           "500": {
             "$ref": "#/components/responses/Problem"
           }
@@ -1414,8 +1973,8 @@
         "tags": ["Analytics"],
         "operationId": "queryChart",
         "summary": "Query chart",
-        "description": "Computes and returns normalized results for a saved chart. v1 supports\n`event_segmentation`, `sessions`, `funnels`, and `retention` chart types;\nother chart types return `422` with `error_code: unsupported_chart_type`.\nResults reflect the authenticated caller's project access and chart\npermissions.\n\nThis POST computes a result and does not mutate state. It is therefore a\nread operation and does not require an `Idempotency-Key`.\n\nOmitting `time_range` uses the chart's saved range; if the chart has no\nsaved range, the server defaults to the last 30 days.\n\nQuery is synchronous with bounded defaults. Expensive queries may return\n`504` when exceeding the server timeout; async query jobs are planned for\na follow-up slice. Retryable responses (`429`, `502`, `504`) populate\n`retry_after_seconds` in the problem body when a delay is advised.\n",
-        "x-required-scopes": ["read:analytics"],
+        "description": "Computes and returns normalized results for a saved chart. v1 supports\n`event_segmentation`, `sessions`, `funnels`, and `retention` chart types;\nother chart types return `422` with `error_code: unsupported_chart_type`.\nResults reflect the authenticated caller's project access and chart\npermissions.\n\nThis POST computes a result and does not mutate state. It is therefore a\nread operation and does not require an `Idempotency-Key`.\n\nOmitting `time_range` uses the chart's saved range; if the chart has no\nsaved range, the server defaults to the last 30 days.\n\nQuery is synchronous with bounded defaults. Expensive queries may return\n`504` when exceeding the server timeout; async query jobs are planned for\na follow-up slice. Retryable responses may include retry advice where\ntheir endpoint-specific error contract provides it.\n",
+        "x-required-scopes": ["analytics:read"],
         "requestBody": {
           "required": false,
           "content": {
@@ -1466,7 +2025,7 @@
             }
           },
           "429": {
-            "$ref": "#/components/responses/Problem"
+            "$ref": "#/components/responses/RateLimitProblem"
           },
           "500": {
             "$ref": "#/components/responses/Problem"
@@ -1492,7 +2051,7 @@
         "tags": ["Feature Flags"],
         "operationId": "listFeatureFlags",
         "summary": "List feature flags",
-        "x-required-scopes": ["read:flags"],
+        "x-required-scopes": ["flags:read"],
         "parameters": [
           {
             "$ref": "#/components/parameters/ProjectId"
@@ -1536,6 +2095,9 @@
           "403": {
             "$ref": "#/components/responses/Problem"
           },
+          "429": {
+            "$ref": "#/components/responses/RateLimitProblem"
+          },
           "500": {
             "$ref": "#/components/responses/Problem"
           }
@@ -1545,7 +2107,7 @@
         "tags": ["Feature Flags"],
         "operationId": "createFeatureFlag",
         "summary": "Create feature flag",
-        "x-required-scopes": ["write:flags"],
+        "x-required-scopes": ["flags:write"],
         "parameters": [
           {
             "$ref": "#/components/parameters/ProjectId"
@@ -1648,6 +2210,9 @@
           "409": {
             "$ref": "#/components/responses/Problem"
           },
+          "429": {
+            "$ref": "#/components/responses/RateLimitProblem"
+          },
           "500": {
             "$ref": "#/components/responses/Problem"
           }
@@ -1667,7 +2232,7 @@
         "tags": ["Feature Flags"],
         "operationId": "getFeatureFlag",
         "summary": "Get feature flag",
-        "x-required-scopes": ["read:flags"],
+        "x-required-scopes": ["flags:read"],
         "responses": {
           "200": {
             "description": "Successful response.",
@@ -1694,6 +2259,9 @@
           "404": {
             "$ref": "#/components/responses/Problem"
           },
+          "429": {
+            "$ref": "#/components/responses/RateLimitProblem"
+          },
           "500": {
             "$ref": "#/components/responses/Problem"
           }
@@ -1704,7 +2272,7 @@
         "operationId": "updateFeatureFlag",
         "summary": "Update feature flag",
         "description": "Updates feature flag metadata and rollout settings. Variant, tester, deployment, and link mutations will be exposed through dedicated subresources in a later slice.",
-        "x-required-scopes": ["write:flags"],
+        "x-required-scopes": ["flags:write"],
         "parameters": [
           {
             "$ref": "#/components/parameters/IdempotencyKey"
@@ -1782,6 +2350,9 @@
           "409": {
             "$ref": "#/components/responses/Problem"
           },
+          "429": {
+            "$ref": "#/components/responses/RateLimitProblem"
+          },
           "500": {
             "$ref": "#/components/responses/Problem"
           }
@@ -1791,7 +2362,7 @@
         "tags": ["Feature Flags"],
         "operationId": "archiveFeatureFlag",
         "summary": "Archive feature flag",
-        "x-required-scopes": ["write:flags"],
+        "x-required-scopes": ["flags:write"],
         "parameters": [
           {
             "$ref": "#/components/parameters/DryRun"
@@ -1815,6 +2386,484 @@
           },
           "404": {
             "$ref": "#/components/responses/Problem"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimitProblem"
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
+    },
+    "/v1/projects/{project_id}/destinations": {
+      "get": {
+        "tags": ["Destinations"],
+        "operationId": "listDestinations",
+        "summary": "List destinations",
+        "x-required-scopes": ["destinations:read"],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ProjectId"
+          },
+          {
+            "$ref": "#/components/parameters/Cursor"
+          },
+          {
+            "$ref": "#/components/parameters/Limit"
+          },
+          {
+            "$ref": "#/components/parameters/Query"
+          },
+          {
+            "$ref": "#/components/parameters/PartnerFilter"
+          },
+          {
+            "$ref": "#/components/parameters/EnabledFilter"
+          },
+          {
+            "$ref": "#/components/parameters/KindFilter"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["data", "pagination"],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Destination"
+                      }
+                    },
+                    "pagination": {
+                      "$ref": "#/components/schemas/Pagination"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationProblem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimitProblem"
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      },
+      "post": {
+        "tags": ["Destinations"],
+        "operationId": "createDestination",
+        "summary": "Create a destination",
+        "description": "Always creates a new destination; the server assigns the `id` used for\nevery subsequent lookup. `display_name` is not an identity key, so\nrepeating a create makes another destination. When `dry_run=true`, returns\na plan envelope without mutating. SECRET/OAUTH config values are\nwrite-only.\n",
+        "x-required-scopes": ["destinations:write"],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ProjectId"
+          },
+          {
+            "$ref": "#/components/parameters/DryRun"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["partner", "display_name"],
+                "properties": {
+                  "partner": {
+                    "type": "string"
+                  },
+                  "display_name": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "kind": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/DestinationConnectorKind"
+                    },
+                    "minItems": 1,
+                    "description": "Optional connector kinds. When omitted, the kind is inferred\nfrom the partner's capabilities; a multi-capability partner with\nno kind is rejected as ambiguous. When provided it is\nauthoritative and validated against the partner. The three\nfamilies are mutually exclusive: a subset of [event, identify],\nor [cohort], or [warehouse_export] — never combined.\n"
+                  },
+                  "config": {
+                    "type": "object",
+                    "additionalProperties": true
+                  },
+                  "enabled": {
+                    "type": "boolean"
+                  },
+                  "event_filter": {
+                    "$ref": "#/components/schemas/DestinationEventFilter"
+                  },
+                  "property_mappings": {
+                    "type": "object",
+                    "additionalProperties": true
+                  },
+                  "send_events": {
+                    "type": "boolean"
+                  },
+                  "send_users": {
+                    "type": "boolean"
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Dry-run plan (no mutation).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["data", "plan"],
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/Destination"
+                    },
+                    "plan": {
+                      "$ref": "#/components/schemas/PlanDetails"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Destination created.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["data"],
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/Destination"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationProblem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimitProblem"
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
+    },
+    "/v1/projects/{project_id}/destinations/{id}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ProjectId"
+        },
+        {
+          "$ref": "#/components/parameters/DestinationId"
+        }
+      ],
+      "get": {
+        "tags": ["Destinations"],
+        "operationId": "getDestination",
+        "summary": "Get a destination",
+        "x-required-scopes": ["destinations:read"],
+        "responses": {
+          "200": {
+            "description": "Successful response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["data"],
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/Destination"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimitProblem"
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      },
+      "patch": {
+        "tags": ["Destinations"],
+        "operationId": "updateDestination",
+        "summary": "Update a destination",
+        "x-required-scopes": ["destinations:write"],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/DryRun"
+          },
+          {
+            "$ref": "#/components/parameters/IfMatch"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "display_name": {
+                    "type": "string"
+                  },
+                  "kind": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/DestinationConnectorKind"
+                    },
+                    "minItems": 1
+                  },
+                  "config": {
+                    "type": "object",
+                    "additionalProperties": true
+                  },
+                  "enabled": {
+                    "type": "boolean"
+                  },
+                  "event_filter": {
+                    "oneOf": [
+                      {
+                        "$ref": "#/components/schemas/DestinationEventFilter"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "property_mappings": {
+                    "oneOf": [
+                      {
+                        "type": "object",
+                        "additionalProperties": true
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "send_events": {
+                    "type": "boolean"
+                  },
+                  "send_users": {
+                    "type": "boolean"
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Destination updated, or dry-run plan.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["data"],
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/Destination"
+                    },
+                    "plan": {
+                      "$ref": "#/components/schemas/PlanDetails"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationProblem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "412": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimitProblem"
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
+    },
+    "/v1/projects/{project_id}/destinations/{id}/test": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ProjectId"
+        },
+        {
+          "$ref": "#/components/parameters/DestinationId"
+        }
+      ],
+      "post": {
+        "tags": ["Destinations"],
+        "operationId": "testDestination",
+        "summary": "Test an event streaming destination connection",
+        "x-required-scopes": ["destinations:write"],
+        "responses": {
+          "200": {
+            "description": "Test result.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["data"],
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/DestinationTestResult"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationProblem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimitProblem"
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
+    },
+    "/v1/projects/{project_id}/snowflake-keys": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ProjectId"
+        }
+      ],
+      "post": {
+        "tags": ["Destinations"],
+        "operationId": "generateSnowflakeRsaKey",
+        "summary": "Generate an RSA key pair for Snowflake authentication",
+        "description": "Generates a Snowflake-compatible RSA key pair. The private key is stored\nserver-side in an ephemeral cache; you receive the public key (paste into\nyour Snowflake user via `ALTER USER <user> SET RSA_PUBLIC_KEY = '...'`) and\nan ephemeral ID to pass as `snowflake_private_key_ephemeral_id` in the\ndestination `config` on a subsequent `POST /destinations` for a Snowflake\ndirect-load destination.\n\nThis is the CLI equivalent of the \"Generate RSA Key\" step in the Amplitude\nUI wizard, so customers do not have to run `openssl genrsa` and manage\nprivate keys locally.\n",
+        "x-required-scopes": ["destinations:write"],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Key pair generated.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["data"],
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "required": ["public_key", "ephemeral_id"],
+                      "properties": {
+                        "public_key": {
+                          "type": "string",
+                          "description": "RSA public key in PEM format. Add to your Snowflake user."
+                        },
+                        "ephemeral_id": {
+                          "type": "string",
+                          "description": "Reference to the server-held private key. Pass as `snowflake_private_key_ephemeral_id` in destination create/update config."
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimitProblem"
           },
           "500": {
             "$ref": "#/components/responses/Problem"
@@ -1982,6 +3031,64 @@
           "type": "string",
           "minLength": 1
         }
+      },
+      "Partner": {
+        "name": "partner",
+        "in": "path",
+        "required": true,
+        "description": "Destination partner key (e.g. braze, kinesis_datastream).",
+        "schema": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "DestinationId": {
+        "name": "id",
+        "in": "path",
+        "required": true,
+        "description": "Destination id.",
+        "schema": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "PartnerFilter": {
+        "name": "partner",
+        "in": "query",
+        "required": false,
+        "description": "Filter by destination partner key.",
+        "schema": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "EnabledFilter": {
+        "name": "enabled",
+        "in": "query",
+        "required": false,
+        "description": "Filter by enabled/active flag.",
+        "schema": {
+          "type": "boolean"
+        }
+      },
+      "IfMatch": {
+        "name": "If-Match",
+        "in": "header",
+        "required": false,
+        "description": "Optimistic concurrency token. Must equal the resource `version` for the\nwrite to proceed; otherwise the API returns 412.\n",
+        "schema": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "KindFilter": {
+        "name": "kind",
+        "in": "query",
+        "required": false,
+        "description": "Filter by a single connector kind; matches destinations whose `kind` array\ncontains this value.\n",
+        "schema": {
+          "$ref": "#/components/schemas/DestinationConnectorKind"
+        }
       }
     },
     "responses": {
@@ -2001,6 +3108,24 @@
           "application/problem+json": {
             "schema": {
               "$ref": "#/components/schemas/ProblemDetails"
+            }
+          }
+        }
+      },
+      "RateLimitProblem": {
+        "description": "Request rate limit exceeded.",
+        "content": {
+          "application/problem+json": {
+            "schema": {
+              "$ref": "#/components/schemas/ProblemDetails"
+            },
+            "example": {
+              "type": "https://developer-api.amplitude.com/problems/rate-limit-exceeded",
+              "title": "Rate limit exceeded",
+              "status": 429,
+              "detail": "Too many requests.",
+              "error_code": "rate_limit_exceeded",
+              "retryable": true
             }
           }
         }
@@ -2506,6 +3631,86 @@
           }
         }
       },
+      "RecentEventIngestionCheckRequest": {
+        "type": "object",
+        "properties": {
+          "event_type": {
+            "type": "string",
+            "pattern": "\\S",
+            "description": "Exact event type to check. Omit to check for any event."
+          },
+          "lookback_minutes": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1440,
+            "default": 10,
+            "description": "Number of recent minutes to evaluate. The returned window can begin up\nto five minutes earlier to cover the complete starting interval.\n"
+          },
+          "polling_timeout_seconds": {
+            "$ref": "#/components/schemas/RecentEventIngestionPollingTimeoutSeconds"
+          }
+        },
+        "additionalProperties": false
+      },
+      "RecentEventIngestionCheck": {
+        "type": "object",
+        "required": ["id", "object", "project_id", "status", "count", "window"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Identifier for this ingestion check."
+          },
+          "object": {
+            "type": "string",
+            "const": "recent_event_ingestion_check",
+            "description": "Resource-type discriminator. Always `recent_event_ingestion_check`."
+          },
+          "project_id": {
+            "type": "string",
+            "pattern": "^[0-9]+$"
+          },
+          "event_type": {
+            "type": "string",
+            "description": "Event type evaluated. Omitted when the request checked for any event."
+          },
+          "status": {
+            "type": "string",
+            "enum": ["observed", "not_observed", "inconclusive"],
+            "description": "`observed` when at least one matching event was found; `not_observed`\nwhen none was found; `inconclusive` when none was found but complete\nrecent data was unavailable.\n"
+          },
+          "count": {
+            "type": "number",
+            "minimum": 0,
+            "description": "Number of matching events found in the evaluated window."
+          },
+          "poll_after_seconds": {
+            "$ref": "#/components/schemas/RecentEventIngestionPollAfterSeconds"
+          },
+          "window": {
+            "type": "object",
+            "required": ["start", "end", "basis"],
+            "properties": {
+              "start": {
+                "type": "string",
+                "format": "date-time",
+                "description": "Start of the evaluated window."
+              },
+              "end": {
+                "type": "string",
+                "format": "date-time",
+                "description": "End of the evaluated window."
+              },
+              "basis": {
+                "type": "string",
+                "const": "server_upload_time",
+                "description": "Time basis for the window. `server_upload_time` measures when an\nevent reached Amplitude.\n"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
       "FeatureFlag": {
         "allOf": [
           {
@@ -2599,22 +3804,222 @@
           }
         }
       },
+      "Destination": {
+        "type": "object",
+        "required": [
+          "id",
+          "object",
+          "project_id",
+          "partner",
+          "display_name",
+          "kind",
+          "config",
+          "credential_status",
+          "version",
+          "created_at",
+          "updated_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Server-assigned identifier (read-only)."
+          },
+          "object": {
+            "type": "string",
+            "const": "destination"
+          },
+          "project_id": {
+            "type": "string",
+            "pattern": "^[0-9]+$"
+          },
+          "partner": {
+            "type": "string"
+          },
+          "display_name": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DestinationConnectorKind"
+            },
+            "minItems": 1
+          },
+          "config": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "Partner config keyed by parameter id. SECRET/OAUTH values are write-only\nand never returned on reads. Values are scalars or structured\n(objects/arrays, e.g. header maps); structured values round-trip as\ndecoded JSON.\n"
+          },
+          "credential_status": {
+            "$ref": "#/components/schemas/DestinationCredentialStatus"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "enabled": {
+            "type": "boolean",
+            "description": "Event-streaming only. Whether the stream is enabled."
+          },
+          "paused": {
+            "type": "boolean",
+            "description": "Event-streaming only. Whether the stream is paused."
+          },
+          "event_filter": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/DestinationEventFilter"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Event-streaming only. Events (and optional property filters) to stream."
+          },
+          "property_mappings": {
+            "oneOf": [
+              {
+                "type": "object",
+                "additionalProperties": true
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Event-streaming only. Optional property mappings."
+          },
+          "send_events": {
+            "type": "boolean",
+            "description": "Event-streaming only. Whether to send events."
+          },
+          "send_users": {
+            "type": "boolean",
+            "description": "Event-streaming only. Whether to send identify/user updates."
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "created_by": {
+            "type": ["string", "null"]
+          },
+          "updated_by": {
+            "type": ["string", "null"]
+          }
+        }
+      },
+      "DestinationType": {
+        "type": "object",
+        "required": [
+          "id",
+          "object",
+          "partner",
+          "display_name",
+          "types",
+          "parameters"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "object": {
+            "type": "string",
+            "const": "destination_type"
+          },
+          "partner": {
+            "type": "string",
+            "description": "Partner key (e.g. braze, kinesis_datastream, s3)."
+          },
+          "display_name": {
+            "type": "string"
+          },
+          "types": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DestinationConnectorType"
+            },
+            "minItems": 1
+          },
+          "parameters": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DestinationParameter"
+            }
+          }
+        }
+      },
+      "DestinationParameter": {
+        "type": "object",
+        "required": ["id", "label", "kind", "required"],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/DestinationParameterKind"
+          },
+          "required": {
+            "type": "boolean"
+          },
+          "description": {
+            "type": ["string", "null"]
+          },
+          "enum_values": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "write_only": {
+            "type": "boolean"
+          }
+        }
+      },
+      "PlanDetails": {
+        "type": "object",
+        "required": ["action", "dry_run"],
+        "properties": {
+          "action": {
+            "$ref": "#/components/schemas/PlanAction"
+          },
+          "dry_run": {
+            "type": "boolean",
+            "const": true
+          },
+          "diff": {
+            "oneOf": [
+              {
+                "type": "object",
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/PlanDiffEntry"
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
       "DeviceAuthorizationRequest": {
         "type": "object",
-        "required": ["code_challenge", "code_challenge_method"],
         "properties": {
           "scope": {
             "type": "string",
-            "description": "Space-delimited OAuth scopes to request."
-          },
-          "code_challenge": {
-            "type": "string",
-            "description": "PKCE code challenge (RFC 7636): the base64url-encoded SHA-256 of your code_verifier.\n"
-          },
-          "code_challenge_method": {
-            "type": "string",
-            "enum": ["S256"],
-            "description": "PKCE challenge method. Must be S256."
+            "description": "Space-delimited OAuth scopes to request. When `offline_access` is requested, `openid` is also required.\n"
           }
         }
       },
@@ -2667,21 +4072,20 @@
         }
       },
       "TokenRequest": {
-        "type": "object",
-        "required": ["grant_type", "device_code", "code_verifier"],
-        "properties": {
-          "grant_type": {
-            "type": "string",
-            "enum": ["urn:ietf:params:oauth:grant-type:device_code"],
-            "description": "The OAuth grant type. Must be `urn:ietf:params:oauth:grant-type:device_code`."
+        "description": "Token grant request. Either the `device_code` grant (RFC 8628) or the `refresh_token` grant, selected by `grant_type`.\n",
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/DeviceCodeTokenRequest"
           },
-          "device_code": {
-            "type": "string",
-            "description": "The device_code from the device-authorization response."
-          },
-          "code_verifier": {
-            "type": "string",
-            "description": "PKCE code verifier matching the code_challenge sent to the device-authorization endpoint.\n"
+          {
+            "$ref": "#/components/schemas/RefreshTokenRequest"
+          }
+        ],
+        "discriminator": {
+          "propertyName": "grant_type",
+          "mapping": {
+            "urn:ietf:params:oauth:grant-type:device_code": "#/components/schemas/DeviceCodeTokenRequest",
+            "refresh_token": "#/components/schemas/RefreshTokenRequest"
           }
         }
       },
@@ -2708,6 +4112,68 @@
             "type": "string"
           }
         }
+      },
+      "DeviceCodeTokenRequest": {
+        "type": "object",
+        "required": ["grant_type", "device_code"],
+        "properties": {
+          "grant_type": {
+            "type": "string",
+            "const": "urn:ietf:params:oauth:grant-type:device_code",
+            "description": "The OAuth grant type. Must be `urn:ietf:params:oauth:grant-type:device_code`."
+          },
+          "device_code": {
+            "type": "string",
+            "description": "The device_code from the device-authorization response."
+          }
+        }
+      },
+      "RefreshTokenRequest": {
+        "type": "object",
+        "required": ["grant_type", "refresh_token"],
+        "properties": {
+          "grant_type": {
+            "type": "string",
+            "const": "refresh_token",
+            "description": "The OAuth grant type. Must be `refresh_token`."
+          },
+          "refresh_token": {
+            "type": "string",
+            "description": "The refresh_token issued by a previous token or refresh grant."
+          }
+        }
+      },
+      "RecentEventIngestionPollingTimeoutSeconds": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 120,
+        "description": "Maximum polling window requested by the caller. Clients should complete\nthe initial check even if it exceeds this window and use the window only\nto limit subsequent polls. Its presence requests polling guidance; it is\nnot an HTTP request timeout, and each HTTP request performs one check.\n"
+      },
+      "RecentEventIngestionPollAfterSeconds": {
+        "type": "integer",
+        "minimum": 1,
+        "description": "Minimum seconds to wait before the next ingestion check. Returned only\nwhen polling was requested and another check is advised. Its omission\nmeans the server does not advise another check.\n"
+      },
+      "DestinationConnectorType": {
+        "type": "string",
+        "enum": ["event", "identify", "cohort"]
+      },
+      "DestinationParameterKind": {
+        "type": "string",
+        "enum": [
+          "string",
+          "number",
+          "boolean",
+          "secret",
+          "oauth",
+          "service_account",
+          "enum",
+          "http_headers",
+          "mapped_field",
+          "event_mapping",
+          "transformation",
+          "ads_account"
+        ]
       },
       "TimeRange": {
         "type": "object",
@@ -3188,6 +4654,67 @@
             "type": ["string", "null"],
             "format": "uri",
             "readOnly": true
+          }
+        }
+      },
+      "DestinationConnectorKind": {
+        "type": "string",
+        "enum": ["event", "identify", "cohort", "warehouse_export"],
+        "description": "Authoritative connector kind on a destination. `event`/`identify`/`cohort`\nare Connector-Manager routed; `warehouse_export` is Falcon routed. Routing\nis derived from the array of these values, so there is no separate routing\nfield. `warehouse_export` cannot be combined with the other kinds.\n"
+      },
+      "DestinationCredentialStatus": {
+        "type": "string",
+        "enum": ["connected", "disconnected", "expired"]
+      },
+      "DestinationEventFilter": {
+        "type": "object",
+        "required": ["events"],
+        "properties": {
+          "events": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1
+          },
+          "property_filters": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        }
+      },
+      "PlanAction": {
+        "type": "string",
+        "enum": ["create", "update", "noop"]
+      },
+      "PlanDiffEntry": {
+        "type": "object",
+        "required": ["from", "to"],
+        "properties": {
+          "from": {},
+          "to": {}
+        }
+      },
+      "DestinationTestResult": {
+        "type": "object",
+        "required": ["ok"],
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "detail": {
+            "type": ["string", "null"]
+          },
+          "example_payload": {
+            "oneOf": [
+              {
+                "type": "object",
+                "additionalProperties": true
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         }
       }

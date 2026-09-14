@@ -31,6 +31,10 @@ tags:
     description: Saved chart discovery and query operations.
   - name: Feature Flags
     description: Feature flag configuration and rollout operations.
+  - name: Destinations
+    description: Destination (connection) catalog and CRUD operations.
+  - name: Skills
+    description: Skill documents for implementing Amplitude, intended for AI agents.
   - name: Auth
     description: OAuth device-flow and token endpoints (RFC 8628 / RFC 6749).
 paths:
@@ -41,7 +45,7 @@ paths:
       operationId: deviceAuthorization
       summary: Start a device authorization request
       description: |
-        RFC 8628 device authorization endpoint. Initiates the device flow and returns a device_code, user_code, and verification URIs for the user to approve out of band, then poll the token endpoint.
+        RFC 8628 device authorization endpoint. Initiates the device flow and returns a device_code, user_code, and verification URIs for the user to approve out of band, then poll the token endpoint. When `offline_access` is requested, `openid` is also required.
       x-required-scopes: []
       security: []
       requestBody:
@@ -72,6 +76,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/OAuthError'
+        '429':
+          $ref: '#/components/responses/RateLimitProblem'
         '500':
           description: Server error (RFC 6749 §5.2 OAuth error).
           content:
@@ -85,7 +91,7 @@ paths:
       operationId: token
       summary: Exchange a grant for tokens
       description: |
-        RFC 6749 §3.2 token endpoint. Supports the `device_code` grant (RFC 8628). Authenticated by the fixed confidential device-flow client (injected server-side). Does not require a Bearer token.
+        RFC 6749 §3.2 token endpoint. Supports the `device_code` grant (RFC 8628) and the `refresh_token` grant. Authenticated by the fixed confidential device-flow client (injected server-side). Does not require a Bearer token.
       x-required-scopes: []
       security: []
       requestBody:
@@ -116,6 +122,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/OAuthError'
+        '429':
+          $ref: '#/components/responses/RateLimitProblem'
         '500':
           description: Server error (RFC 6749 §5.2 OAuth error).
           content:
@@ -130,7 +138,7 @@ paths:
       summary: Get authenticated context
       description: Returns the authenticated principal and organization context.
       x-required-scopes:
-        - read:projects
+        - projects:read
       responses:
         '200':
           description: Successful response.
@@ -202,6 +210,8 @@ paths:
           $ref: '#/components/responses/Problem'
         '403':
           $ref: '#/components/responses/Problem'
+        '429':
+          $ref: '#/components/responses/RateLimitProblem'
         '500':
           $ref: '#/components/responses/Problem'
   /v1/projects:
@@ -212,7 +222,7 @@ paths:
       summary: List projects
       description: Returns projects visible to the authenticated principal.
       x-required-scopes:
-        - read:projects
+        - projects:read
       parameters:
         - $ref: '#/components/parameters/Cursor'
         - $ref: '#/components/parameters/Limit'
@@ -241,6 +251,297 @@ paths:
           $ref: '#/components/responses/Problem'
         '403':
           $ref: '#/components/responses/Problem'
+        '429':
+          $ref: '#/components/responses/RateLimitProblem'
+        '500':
+          $ref: '#/components/responses/Problem'
+  /v1/events/check-recent-ingestion:
+    post:
+      tags:
+        - Analytics
+      operationId: checkRecentEventIngestionByApiKey
+      summary: Check recent event ingestion with an ingestion API key
+      description: |
+        Checks whether Amplitude received any events for the project associated
+        with the supplied ingestion API key during the preceding eight hours.
+
+        `observed` means at least one event was received in the evaluated window.
+        `not_observed` means no events were received. `inconclusive` means no events
+        were found, but the available data could not confirm their absence. Use the
+        returned window when reporting or comparing results.
+
+        The window uses server upload time: when Amplitude received each event,
+        rather than the event time supplied by the sender.
+
+        Provide `polling_timeout_seconds` to request server polling guidance.
+        While another check is advised, successful responses include
+        `poll_after_seconds`; its omission means clients should stop polling.
+      x-required-scopes: []
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - api_key
+              properties:
+                api_key:
+                  type: string
+                  pattern: \S
+                  description: Ingestion API key for the Amplitude project to check.
+                polling_timeout_seconds:
+                  $ref: '#/components/schemas/RecentEventIngestionPollingTimeoutSeconds'
+              additionalProperties: false
+      responses:
+        '200':
+          description: Recent event ingestion status for the evaluated window.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    type: object
+                    required:
+                      - status
+                      - window
+                    properties:
+                      status:
+                        type: string
+                        enum:
+                          - observed
+                          - not_observed
+                          - inconclusive
+                        description: |
+                          `observed` when at least one event was received;
+                          `not_observed` when none were received; `inconclusive`
+                          when none were found but their absence could not be
+                          confirmed.
+                      poll_after_seconds:
+                        $ref: '#/components/schemas/RecentEventIngestionPollAfterSeconds'
+                      window:
+                        type: object
+                        required:
+                          - lookback_hours
+                          - start
+                          - end
+                          - basis
+                        properties:
+                          lookback_hours:
+                            type: integer
+                            const: 8
+                            description: Number of hours evaluated.
+                          start:
+                            type: string
+                            format: date-time
+                            description: Start of the evaluated window.
+                          end:
+                            type: string
+                            format: date-time
+                            description: End of the evaluated window.
+                          basis:
+                            type: string
+                            const: server_upload_time
+                            description: |
+                              The window is based on when Amplitude received each
+                              event.
+                        additionalProperties: false
+                    additionalProperties: false
+              example:
+                data:
+                  status: observed
+                  window:
+                    lookback_hours: 8
+                    start: '2026-09-03T09:00:00Z'
+                    end: '2026-09-03T17:00:00Z'
+                    basis: server_upload_time
+        '400':
+          $ref: '#/components/responses/ValidationProblem'
+        '401':
+          description: The supplied API key is invalid.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+              example:
+                type: https://developer-api.amplitude.com/problems/invalid-api-key
+                title: Invalid API key
+                status: 401
+                detail: The supplied API key is invalid.
+                error_code: invalid_api_key
+                retryable: false
+        '403':
+          description: The endpoint is unavailable.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+              example:
+                type: https://developer-api.amplitude.com/problems/operation-not-enabled
+                title: Endpoint unavailable
+                status: 403
+                detail: This endpoint is unavailable.
+                error_code: operation_not_enabled
+                retryable: false
+        '429':
+          $ref: '#/components/responses/RateLimitProblem'
+        '500':
+          $ref: '#/components/responses/Problem'
+        '502':
+          description: |
+            The ingestion status could not be determined. Retryable responses use
+            `unreliable_dataset_response` or `upstream_error` as the `error_code`.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '503':
+          description: Endpoint not available.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+              example:
+                type: https://developer-api.amplitude.com/problems/operation-availability-unavailable
+                title: Endpoint not available
+                status: 503
+                detail: This endpoint is not available.
+                error_code: operation_availability_unavailable
+                retryable: true
+  /v1/skills:
+    get:
+      tags:
+        - Skills
+      operationId: listSkills
+      summary: List available skills
+      description: Returns the skills currently available for implementing Amplitude, with each skill's name and when-to-use description.
+      security: []
+      responses:
+        '200':
+          description: Available skills.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      required:
+                        - name
+                        - description
+                      properties:
+                        name:
+                          type: string
+                          description: Identifier used to retrieve the skill.
+                        description:
+                          type: string
+                          description: When to use this skill.
+        '429':
+          $ref: '#/components/responses/RateLimitProblem'
+        '500':
+          $ref: '#/components/responses/Problem'
+  /v1/skills/{name}:
+    get:
+      tags:
+        - Skills
+      operationId: getSkill
+      summary: Get a skill document
+      description: Returns the requested skill document verbatim as markdown, including frontmatter.
+      security: []
+      parameters:
+        - name: name
+          in: path
+          required: true
+          description: Skill identifier as listed by `GET /v1/skills`.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: The requested skill document as markdown.
+          content:
+            text/markdown:
+              schema:
+                type: string
+        '404':
+          $ref: '#/components/responses/Problem'
+        '429':
+          $ref: '#/components/responses/RateLimitProblem'
+        '500':
+          $ref: '#/components/responses/Problem'
+  /v1/destination-types:
+    get:
+      tags:
+        - Destinations
+      operationId: listDestinationTypes
+      summary: List destination partner types
+      x-required-scopes:
+        - destinations:read
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                  - pagination
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/DestinationType'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '429':
+          $ref: '#/components/responses/RateLimitProblem'
+        '500':
+          $ref: '#/components/responses/Problem'
+  /v1/destination-types/{partner}:
+    parameters:
+      - $ref: '#/components/parameters/Partner'
+    get:
+      tags:
+        - Destinations
+      operationId: getDestinationType
+      summary: Get destination partner type
+      x-required-scopes:
+        - destinations:read
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/DestinationType'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '429':
+          $ref: '#/components/responses/RateLimitProblem'
         '500':
           $ref: '#/components/responses/Problem'
   /v1/projects/{project_id}/events:
@@ -250,7 +551,7 @@ paths:
       operationId: listEvents
       summary: List event taxonomy entries
       x-required-scopes:
-        - read:taxonomy
+        - taxonomy:read
       parameters:
         - $ref: '#/components/parameters/ProjectId'
         - $ref: '#/components/parameters/Cursor'
@@ -279,6 +580,8 @@ paths:
           $ref: '#/components/responses/Problem'
         '403':
           $ref: '#/components/responses/Problem'
+        '429':
+          $ref: '#/components/responses/RateLimitProblem'
         '500':
           $ref: '#/components/responses/Problem'
     post:
@@ -287,7 +590,7 @@ paths:
       operationId: createEvent
       summary: Create event taxonomy entry
       x-required-scopes:
-        - write:taxonomy
+        - taxonomy:write
       parameters:
         - $ref: '#/components/parameters/ProjectId'
         - $ref: '#/components/parameters/IdempotencyKey'
@@ -327,8 +630,120 @@ paths:
           $ref: '#/components/responses/Problem'
         '409':
           $ref: '#/components/responses/Problem'
+        '429':
+          $ref: '#/components/responses/RateLimitProblem'
         '500':
           $ref: '#/components/responses/Problem'
+  /v1/projects/{project_id}/events/check-recent-ingestion:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+    post:
+      tags:
+        - Analytics
+      operationId: checkRecentEventIngestion
+      summary: Check recent event ingestion
+      description: |
+        Checks whether events reached an Amplitude project during a recent time
+        window. Provide `event_type` to check one exact event type, or omit it to
+        check for any event. The default lookback is 10 minutes. The returned
+        window can begin up to five minutes earlier so the evaluation covers the
+        complete starting interval.
+
+        `observed` means at least one matching event was found. `not_observed`
+        means no matching event was found in the evaluated window. `inconclusive`
+        means no matching event was found, but complete recent data was not
+        available to confirm its absence. Use the returned window when reporting
+        or comparing results.
+
+        This POST computes a result and does not mutate state, so it does not
+        require an `Idempotency-Key`.
+
+        Provide `polling_timeout_seconds` to request server polling guidance.
+        While another check is advised, successful responses include
+        `poll_after_seconds`; its omission means clients should stop polling.
+      x-required-scopes:
+        - analytics:read
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RecentEventIngestionCheckRequest'
+      responses:
+        '200':
+          description: Ingestion check completed successfully.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/RecentEventIngestionCheck'
+        '400':
+          $ref: '#/components/responses/ValidationProblem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          description: |
+            The caller cannot use this operation. `operation_not_enabled` means the
+            operation is not enabled for the caller's organization;
+            `insufficient_scope` means the token lacks `analytics:read`.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+              examples:
+                operationNotEnabled:
+                  summary: Endpoint unavailable
+                  value:
+                    type: https://developer-api.amplitude.com/problems/operation-not-enabled
+                    title: Endpoint unavailable
+                    status: 403
+                    detail: This endpoint is unavailable for your organization.
+                    error_code: operation_not_enabled
+                    retryable: false
+                insufficientScope:
+                  summary: Missing required scope
+                  value:
+                    type: https://developer-api.amplitude.com/problems/forbidden
+                    title: Insufficient scope
+                    status: 403
+                    detail: Token missing required scopes.
+                    error_code: insufficient_scope
+                    retryable: false
+        '404':
+          $ref: '#/components/responses/Problem'
+        '429':
+          $ref: '#/components/responses/RateLimitProblem'
+        '500':
+          $ref: '#/components/responses/Problem'
+        '502':
+          description: |
+            The ingestion status could not be determined. Retryable responses use
+            `event_type_not_queryable`, `unreliable_dataset_response`, or
+            `upstream_error` as the `error_code`.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '503':
+          description: Endpoint not available.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+              examples:
+                endpointNotAvailable:
+                  summary: Endpoint not available
+                  value:
+                    type: https://developer-api.amplitude.com/problems/operation-availability-unavailable
+                    title: Endpoint not available
+                    status: 503
+                    detail: This endpoint is not available.
+                    error_code: operation_availability_unavailable
+                    retryable: true
   /v1/projects/{project_id}/events/{event_id}:
     parameters:
       - $ref: '#/components/parameters/ProjectId'
@@ -339,7 +754,7 @@ paths:
       operationId: getEvent
       summary: Get event taxonomy entry
       x-required-scopes:
-        - read:taxonomy
+        - taxonomy:read
       responses:
         '200':
           description: Successful response.
@@ -358,6 +773,8 @@ paths:
           $ref: '#/components/responses/Problem'
         '404':
           $ref: '#/components/responses/Problem'
+        '429':
+          $ref: '#/components/responses/RateLimitProblem'
         '500':
           $ref: '#/components/responses/Problem'
     patch:
@@ -366,7 +783,7 @@ paths:
       operationId: updateEvent
       summary: Update event taxonomy entry
       x-required-scopes:
-        - write:taxonomy
+        - taxonomy:write
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
@@ -403,6 +820,8 @@ paths:
           $ref: '#/components/responses/Problem'
         '404':
           $ref: '#/components/responses/Problem'
+        '429':
+          $ref: '#/components/responses/RateLimitProblem'
         '500':
           $ref: '#/components/responses/Problem'
     delete:
@@ -411,7 +830,7 @@ paths:
       operationId: deleteEvent
       summary: Soft-delete event taxonomy entry
       x-required-scopes:
-        - write:taxonomy
+        - taxonomy:write
       parameters:
         - $ref: '#/components/parameters/DryRun'
         - $ref: '#/components/parameters/IdempotencyKey'
@@ -426,6 +845,8 @@ paths:
           $ref: '#/components/responses/Problem'
         '404':
           $ref: '#/components/responses/Problem'
+        '429':
+          $ref: '#/components/responses/RateLimitProblem'
         '500':
           $ref: '#/components/responses/Problem'
   /v1/projects/{project_id}/events/{event_id}/event-properties:
@@ -442,7 +863,7 @@ paths:
         properties (those with `is_in_schema: false`). Use the `is_in_schema`
         flag to detect whether a `PATCH` will succeed before issuing it.
       x-required-scopes:
-        - read:taxonomy
+        - taxonomy:read
       parameters:
         - $ref: '#/components/parameters/Cursor'
         - $ref: '#/components/parameters/Limit'
@@ -472,6 +893,8 @@ paths:
           $ref: '#/components/responses/Problem'
         '404':
           $ref: '#/components/responses/Problem'
+        '429':
+          $ref: '#/components/responses/RateLimitProblem'
         '500':
           $ref: '#/components/responses/Problem'
     post:
@@ -486,7 +909,7 @@ paths:
         If the property exists ingested-only (`is_in_schema: false`), this call
         promotes it into the schema with the metadata supplied here.
       x-required-scopes:
-        - write:taxonomy
+        - taxonomy:write
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
@@ -548,6 +971,8 @@ paths:
           $ref: '#/components/responses/Problem'
         '409':
           $ref: '#/components/responses/Problem'
+        '429':
+          $ref: '#/components/responses/RateLimitProblem'
         '500':
           $ref: '#/components/responses/Problem'
   /v1/projects/{project_id}/events/{event_id}/event-properties/{event_property_id}:
@@ -561,7 +986,7 @@ paths:
       operationId: getEventProperty
       summary: Get event property
       x-required-scopes:
-        - read:taxonomy
+        - taxonomy:read
       responses:
         '200':
           description: Successful response.
@@ -580,6 +1005,8 @@ paths:
           $ref: '#/components/responses/Problem'
         '404':
           $ref: '#/components/responses/Problem'
+        '429':
+          $ref: '#/components/responses/RateLimitProblem'
         '500':
           $ref: '#/components/responses/Problem'
     patch:
@@ -594,7 +1021,7 @@ paths:
         clears (where allowed). `enum_values` and `classifications` replace the
         array entirely — there is no per-item add/remove.
       x-required-scopes:
-        - write:taxonomy
+        - taxonomy:write
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
@@ -655,6 +1082,8 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/ProblemDetails'
+        '429':
+          $ref: '#/components/responses/RateLimitProblem'
         '500':
           $ref: '#/components/responses/Problem'
     delete:
@@ -663,7 +1092,7 @@ paths:
       operationId: deleteEventProperty
       summary: Delete event property
       x-required-scopes:
-        - write:taxonomy
+        - taxonomy:write
       parameters:
         - $ref: '#/components/parameters/DryRun'
         - $ref: '#/components/parameters/IdempotencyKey'
@@ -678,6 +1107,8 @@ paths:
           $ref: '#/components/responses/Problem'
         '404':
           $ref: '#/components/responses/Problem'
+        '429':
+          $ref: '#/components/responses/RateLimitProblem'
         '500':
           $ref: '#/components/responses/Problem'
   /v1/projects/{project_id}/user-properties:
@@ -689,7 +1120,7 @@ paths:
       operationId: listUserProperties
       summary: List user properties for a project
       x-required-scopes:
-        - read:taxonomy
+        - taxonomy:read
       parameters:
         - $ref: '#/components/parameters/Cursor'
         - $ref: '#/components/parameters/Limit'
@@ -719,6 +1150,8 @@ paths:
           $ref: '#/components/responses/Problem'
         '404':
           $ref: '#/components/responses/Problem'
+        '429':
+          $ref: '#/components/responses/RateLimitProblem'
         '500':
           $ref: '#/components/responses/Problem'
     post:
@@ -730,7 +1163,7 @@ paths:
         Creates a user property and adds it to the project's tracking plan.
         Same idempotency semantics as `createEventProperty`.
       x-required-scopes:
-        - write:taxonomy
+        - taxonomy:write
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
@@ -796,6 +1229,8 @@ paths:
           $ref: '#/components/responses/Problem'
         '409':
           $ref: '#/components/responses/Problem'
+        '429':
+          $ref: '#/components/responses/RateLimitProblem'
         '500':
           $ref: '#/components/responses/Problem'
   /v1/projects/{project_id}/user-properties/{user_property_id}:
@@ -808,7 +1243,7 @@ paths:
       operationId: getUserProperty
       summary: Get user property
       x-required-scopes:
-        - read:taxonomy
+        - taxonomy:read
       responses:
         '200':
           description: Successful response.
@@ -827,6 +1262,8 @@ paths:
           $ref: '#/components/responses/Problem'
         '404':
           $ref: '#/components/responses/Problem'
+        '429':
+          $ref: '#/components/responses/RateLimitProblem'
         '500':
           $ref: '#/components/responses/Problem'
     patch:
@@ -844,7 +1281,7 @@ paths:
         `is_array_type`, `enum_values`, `regex`) are settable only at creation.
         `is_official` is read-only until TMS exposes a write path for it.
       x-required-scopes:
-        - write:taxonomy
+        - taxonomy:write
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
@@ -897,6 +1334,8 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/ProblemDetails'
+        '429':
+          $ref: '#/components/responses/RateLimitProblem'
         '500':
           $ref: '#/components/responses/Problem'
     delete:
@@ -905,7 +1344,7 @@ paths:
       operationId: deleteUserProperty
       summary: Delete user property
       x-required-scopes:
-        - write:taxonomy
+        - taxonomy:write
       parameters:
         - $ref: '#/components/parameters/DryRun'
         - $ref: '#/components/parameters/IdempotencyKey'
@@ -920,6 +1359,8 @@ paths:
           $ref: '#/components/responses/Problem'
         '404':
           $ref: '#/components/responses/Problem'
+        '429':
+          $ref: '#/components/responses/RateLimitProblem'
         '500':
           $ref: '#/components/responses/Problem'
   /v1/projects/{project_id}/charts:
@@ -943,7 +1384,7 @@ paths:
         Defaults to `-updated_at` (most recently updated first). `created_at` is not
         supported in this API version.
       x-required-scopes:
-        - read:analytics
+        - analytics:read
       parameters:
         - $ref: '#/components/parameters/ProjectId'
         - $ref: '#/components/parameters/Cursor'
@@ -974,6 +1415,8 @@ paths:
           $ref: '#/components/responses/Problem'
         '403':
           $ref: '#/components/responses/Problem'
+        '429':
+          $ref: '#/components/responses/RateLimitProblem'
         '500':
           $ref: '#/components/responses/Problem'
   /v1/projects/{project_id}/charts/{chart_id}:
@@ -990,7 +1433,7 @@ paths:
         `include_definition=true` to include a read-only definition object. The
         definition shape is unstable and not intended for authoring.
       x-required-scopes:
-        - read:analytics
+        - analytics:read
       parameters:
         - $ref: '#/components/parameters/IncludeDefinition'
       responses:
@@ -1013,6 +1456,8 @@ paths:
           $ref: '#/components/responses/Problem'
         '404':
           $ref: '#/components/responses/Problem'
+        '429':
+          $ref: '#/components/responses/RateLimitProblem'
         '500':
           $ref: '#/components/responses/Problem'
   /v1/projects/{project_id}/charts/{chart_id}/query:
@@ -1039,10 +1484,10 @@ paths:
 
         Query is synchronous with bounded defaults. Expensive queries may return
         `504` when exceeding the server timeout; async query jobs are planned for
-        a follow-up slice. Retryable responses (`429`, `502`, `504`) populate
-        `retry_after_seconds` in the problem body when a delay is advised.
+        a follow-up slice. Retryable responses may include retry advice where
+        their endpoint-specific error contract provides it.
       x-required-scopes:
-        - read:analytics
+        - analytics:read
       requestBody:
         required: false
         content:
@@ -1080,7 +1525,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetails'
         '429':
-          $ref: '#/components/responses/Problem'
+          $ref: '#/components/responses/RateLimitProblem'
         '500':
           $ref: '#/components/responses/Problem'
         '502':
@@ -1098,7 +1543,7 @@ paths:
       operationId: listFeatureFlags
       summary: List feature flags
       x-required-scopes:
-        - read:flags
+        - flags:read
       parameters:
         - $ref: '#/components/parameters/ProjectId'
         - $ref: '#/components/parameters/Cursor'
@@ -1126,6 +1571,8 @@ paths:
           $ref: '#/components/responses/Problem'
         '403':
           $ref: '#/components/responses/Problem'
+        '429':
+          $ref: '#/components/responses/RateLimitProblem'
         '500':
           $ref: '#/components/responses/Problem'
     post:
@@ -1134,7 +1581,7 @@ paths:
       operationId: createFeatureFlag
       summary: Create feature flag
       x-required-scopes:
-        - write:flags
+        - flags:write
       parameters:
         - $ref: '#/components/parameters/ProjectId'
         - $ref: '#/components/parameters/IdempotencyKey'
@@ -1209,6 +1656,8 @@ paths:
           $ref: '#/components/responses/Problem'
         '409':
           $ref: '#/components/responses/Problem'
+        '429':
+          $ref: '#/components/responses/RateLimitProblem'
         '500':
           $ref: '#/components/responses/Problem'
   /v1/projects/{project_id}/flags/{flag_id}:
@@ -1221,7 +1670,7 @@ paths:
       operationId: getFeatureFlag
       summary: Get feature flag
       x-required-scopes:
-        - read:flags
+        - flags:read
       responses:
         '200':
           description: Successful response.
@@ -1240,6 +1689,8 @@ paths:
           $ref: '#/components/responses/Problem'
         '404':
           $ref: '#/components/responses/Problem'
+        '429':
+          $ref: '#/components/responses/RateLimitProblem'
         '500':
           $ref: '#/components/responses/Problem'
     patch:
@@ -1249,7 +1700,7 @@ paths:
       summary: Update feature flag
       description: Updates feature flag metadata and rollout settings. Variant, tester, deployment, and link mutations will be exposed through dedicated subresources in a later slice.
       x-required-scopes:
-        - write:flags
+        - flags:write
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
@@ -1305,6 +1756,8 @@ paths:
           $ref: '#/components/responses/Problem'
         '409':
           $ref: '#/components/responses/Problem'
+        '429':
+          $ref: '#/components/responses/RateLimitProblem'
         '500':
           $ref: '#/components/responses/Problem'
     delete:
@@ -1313,7 +1766,7 @@ paths:
       operationId: archiveFeatureFlag
       summary: Archive feature flag
       x-required-scopes:
-        - write:flags
+        - flags:write
       parameters:
         - $ref: '#/components/parameters/DryRun'
         - $ref: '#/components/parameters/IdempotencyKey'
@@ -1328,6 +1781,347 @@ paths:
           $ref: '#/components/responses/Problem'
         '404':
           $ref: '#/components/responses/Problem'
+        '429':
+          $ref: '#/components/responses/RateLimitProblem'
+        '500':
+          $ref: '#/components/responses/Problem'
+  /v1/projects/{project_id}/destinations:
+    get:
+      tags:
+        - Destinations
+      operationId: listDestinations
+      summary: List destinations
+      x-required-scopes:
+        - destinations:read
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Query'
+        - $ref: '#/components/parameters/PartnerFilter'
+        - $ref: '#/components/parameters/EnabledFilter'
+        - $ref: '#/components/parameters/KindFilter'
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                  - pagination
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Destination'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+        '400':
+          $ref: '#/components/responses/ValidationProblem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '429':
+          $ref: '#/components/responses/RateLimitProblem'
+        '500':
+          $ref: '#/components/responses/Problem'
+    post:
+      tags:
+        - Destinations
+      operationId: createDestination
+      summary: Create a destination
+      description: |
+        Always creates a new destination; the server assigns the `id` used for
+        every subsequent lookup. `display_name` is not an identity key, so
+        repeating a create makes another destination. When `dry_run=true`, returns
+        a plan envelope without mutating. SECRET/OAUTH config values are
+        write-only.
+      x-required-scopes:
+        - destinations:write
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - $ref: '#/components/parameters/DryRun'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - partner
+                - display_name
+              properties:
+                partner:
+                  type: string
+                display_name:
+                  type: string
+                  minLength: 1
+                kind:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/DestinationConnectorKind'
+                  minItems: 1
+                  description: |
+                    Optional connector kinds. When omitted, the kind is inferred
+                    from the partner's capabilities; a multi-capability partner with
+                    no kind is rejected as ambiguous. When provided it is
+                    authoritative and validated against the partner. The three
+                    families are mutually exclusive: a subset of [event, identify],
+                    or [cohort], or [warehouse_export] — never combined.
+                config:
+                  type: object
+                  additionalProperties: true
+                enabled:
+                  type: boolean
+                event_filter:
+                  $ref: '#/components/schemas/DestinationEventFilter'
+                property_mappings:
+                  type: object
+                  additionalProperties: true
+                send_events:
+                  type: boolean
+                send_users:
+                  type: boolean
+              additionalProperties: false
+      responses:
+        '200':
+          description: Dry-run plan (no mutation).
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                  - plan
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Destination'
+                  plan:
+                    $ref: '#/components/schemas/PlanDetails'
+        '201':
+          description: Destination created.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Destination'
+        '400':
+          $ref: '#/components/responses/ValidationProblem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '422':
+          $ref: '#/components/responses/Problem'
+        '429':
+          $ref: '#/components/responses/RateLimitProblem'
+        '500':
+          $ref: '#/components/responses/Problem'
+  /v1/projects/{project_id}/destinations/{id}:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+      - $ref: '#/components/parameters/DestinationId'
+    get:
+      tags:
+        - Destinations
+      operationId: getDestination
+      summary: Get a destination
+      x-required-scopes:
+        - destinations:read
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Destination'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '429':
+          $ref: '#/components/responses/RateLimitProblem'
+        '500':
+          $ref: '#/components/responses/Problem'
+    patch:
+      tags:
+        - Destinations
+      operationId: updateDestination
+      summary: Update a destination
+      x-required-scopes:
+        - destinations:write
+      parameters:
+        - $ref: '#/components/parameters/DryRun'
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                display_name:
+                  type: string
+                kind:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/DestinationConnectorKind'
+                  minItems: 1
+                config:
+                  type: object
+                  additionalProperties: true
+                enabled:
+                  type: boolean
+                event_filter:
+                  oneOf:
+                    - $ref: '#/components/schemas/DestinationEventFilter'
+                    - type: 'null'
+                property_mappings:
+                  oneOf:
+                    - type: object
+                      additionalProperties: true
+                    - type: 'null'
+                send_events:
+                  type: boolean
+                send_users:
+                  type: boolean
+              additionalProperties: false
+      responses:
+        '200':
+          description: Destination updated, or dry-run plan.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Destination'
+                  plan:
+                    $ref: '#/components/schemas/PlanDetails'
+        '400':
+          $ref: '#/components/responses/ValidationProblem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '412':
+          $ref: '#/components/responses/Problem'
+        '422':
+          $ref: '#/components/responses/Problem'
+        '429':
+          $ref: '#/components/responses/RateLimitProblem'
+        '500':
+          $ref: '#/components/responses/Problem'
+  /v1/projects/{project_id}/destinations/{id}/test:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+      - $ref: '#/components/parameters/DestinationId'
+    post:
+      tags:
+        - Destinations
+      operationId: testDestination
+      summary: Test an event streaming destination connection
+      x-required-scopes:
+        - destinations:write
+      responses:
+        '200':
+          description: Test result.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/DestinationTestResult'
+        '400':
+          $ref: '#/components/responses/ValidationProblem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '429':
+          $ref: '#/components/responses/RateLimitProblem'
+        '500':
+          $ref: '#/components/responses/Problem'
+  /v1/projects/{project_id}/snowflake-keys:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+    post:
+      tags:
+        - Destinations
+      operationId: generateSnowflakeRsaKey
+      summary: Generate an RSA key pair for Snowflake authentication
+      description: |
+        Generates a Snowflake-compatible RSA key pair. The private key is stored
+        server-side in an ephemeral cache; you receive the public key (paste into
+        your Snowflake user via `ALTER USER <user> SET RSA_PUBLIC_KEY = '...'`) and
+        an ephemeral ID to pass as `snowflake_private_key_ephemeral_id` in the
+        destination `config` on a subsequent `POST /destinations` for a Snowflake
+        direct-load destination.
+
+        This is the CLI equivalent of the "Generate RSA Key" step in the Amplitude
+        UI wizard, so customers do not have to run `openssl genrsa` and manage
+        private keys locally.
+      x-required-scopes:
+        - destinations:write
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '201':
+          description: Key pair generated.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    type: object
+                    required:
+                      - public_key
+                      - ephemeral_id
+                    properties:
+                      public_key:
+                        type: string
+                        description: RSA public key in PEM format. Add to your Snowflake user.
+                      ephemeral_id:
+                        type: string
+                        description: Reference to the server-held private key. Pass as `snowflake_private_key_ephemeral_id` in destination create/update config.
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '429':
+          $ref: '#/components/responses/RateLimitProblem'
         '500':
           $ref: '#/components/responses/Problem'
 components:
@@ -1472,6 +2266,56 @@ components:
       schema:
         type: string
         minLength: 1
+    Partner:
+      name: partner
+      in: path
+      required: true
+      description: Destination partner key (e.g. braze, kinesis_datastream).
+      schema:
+        type: string
+        minLength: 1
+    DestinationId:
+      name: id
+      in: path
+      required: true
+      description: Destination id.
+      schema:
+        type: string
+        minLength: 1
+    PartnerFilter:
+      name: partner
+      in: query
+      required: false
+      description: Filter by destination partner key.
+      schema:
+        type: string
+        minLength: 1
+    EnabledFilter:
+      name: enabled
+      in: query
+      required: false
+      description: Filter by enabled/active flag.
+      schema:
+        type: boolean
+    IfMatch:
+      name: If-Match
+      in: header
+      required: false
+      description: |
+        Optimistic concurrency token. Must equal the resource `version` for the
+        write to proceed; otherwise the API returns 412.
+      schema:
+        type: integer
+        minimum: 0
+    KindFilter:
+      name: kind
+      in: query
+      required: false
+      description: |
+        Filter by a single connector kind; matches destinations whose `kind` array
+        contains this value.
+      schema:
+        $ref: '#/components/schemas/DestinationConnectorKind'
   responses:
     Problem:
       description: Error response encoded as RFC 9457 Problem Details.
@@ -1485,6 +2329,19 @@ components:
         application/problem+json:
           schema:
             $ref: '#/components/schemas/ProblemDetails'
+    RateLimitProblem:
+      description: Request rate limit exceeded.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+          example:
+            type: https://developer-api.amplitude.com/problems/rate-limit-exceeded
+            title: Rate limit exceeded
+            status: 429
+            detail: Too many requests.
+            error_code: rate_limit_exceeded
+            retryable: true
   schemas:
     ObjectMeta:
       type: object
@@ -1952,6 +2809,86 @@ components:
           oneOf:
             - $ref: '#/components/schemas/TruncationInfo'
             - type: 'null'
+    RecentEventIngestionCheckRequest:
+      type: object
+      properties:
+        event_type:
+          type: string
+          pattern: \S
+          description: Exact event type to check. Omit to check for any event.
+        lookback_minutes:
+          type: integer
+          minimum: 1
+          maximum: 1440
+          default: 10
+          description: |
+            Number of recent minutes to evaluate. The returned window can begin up
+            to five minutes earlier to cover the complete starting interval.
+        polling_timeout_seconds:
+          $ref: '#/components/schemas/RecentEventIngestionPollingTimeoutSeconds'
+      additionalProperties: false
+    RecentEventIngestionCheck:
+      type: object
+      required:
+        - id
+        - object
+        - project_id
+        - status
+        - count
+        - window
+      properties:
+        id:
+          type: string
+          description: Identifier for this ingestion check.
+        object:
+          type: string
+          const: recent_event_ingestion_check
+          description: Resource-type discriminator. Always `recent_event_ingestion_check`.
+        project_id:
+          type: string
+          pattern: ^[0-9]+$
+        event_type:
+          type: string
+          description: Event type evaluated. Omitted when the request checked for any event.
+        status:
+          type: string
+          enum:
+            - observed
+            - not_observed
+            - inconclusive
+          description: |
+            `observed` when at least one matching event was found; `not_observed`
+            when none was found; `inconclusive` when none was found but complete
+            recent data was unavailable.
+        count:
+          type: number
+          minimum: 0
+          description: Number of matching events found in the evaluated window.
+        poll_after_seconds:
+          $ref: '#/components/schemas/RecentEventIngestionPollAfterSeconds'
+        window:
+          type: object
+          required:
+            - start
+            - end
+            - basis
+          properties:
+            start:
+              type: string
+              format: date-time
+              description: Start of the evaluated window.
+            end:
+              type: string
+              format: date-time
+              description: End of the evaluated window.
+            basis:
+              type: string
+              const: server_upload_time
+              description: |
+                Time basis for the window. `server_upload_time` measures when an
+                event reached Amplitude.
+          additionalProperties: false
+      additionalProperties: false
     FeatureFlag:
       allOf:
         - $ref: '#/components/schemas/FeatureFlagBase'
@@ -2034,24 +2971,172 @@ components:
           type:
             - string
             - 'null'
-    DeviceAuthorizationRequest:
+    Destination:
       type: object
       required:
-        - code_challenge
-        - code_challenge_method
+        - id
+        - object
+        - project_id
+        - partner
+        - display_name
+        - kind
+        - config
+        - credential_status
+        - version
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          description: Server-assigned identifier (read-only).
+        object:
+          type: string
+          const: destination
+        project_id:
+          type: string
+          pattern: ^[0-9]+$
+        partner:
+          type: string
+        display_name:
+          type: string
+        kind:
+          type: array
+          items:
+            $ref: '#/components/schemas/DestinationConnectorKind'
+          minItems: 1
+        config:
+          type: object
+          additionalProperties: true
+          description: |
+            Partner config keyed by parameter id. SECRET/OAUTH values are write-only
+            and never returned on reads. Values are scalars or structured
+            (objects/arrays, e.g. header maps); structured values round-trip as
+            decoded JSON.
+        credential_status:
+          $ref: '#/components/schemas/DestinationCredentialStatus'
+        version:
+          type: integer
+          minimum: 1
+        enabled:
+          type: boolean
+          description: Event-streaming only. Whether the stream is enabled.
+        paused:
+          type: boolean
+          description: Event-streaming only. Whether the stream is paused.
+        event_filter:
+          oneOf:
+            - $ref: '#/components/schemas/DestinationEventFilter'
+            - type: 'null'
+          description: Event-streaming only. Events (and optional property filters) to stream.
+        property_mappings:
+          oneOf:
+            - type: object
+              additionalProperties: true
+            - type: 'null'
+          description: Event-streaming only. Optional property mappings.
+        send_events:
+          type: boolean
+          description: Event-streaming only. Whether to send events.
+        send_users:
+          type: boolean
+          description: Event-streaming only. Whether to send identify/user updates.
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        created_by:
+          type:
+            - string
+            - 'null'
+        updated_by:
+          type:
+            - string
+            - 'null'
+    DestinationType:
+      type: object
+      required:
+        - id
+        - object
+        - partner
+        - display_name
+        - types
+        - parameters
+      properties:
+        id:
+          type: string
+        object:
+          type: string
+          const: destination_type
+        partner:
+          type: string
+          description: Partner key (e.g. braze, kinesis_datastream, s3).
+        display_name:
+          type: string
+        types:
+          type: array
+          items:
+            $ref: '#/components/schemas/DestinationConnectorType'
+          minItems: 1
+        parameters:
+          type: array
+          items:
+            $ref: '#/components/schemas/DestinationParameter'
+    DestinationParameter:
+      type: object
+      required:
+        - id
+        - label
+        - kind
+        - required
+      properties:
+        id:
+          type: string
+        label:
+          type: string
+        kind:
+          $ref: '#/components/schemas/DestinationParameterKind'
+        required:
+          type: boolean
+        description:
+          type:
+            - string
+            - 'null'
+        enum_values:
+          type: array
+          items:
+            type: string
+        write_only:
+          type: boolean
+    PlanDetails:
+      type: object
+      required:
+        - action
+        - dry_run
+      properties:
+        action:
+          $ref: '#/components/schemas/PlanAction'
+        dry_run:
+          type: boolean
+          const: true
+        diff:
+          oneOf:
+            - type: object
+              additionalProperties:
+                $ref: '#/components/schemas/PlanDiffEntry'
+            - type: 'null'
+        warnings:
+          type: array
+          items:
+            type: string
+    DeviceAuthorizationRequest:
+      type: object
       properties:
         scope:
           type: string
-          description: Space-delimited OAuth scopes to request.
-        code_challenge:
-          type: string
           description: |
-            PKCE code challenge (RFC 7636): the base64url-encoded SHA-256 of your code_verifier.
-        code_challenge_method:
-          type: string
-          enum:
-            - S256
-          description: PKCE challenge method. Must be S256.
+            Space-delimited OAuth scopes to request. When `offline_access` is requested, `openid` is also required.
     DeviceAuthorizationResponse:
       type: object
       required:
@@ -2087,24 +3172,16 @@ components:
         error_uri:
           type: string
     TokenRequest:
-      type: object
-      required:
-        - grant_type
-        - device_code
-        - code_verifier
-      properties:
-        grant_type:
-          type: string
-          enum:
-            - urn:ietf:params:oauth:grant-type:device_code
-          description: The OAuth grant type. Must be `urn:ietf:params:oauth:grant-type:device_code`.
-        device_code:
-          type: string
-          description: The device_code from the device-authorization response.
-        code_verifier:
-          type: string
-          description: |
-            PKCE code verifier matching the code_challenge sent to the device-authorization endpoint.
+      description: |
+        Token grant request. Either the `device_code` grant (RFC 8628) or the `refresh_token` grant, selected by `grant_type`.
+      oneOf:
+        - $ref: '#/components/schemas/DeviceCodeTokenRequest'
+        - $ref: '#/components/schemas/RefreshTokenRequest'
+      discriminator:
+        propertyName: grant_type
+        mapping:
+          urn:ietf:params:oauth:grant-type:device_code: '#/components/schemas/DeviceCodeTokenRequest'
+          refresh_token: '#/components/schemas/RefreshTokenRequest'
     TokenResponse:
       type: object
       required:
@@ -2124,6 +3201,69 @@ components:
           type: string
         id_token:
           type: string
+    DeviceCodeTokenRequest:
+      type: object
+      required:
+        - grant_type
+        - device_code
+      properties:
+        grant_type:
+          type: string
+          const: urn:ietf:params:oauth:grant-type:device_code
+          description: The OAuth grant type. Must be `urn:ietf:params:oauth:grant-type:device_code`.
+        device_code:
+          type: string
+          description: The device_code from the device-authorization response.
+    RefreshTokenRequest:
+      type: object
+      required:
+        - grant_type
+        - refresh_token
+      properties:
+        grant_type:
+          type: string
+          const: refresh_token
+          description: The OAuth grant type. Must be `refresh_token`.
+        refresh_token:
+          type: string
+          description: The refresh_token issued by a previous token or refresh grant.
+    RecentEventIngestionPollingTimeoutSeconds:
+      type: integer
+      minimum: 1
+      maximum: 120
+      description: |
+        Maximum polling window requested by the caller. Clients should complete
+        the initial check even if it exceeds this window and use the window only
+        to limit subsequent polls. Its presence requests polling guidance; it is
+        not an HTTP request timeout, and each HTTP request performs one check.
+    RecentEventIngestionPollAfterSeconds:
+      type: integer
+      minimum: 1
+      description: |
+        Minimum seconds to wait before the next ingestion check. Returned only
+        when polling was requested and another check is advised. Its omission
+        means the server does not advise another check.
+    DestinationConnectorType:
+      type: string
+      enum:
+        - event
+        - identify
+        - cohort
+    DestinationParameterKind:
+      type: string
+      enum:
+        - string
+        - number
+        - boolean
+        - secret
+        - oauth
+        - service_account
+        - enum
+        - http_headers
+        - mapped_field
+        - event_mapping
+        - transformation
+        - ads_account
     TimeRange:
       type: object
       required:
@@ -2544,3 +3684,64 @@ components:
             - 'null'
           format: uri
           readOnly: true
+    DestinationConnectorKind:
+      type: string
+      enum:
+        - event
+        - identify
+        - cohort
+        - warehouse_export
+      description: |
+        Authoritative connector kind on a destination. `event`/`identify`/`cohort`
+        are Connector-Manager routed; `warehouse_export` is Falcon routed. Routing
+        is derived from the array of these values, so there is no separate routing
+        field. `warehouse_export` cannot be combined with the other kinds.
+    DestinationCredentialStatus:
+      type: string
+      enum:
+        - connected
+        - disconnected
+        - expired
+    DestinationEventFilter:
+      type: object
+      required:
+        - events
+      properties:
+        events:
+          type: array
+          items:
+            type: string
+          minItems: 1
+        property_filters:
+          type: object
+          additionalProperties: true
+    PlanAction:
+      type: string
+      enum:
+        - create
+        - update
+        - noop
+    PlanDiffEntry:
+      type: object
+      required:
+        - from
+        - to
+      properties:
+        from: {}
+        to: {}
+    DestinationTestResult:
+      type: object
+      required:
+        - ok
+      properties:
+        ok:
+          type: boolean
+        detail:
+          type:
+            - string
+            - 'null'
+        example_payload:
+          oneOf:
+            - type: object
+              additionalProperties: true
+            - type: 'null'

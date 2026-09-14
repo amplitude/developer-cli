@@ -1,21 +1,7 @@
-import { CLI_OPERATIONS } from './generated/cli-manifest';
-// Legacy org-level scopes, generated from the central OAuth scope catalog.
-// They map to the granular API read/write scopes server-side, but the
-// device-flow client can grant them directly, so include them in the default
-// request for full coverage. No CLI command declares them as required.
-import { MCP_BASE_SCOPES } from './generated/scopes';
+import { DEFAULT_CLI_LOGIN_SCOPES } from './generated/scopes';
 
 /**
- * The scope set a login requests when no `--scope` is given. The granular
- * `read:`/`write:` scopes come from the generated manifest, so the default
- * tracks the command surface automatically; the MCP scopes are appended.
- * Sorted and de-duped for deterministic output.
+ * The scope set a login requests when no `--scope` is given. Generated from
+ * the command surface and central OAuth scope catalog.
  */
-export const DEFAULT_SCOPES: string = [
-  ...new Set([
-    ...CLI_OPERATIONS.flatMap((operation) => operation.requiredScopes),
-    ...MCP_BASE_SCOPES,
-  ]),
-]
-  .sort()
-  .join(' ');
+export const DEFAULT_SCOPES: string = DEFAULT_CLI_LOGIN_SCOPES;

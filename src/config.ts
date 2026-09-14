@@ -87,8 +87,13 @@ export function resolveNamedBaseUrl(options: {
 }
 
 export function resolveBaseUrl(flags: Record<string, FlagValue>): string {
+  const namedBaseUrl = resolveNamedBaseUrl({
+    envFlag: stringFlag(flags, ['env']),
+    regionFlag: stringFlag(flags, ['region']),
+  });
   return (
     stringFlag(flags, ['base-url']) ??
+    namedBaseUrl ??
     apiBaseUrlFromEnv() ??
     DEFAULT_API_BASE_URL
   ).replace(/\/$/, '');

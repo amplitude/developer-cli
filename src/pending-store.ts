@@ -5,17 +5,17 @@ import {
   rmSync,
   writeFileSync,
 } from 'node:fs';
-import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 
 import { z } from 'zod';
+
+import { amplitudeDataFiles, amplitudeDataPath } from './amplitude-data-path';
 
 export const CURRENT_PENDING_VERSION = 1;
 
 const pendingEntrySchema = z
   .object({
     device_code: z.string().min(1),
-    code_verifier: z.string().min(1),
     base_url: z.string().min(1),
     expires_at: z.string().min(1),
     interval: z.number().int().positive(),
@@ -34,9 +34,7 @@ export type PendingEntry = z.infer<typeof pendingEntrySchema>;
 export type PendingStore = z.infer<typeof pendingStoreSchema>;
 
 export function pendingPath(override?: string): string {
-  return (
-    override ?? join(homedir(), '.amplitude', 'amp', 'pending-logins.json')
-  );
+  return amplitudeDataPath(amplitudeDataFiles.pendingLogins, override);
 }
 
 export function emptyPending(): PendingStore {

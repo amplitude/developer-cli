@@ -1,4 +1,3 @@
-import { createHash, randomBytes } from 'node:crypto';
 import type { Readable } from 'node:stream';
 import { setTimeout as delay } from 'node:timers/promises';
 
@@ -6,6 +5,7 @@ import open from 'open';
 import { z } from 'zod';
 
 import { usageError } from './cli-error';
+import { deviceIdHeader } from './client-identity';
 import { CLI_VERSION } from './help';
 import { toOAuthError } from './oauthError';
 import {
@@ -41,22 +41,6 @@ function parseResponse<Schema extends z.ZodType>(
   throw new Error( // plain-error-ok: device-flow errors are caught and re-emitted as a JSON envelope by `auth login start`/`poll`; only the interactive TTY `auth login` surfaces them as prose.
     `The authorization server returned an unexpected ${description} response.`,
   );
-}
-
-export interface PkcePair {
-  codeVerifier: string;
-  codeChallenge: string;
-}
-
-// RFC 7636: a 32-byte base64url verifier (43 chars, no padding) and its S256
-// challenge. Kept entirely in memory — never written to disk.
-export function generatePkcePair(): PkcePair {
-  const codeVerifier = randomBytes(32).toString('base64url');
-  const codeChallenge = createHash('sha256')
-    .update(codeVerifier)
-    .digest('base64url');
-
-  return { codeVerifier, codeChallenge };
 }
 
 // Prefer the code-embedded URL (the /device route reads user_code from the
@@ -194,7 +178,11 @@ export function startWaitingIndicator(
     return () => {};
   }
 
-  const write = options.write ?? ((chunk) => void process.stderr.write(chunk));
+  const write =
+    options.write ??
+    ((chunk) => {
+      process.stderr.write(chunk);
+    });
   let frame = 0;
   const render = (): void => {
     write(`\r${SPINNER_FRAMES[frame]} ${label}`);
@@ -306,7 +294,6 @@ const TRANSIENT_OAUTH_ERRORS = new Set([
 interface PollDeviceBoundedOptions {
   request: AnonymousRequest;
   deviceCode: string;
-  codeVerifier: string;
   intervalSeconds: number;
   codeExpiresAtMs: number;
   timeoutSeconds: number;
@@ -328,7 +315,6 @@ export async function pollDeviceTokenBounded(
     const { status, body } = await options.request('POST', '/v1/auth/token', {
       grant_type: DEVICE_CODE_GRANT_TYPE,
       device_code: options.deviceCode,
-      code_verifier: options.codeVerifier,
     });
 
     if (isOk(status)) {
@@ -384,11 +370,22 @@ export type AnonymousRequest = (
 // getJson/requestJson, never throws on a non-2xx — it returns the status and
 // parsed body for the poll loop to interpret. A non-JSON body (e.g. an HTML
 // error page) degrades to the raw text rather than throwing a parse error.
-export function createAnonymousRequest(baseUrl: string): AnonymousRequest {
+export function createAnonymousRequest(
+  baseUrl: string,
+  // Per-request wall-clock bound. Off by default (the device flow paces itself
+  // with its own poll deadline); set by callers that hold a lock across the
+  // call, where an unbounded socket would pin the lock for undici's 300s
+  // default.
+  options: { timeoutMs?: number } = {},
+): AnonymousRequest {
+  let identityHeader: Record<string, string> | undefined;
+
   return async (method, path, body) => {
+    identityHeader ??= deviceIdHeader();
     const headers: Record<string, string> = {
       Accept: 'application/json',
       'User-Agent': `amp-cli/${CLI_VERSION}`,
+      ...identityHeader,
     };
     if (body !== undefined) {
       headers['Content-Type'] = 'application/json';
@@ -397,6 +394,9 @@ export function createAnonymousRequest(baseUrl: string): AnonymousRequest {
     const init: RequestInit = { method, headers };
     if (body !== undefined) {
       init.body = JSON.stringify(body);
+    }
+    if (options.timeoutMs !== undefined) {
+      init.signal = AbortSignal.timeout(options.timeoutMs);
     }
 
     let response: Response;
@@ -462,14 +462,10 @@ export async function requestDeviceToken(
   const emitStderr =
     options.stderr ?? ((line) => process.stderr.write(`${line}\n`));
 
-  const { codeVerifier, codeChallenge } = generatePkcePair();
-
   const deviceResponse = await request(
     'POST',
     '/v1/auth/device-authorization',
     {
-      code_challenge: codeChallenge,
-      code_challenge_method: 'S256',
       scope: scope ?? undefined,
     },
   );
@@ -504,7 +500,6 @@ export async function requestDeviceToken(
         request('POST', '/v1/auth/token', {
           grant_type: DEVICE_CODE_GRANT_TYPE,
           device_code: deviceAuthorization.device_code,
-          code_verifier: codeVerifier,
         }),
       sleep,
       intervalSeconds: deviceAuthorization.interval ?? 5,

@@ -243,7 +243,6 @@ describe('runAuthPat', () => {
     savePending(
       setPending(loadPending(pendingPath), 'ci', {
         device_code: 'abandoned',
-        code_verifier: 'cv',
         base_url: 'https://developer-api.amplitude.com',
         expires_at: new Date(NOW + 600_000).toISOString(),
         interval: 5,

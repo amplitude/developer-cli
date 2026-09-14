@@ -160,7 +160,9 @@ function withQuery(path: string, query: Record<string, QueryValue>): string {
 }
 
 function allowedAliases(operation: CliOperation): Set<string> {
-  const aliases = new Set<string>(apiGlobalOptionAliases());
+  const aliases = new Set<string>(
+    apiGlobalOptionAliases(operation.authentication),
+  );
   for (const parameter of operation.parameters) {
     for (const alias of parameter.aliases) {
       aliases.add(alias);

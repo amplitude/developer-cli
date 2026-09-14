@@ -22,6 +22,55 @@ describe('parseArgs', () => {
     expect(parseArgs(['-v']).flags).toEqual({ v: true });
   });
 
+  it.each(['json', 'help', 'version'])(
+    'keeps the skills name positional when --%s precedes it',
+    (alias) => {
+      const { command, flags } = parseArgs([
+        'skills',
+        'get',
+        `--${alias}`,
+        'integrating-amplitude',
+        '--region',
+        'us',
+      ]);
+
+      expect(command).toEqual(['skills', 'get', 'integrating-amplitude']);
+      expect(flags[alias]).toBe(true);
+      expect(flags.region).toBe('us');
+    },
+  );
+
+  it.each(['json', 'help', 'version'])(
+    'keeps the skills name positional when --%s follows it',
+    (alias) => {
+      const { command, flags } = parseArgs([
+        'skills',
+        'get',
+        'integrating-amplitude',
+        `--${alias}`,
+      ]);
+
+      expect(command).toEqual(['skills', 'get', 'integrating-amplitude']);
+      expect(flags[alias]).toBe(true);
+    },
+  );
+
+  it.each([
+    ['equals', ['--json=false', 'integrating-amplitude']],
+    ['separate', ['--json', 'false', 'integrating-amplitude']],
+  ])('preserves the %s explicit boolean form', (_, tail) => {
+    const { command, flags } = parseArgs(['skills', 'get', ...tail]);
+
+    expect(command).toEqual(['skills', 'get', 'integrating-amplitude']);
+    expect(flags.json).toBe('false');
+  });
+
+  it('does not suggest the hidden --env flag for a typo', () => {
+    expect(() => parseArgs(['skills', 'get', '--enx'])).toThrowError(
+      /^unknown option '--enx'$/,
+    );
+  });
+
   it('stops flag parsing at -- and keeps it out of the command', () => {
     const { command } = parseArgs(['context', '--']);
     expect(command).toEqual(['context']);
@@ -51,6 +100,23 @@ describe('parseArgs', () => {
 
     expect(command).toEqual(['events', 'list']);
     expect(flags).toMatchObject({ project: '187520', limit: '10' });
+  });
+
+  it('parses the ingestion check timeout option', () => {
+    const { command, flags } = parseArgs([
+      'events',
+      'check-ingestion',
+      '--project',
+      '187520',
+      '--timeout-seconds',
+      '120',
+    ]);
+
+    expect(command).toEqual(['events', 'check-ingestion']);
+    expect(flags).toMatchObject({
+      project: '187520',
+      'timeout-seconds': '120',
+    });
   });
 
   it('parses auth token device-flow options', () => {

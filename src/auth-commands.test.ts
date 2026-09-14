@@ -2,7 +2,8 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { describe, expect, it } from 'vitest';
+import { lock as properLock } from 'proper-lockfile';
+import { describe, expect, it, vi } from 'vitest';
 
 import {
   resolvePollProfile,
@@ -83,9 +84,10 @@ describe('runAuthLoginStart', () => {
         pendingPath,
         now: () => 0,
         stdout: (l) => lines.push(l),
-        request: async (method, p) => {
+        request: async (method, p, body) => {
           expect(method).toBe('POST');
           expect(p).toBe('/v1/auth/device-authorization');
+          expect(body).toEqual({ scope: expect.any(String) });
           return {
             status: 200,
             body: {
@@ -112,6 +114,9 @@ describe('runAuthLoginStart', () => {
     expect(lines.join('\n')).not.toContain('DC'); // device_code withheld
     expect(getPending(loadPending(pendingPath), 'default')?.device_code).toBe(
       'DC',
+    );
+    expect(getPending(loadPending(pendingPath), 'default')).not.toHaveProperty(
+      'code_verifier',
     );
   });
 
@@ -371,7 +376,6 @@ describe('runAuthLoginStart', () => {
 
 const pendingEntry = (expiresAt: string) => ({
   device_code: 'DC',
-  code_verifier: 'CV',
   base_url: 'https://developer-api.amplitude.com',
   expires_at: expiresAt,
   interval: 5,
@@ -485,10 +489,22 @@ describe('runAuthLoginPoll', () => {
         pendingPath,
         now: () => 0,
         stdout: (l) => lines.push(l),
-        request: async () => ({
-          status: 200,
-          body: { access_token: 'AT', token_type: 'bearer', expires_in: 3600 },
-        }),
+        request: async (method, requestPath, body) => {
+          expect(method).toBe('POST');
+          expect(requestPath).toBe('/v1/auth/token');
+          expect(body).toEqual({
+            grant_type: 'urn:ietf:params:oauth:grant-type:device_code',
+            device_code: 'DC',
+          });
+          return {
+            status: 200,
+            body: {
+              access_token: 'AT',
+              token_type: 'bearer',
+              expires_in: 3600,
+            },
+          };
+        },
       },
     );
     const out = JSON.parse(lines.join('\n'));
@@ -499,6 +515,90 @@ describe('runAuthLoginPoll', () => {
     expect(store.default).toBe('default');
     expect(getProfile(store, 'default')?.credential.type).toBe('oauth');
     expect(getPending(loadPending(pendingPath), 'default')).toBeUndefined();
+  });
+
+  it('reports a completed sign-in save failure without exposing recovery internals', async () => {
+    const { path, pendingPath } = paths();
+    savePending(
+      setPending(
+        emptyPending(),
+        'default',
+        pendingEntry('2999-01-01T00:00:00Z'),
+      ),
+      pendingPath,
+    );
+    let retries: unknown;
+    const lock = vi.fn<typeof properLock>(async (_path, options) => {
+      retries = options?.retries;
+      throw new Error('ELOCKED');
+    });
+    const lines: string[] = [];
+
+    await runAuthLoginPoll(
+      { profile: 'default' },
+      {
+        path,
+        pendingPath,
+        lock,
+        now: () => 0,
+        stdout: (line) => lines.push(line),
+        request: async () => ({
+          status: 200,
+          body: { access_token: 'AT', token_type: 'bearer', expires_in: 3600 },
+        }),
+      },
+    );
+
+    const output = JSON.parse(lines.join('\n'));
+    expect(output).toMatchObject({
+      status: 'error',
+      message:
+        'Sign-in succeeded, but the session could not be saved. Run `amp auth login` again.',
+      error: { error_code: 'authentication_required' },
+    });
+    expect(output.message).not.toMatch(/lock|retry|rotation|token generation/i);
+    expect(retries).toMatchObject({ retries: 51 });
+    expect(getPending(loadPending(pendingPath), 'default')).toBeDefined();
+    process.exitCode = 0;
+  });
+
+  it('uses the same guidance when writing an authorized poll result fails', async () => {
+    const { path, pendingPath } = paths();
+    savePending(
+      setPending(
+        emptyPending(),
+        'default',
+        pendingEntry('2999-01-01T00:00:00Z'),
+      ),
+      pendingPath,
+    );
+    const lines: string[] = [];
+    const save = vi.fn(() => {
+      throw new Error('ENOSPC: raw filesystem detail');
+    });
+
+    await runAuthLoginPoll(
+      { profile: 'default' },
+      {
+        path,
+        pendingPath,
+        save,
+        now: () => 0,
+        stdout: (line) => lines.push(line),
+        request: async () => ({
+          status: 200,
+          body: { access_token: 'AT', token_type: 'bearer', expires_in: 3600 },
+        }),
+      },
+    );
+
+    expect(JSON.parse(lines.join('\n'))).toMatchObject({
+      status: 'error',
+      message:
+        'Sign-in succeeded, but the session could not be saved. Check available disk space and file permissions, then run `amp auth login` again.',
+      error: { error_code: 'authentication_required' },
+    });
+    process.exitCode = 0;
   });
 
   it('authorizes with region derived from an EU pending base_url', async () => {
