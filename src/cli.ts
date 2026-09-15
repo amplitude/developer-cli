@@ -33,6 +33,11 @@ import {
 import { shouldUseJsonOutput } from './output';
 import { assertFlagsAllowed } from './request';
 import { runOperation } from './run';
+import {
+  assertSkillsFlags,
+  runSkillsGet,
+  runSkillsList,
+} from './skills-commands';
 import { terminal } from './terminal';
 
 /**
@@ -114,6 +119,24 @@ export async function main(): Promise<void> {
       return;
     }
 
+    if (command[0] === 'skills') {
+      if (command.length === 2 && command[1] === 'list') {
+        assertSkillsFlags('list', flags);
+        await runSkillsList(flags);
+        return;
+      }
+
+      if (command[1] === 'get' && command.length <= 3) {
+        assertSkillsFlags('get', flags);
+        await runSkillsGet(command[2], flags);
+        return;
+      }
+
+      throw usageError(
+        `Unknown skills command: ${command.join(' ')}. Try: amp help skills`,
+      );
+    }
+
     if (command[0] === 'auth') {
       if (
         command.length === 3 &&
@@ -157,7 +180,7 @@ export async function main(): Promise<void> {
       }
       if (command[1] === 'use' && command.length <= 3) {
         assertKnownAuthFlags(['auth', 'use'], flags);
-        runAuthUse(command[2]);
+        await runAuthUse(command[2]);
         return;
       }
       if (command.length === 2 && command[1] === 'status') {
@@ -167,7 +190,7 @@ export async function main(): Promise<void> {
       }
       if (command.length === 2 && command[1] === 'token') {
         assertKnownAuthFlags(['auth', 'token'], flags);
-        runAuthToken(flags);
+        await runAuthToken(flags);
         return;
       }
 

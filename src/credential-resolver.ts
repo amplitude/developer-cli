@@ -13,6 +13,7 @@ import {
   oauthCredentialSchema,
   patCredentialSchema,
 } from './credential-store';
+import { refreshProfileTokenLocked } from './token-refresh';
 
 /**
  * Resolves which credential a command should use and how to reach the API.
@@ -29,13 +30,29 @@ export interface ResolveInput {
   baseUrlFlag?: string;
   env?: NodeJS.ProcessEnv;
   store?: CredentialStore;
+  path?: string;
   now?: number;
 }
 
 export interface ResolvedAuth {
   token: string;
   baseUrl: string;
+  // The profile's persisted backend, kept separate from `baseUrl` because an
+  // explicit request override may intentionally target another host. Reactive
+  // refresh uses this to detect a concurrent same-name login to another
+  // environment before retrying with its credential.
+  profileBaseUrl?: string;
   source: string;
+  // Whether the resolved credential is an OAuth profile with a refresh token —
+  // i.e. a 401 can be recovered by a forced refresh + retry. False on the
+  // --token / AMP_TOKEN paths and for a profile with no refresh token.
+  refreshable: boolean;
+  // Whether resolveAuthWithRefresh proactively rotated this token. If so, a
+  // subsequent 401 can't be helped by refreshing again (the token is freshly
+  // minted), so the reactive path skips it to avoid a double rotation. Stays
+  // false when the proactive path only adopted a peer's already-refreshed
+  // token — that one is not ours, so the reactive net still applies.
+  refreshed?: boolean;
   // Set only when a stored profile was selected (not on the --token / AMP_TOKEN
   // paths), so callers like `auth status` can show the profile's type/expiry
   // without re-deriving the precedence ladder.
@@ -128,7 +145,7 @@ export function selectProfile(
     return undefined;
   }
 
-  const store = input.store ?? loadStore();
+  const store = input.store ?? loadStore(input.path);
   const profileFlag = trimmed(input.profileFlag);
   const ampProfile = trimmed(env.AMP_PROFILE);
   const name = profileFlag ?? ampProfile ?? store.default;
@@ -159,6 +176,7 @@ export function resolveAuth(input: ResolveInput = {}): ResolvedAuth {
       token: tokenFlag,
       baseUrl: rawTokenBaseUrl(input, env),
       source: '--token flag',
+      refreshable: false,
     };
   }
 
@@ -168,19 +186,23 @@ export function resolveAuth(input: ResolveInput = {}): ResolvedAuth {
       token: ampToken,
       baseUrl: rawTokenBaseUrl(input, env),
       source: 'AMP_TOKEN env var',
+      refreshable: false,
     };
   }
 
-  const store = input.store ?? loadStore();
+  const store = input.store ?? loadStore(input.path);
   const selected = selectProfile({ ...input, store, env });
   if (selected) {
+    const oauth = oauthCredentialSchema.safeParse(selected.profile.credential);
     return {
       token: tokenFromProfile(selected.profile, selected.name, now),
       baseUrl: stripTrailingSlash(
         trimmed(input.baseUrlFlag) ?? selected.profile.base_url,
       ),
+      profileBaseUrl: selected.profile.base_url,
       source: selected.source,
       profile: selected.name,
+      refreshable: oauth.success && Boolean(oauth.data.refresh_token),
     };
   }
 
@@ -230,7 +252,7 @@ function baseUrlOverrideFromFlags(
  */
 export function resolveAuthFromFlags(
   flags: Record<string, FlagValue>,
-  overrides: Pick<ResolveInput, 'store' | 'now' | 'env'> = {},
+  overrides: Pick<ResolveInput, 'store' | 'path' | 'now' | 'env'> = {},
 ): ResolvedAuth {
   return resolveAuth({
     tokenFlag: stringFlag(flags, ['token']),
@@ -241,13 +263,64 @@ export function resolveAuthFromFlags(
 }
 
 /**
+ * Async sibling of {@link resolveAuthFromFlags}: proactively refreshes a
+ * selected, expired OAuth profile that still has a refresh token — persisting
+ * the rotation — before delegating to the synchronous resolver. A profile
+ * with no refresh token is left alone, so {@link tokenFromProfile}'s expiry
+ * throw remains the re-auth backstop.
+ */
+export async function resolveAuthWithRefresh(
+  flags: Record<string, FlagValue>,
+  overrides: Pick<ResolveInput, 'path' | 'now' | 'env'> = {},
+): Promise<ResolvedAuth> {
+  const now = overrides.now ?? Date.now();
+  const selected = selectProfileFromFlags(flags, overrides);
+  let rotation:
+    | {
+        profile: string;
+        accessToken: string;
+      }
+    | undefined;
+  if (selected) {
+    const oauth = oauthCredentialSchema.safeParse(selected.profile.credential);
+    if (
+      oauth.success &&
+      oauth.data.refresh_token &&
+      isExpired(oauth.data.expires_at, now)
+    ) {
+      const fresh = await refreshProfileTokenLocked({
+        name: selected.name,
+        now,
+        path: overrides.path,
+      });
+      // Only a real rotation makes the token freshly minted; adopting a peer's
+      // token leaves the reactive 401 path as the useful backstop.
+      if (fresh.rotated) {
+        rotation = {
+          profile: selected.name,
+          accessToken: fresh.credential.access_token,
+        };
+      }
+    }
+  }
+  const resolved = resolveAuthFromFlags(flags, { ...overrides, now });
+  return {
+    ...resolved,
+    refreshed:
+      rotation !== undefined &&
+      resolved.profile === rotation.profile &&
+      resolved.token === rotation.accessToken,
+  };
+}
+
+/**
  * Flags adapter for {@link selectProfile}, mirroring {@link resolveAuthFromFlags}.
  * Used by `auth status` to render the selected profile's metadata even when its
  * token has expired.
  */
 export function selectProfileFromFlags(
   flags: Record<string, FlagValue>,
-  overrides: Pick<ResolveInput, 'store' | 'env'> = {},
+  overrides: Pick<ResolveInput, 'store' | 'path' | 'env'> = {},
 ): SelectedProfile | undefined {
   return selectProfile({
     tokenFlag: stringFlag(flags, ['token']),

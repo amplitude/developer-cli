@@ -6,6 +6,7 @@ import {
   exitCodeForErrorCode,
   formatErrorEnvelope,
   formatErrorText,
+  transportError,
   usageError,
 } from './cli-error';
 
@@ -146,5 +147,14 @@ describe('formatErrorText', () => {
     });
 
     expect(formatErrorText(err)).toBe('Something broke');
+  });
+
+  it('gives a transport failure an actionable hint', () => {
+    const err = transportError(
+      'Could not reach the API at https://example.test.',
+    );
+
+    expect(err.hint).toBe('Check network connectivity and retry.');
+    expect(formatErrorText(err)).not.toMatch(/--base-url|--env/);
   });
 });

@@ -17,7 +17,6 @@ import {
 
 const entry = {
   device_code: 'dc',
-  code_verifier: 'cv',
   base_url: 'https://developer-api.amplitude.com',
   expires_at: '2026-07-15T00:10:00.000Z',
   interval: 5,
@@ -42,6 +41,17 @@ describe('pending-store', () => {
     expect(getPending(loadPending(path), 'default')).toEqual(entry);
     // eslint-disable-next-line no-bitwise -- masking permission bits off st_mode
     expect(statSync(path).mode & 0o777).toBe(0o600);
+  });
+
+  it('loads a legacy entry containing code_verifier', () => {
+    const path = tmpFile();
+    const legacyEntry = { ...entry, code_verifier: 'legacy-verifier' };
+    writeRaw(
+      path,
+      JSON.stringify({ version: 1, pending: { legacy: legacyEntry } }),
+    );
+
+    expect(getPending(loadPending(path), 'legacy')).toEqual(legacyEntry);
   });
 
   it('removePending drops the entry', () => {

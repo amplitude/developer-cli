@@ -14,6 +14,48 @@ import {
 import { normalizeWhitespace } from './output';
 
 describe('help', () => {
+  it('discovers both ingestion checks with their canonical usage', () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    try {
+      printCommandHelp(['events']);
+      const eventsHelp = log.mock.calls
+        .map((call) => String(call[0]))
+        .join('\n');
+      expect(eventsHelp).toContain('events check-ingestion');
+      expect(eventsHelp).toContain('events check-ingestion-by-api-key');
+      expect(eventsHelp).not.toContain('check-recent-event-ingestion');
+
+      log.mockClear();
+      printCommandHelp(['events', 'check-ingestion']);
+      const commandHelp = log.mock.calls
+        .map((call) => String(call[0]))
+        .join('\n');
+      expect(commandHelp).toContain(
+        'amp events check-ingestion --project <project_id> [--event-type <event_type>] [--lookback-minutes <lookback_minutes>] [--timeout-seconds <polling_timeout_seconds>]',
+      );
+      expect(commandHelp).toContain(
+        'amp events check-ingestion --project <project_id> --event-type <event_type>',
+      );
+      expect(commandHelp).toContain('--json');
+
+      log.mockClear();
+      printCommandHelp(['events', 'check-ingestion-by-api-key']);
+      const apiKeyCommandHelp = log.mock.calls
+        .map((call) => String(call[0]))
+        .join('\n');
+      expect(apiKeyCommandHelp).toContain(
+        'amp events check-ingestion-by-api-key --api-key <api_key> [--timeout-seconds <polling_timeout_seconds>]',
+      );
+      expect(apiKeyCommandHelp).toContain(
+        'amp events check-ingestion-by-api-key --api-key <api_key>',
+      );
+      expect(apiKeyCommandHelp).not.toContain('--project');
+      expect(apiKeyCommandHelp).not.toContain('--token');
+    } finally {
+      log.mockRestore();
+    }
+  });
+
   it('lists all catalog groups for top-level help, including charts', () => {
     const surfaces = listProductSurfaces().map((surface) => surface.label);
     expect(surfaces).toContain('charts');
@@ -51,6 +93,67 @@ describe('help', () => {
       const output = log.mock.calls.map((c) => String(c[0])).join('\n');
       expect(output).toMatch(/device authorization/);
       expect(output).not.toMatch(/Agents:/);
+    } finally {
+      log.mockRestore();
+    }
+  });
+
+  it('shows the required positional in a command’s usage line', () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    try {
+      printCommandHelp(['skills', 'get']);
+      const output = log.mock.calls.map((c) => String(c[0])).join('\n');
+      expect(output).toContain('amp skills get <name>');
+    } finally {
+      log.mockRestore();
+    }
+  });
+
+  it('explains JSON retrieval for skills get', () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    try {
+      printCommandHelp(['skills', 'get']);
+      const output = log.mock.calls.map((c) => String(c[0])).join('\n');
+      expect(output).toContain('--json');
+      expect(output).toContain('data.document');
+    } finally {
+      log.mockRestore();
+    }
+  });
+
+  it.each([
+    ['skills', 'list'],
+    ['skills', 'get'],
+  ])('does not reveal the internal --env flag in %s %s help', (...command) => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    try {
+      printCommandHelp(command);
+      expect(log.mock.calls.flat().join('\n')).not.toContain('--env');
+    } finally {
+      log.mockRestore();
+    }
+  });
+
+  it('still advertises the API globals on a generated command', () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    try {
+      printCommandHelp(['flags', 'list']);
+      const output = log.mock.calls.map((c) => String(c[0])).join('\n');
+      expect(output).toContain(
+        'Global flags: --token, --json, --yes, --body-json',
+      );
+    } finally {
+      log.mockRestore();
+    }
+  });
+
+  it('lists a bespoke group’s commands for `amp help <group>`', () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    try {
+      printCommandHelp(['skills']);
+      const output = log.mock.calls.map((c) => String(c[0])).join('\n');
+      expect(output).toContain('skills list');
+      expect(output).toContain('skills get');
     } finally {
       log.mockRestore();
     }
@@ -133,18 +236,42 @@ describe('help', () => {
       'user-properties',
       'flags',
       'charts',
+      'destination-types',
+      'destinations',
+      'skills',
     ]);
     expect(groups.indexOf('auth')).toBeGreaterThan(groups.indexOf('charts'));
   });
 
-  it('describes the JSON output surface behaviorally in prose global help', () => {
+  it('describes the JSON output surface and skill audience in global help', () => {
     const log = vi.spyOn(console, 'log').mockImplementation(() => undefined);
     try {
       printGlobalHelp();
       const out = log.mock.calls.map((c) => String(c[0])).join('\n');
       expect(out).toMatch(/--json/);
       expect(out).toMatch(/JSON/);
-      expect(out).not.toMatch(/agents/i);
+      expect(out).toContain(
+        'Skill documents for implementing Amplitude, intended for AI agents.',
+      );
+    } finally {
+      log.mockRestore();
+    }
+  });
+
+  it('qualifies the piped JSON default for raw skills documents', () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    try {
+      printGlobalHelp();
+      const out = log.mock.calls.map((c) => String(c[0])).join('\n');
+      expect(out).toContain(
+        'Most commands use JSON when piped or with --json.',
+      );
+      expect(out).toContain(
+        'amp skills get remains raw when piped unless --json is passed.',
+      );
+      expect(out).toContain(
+        '--json               Print raw JSON (most commands default when piped)',
+      );
     } finally {
       log.mockRestore();
     }
@@ -174,6 +301,24 @@ describe('help JSON', () => {
       log.mockRestore();
     }
   };
+
+  it.each([
+    ['skills', 'list'],
+    ['skills', 'get'],
+  ])(
+    'does not reveal the internal --env flag in %s %s JSON help',
+    (...command) => {
+      const log = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+      try {
+        printCommandHelp(command, { json: true, isTTY: false });
+        const output = log.mock.calls.flat().join('');
+        expect(output).not.toContain('--env');
+        expect(JSON.parse(output)).not.toHaveProperty('globalFlags');
+      } finally {
+        log.mockRestore();
+      }
+    },
+  );
 
   it('serializeCatalog dumps cli, spec, a drilldown hint, and a compact index of every catalog command', () => {
     const dump = serializeCatalog();

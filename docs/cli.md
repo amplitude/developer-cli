@@ -75,10 +75,10 @@ scopes below document what each command needs.
 
 | Command family             | Scopes                            |
 | -------------------------- | --------------------------------- |
-| `context`, `projects list` | `read:projects`                   |
-| `events *`                 | `read:taxonomy`, `write:taxonomy` |
-| `flags *`                  | `read:flags`, `write:flags`       |
-| `charts *`                 | `read:analytics`                  |
+| `context`, `projects list` | `projects:read`                   |
+| `events *`                 | `taxonomy:read`, `taxonomy:write` |
+| `flags *`                  | `flags:read`, `flags:write`       |
+| `charts *`                 | `analytics:read`                  |
 
 Route-level scopes are defined on each OpenAPI operation (`x-required-scopes`).
 
