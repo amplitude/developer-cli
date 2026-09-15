@@ -11,11 +11,10 @@ import {
   type AnonymousRequest,
   type DeviceFlowOptions,
   createAnonymousRequest,
-  generatePkcePair,
   pollDeviceTokenBounded,
   requestDeviceToken,
 } from './authToken';
-import { CliError, usageError } from './cli-error';
+import { authError, CliError, usageError } from './cli-error';
 import {
   assertRegionAndEnvNotBothSet,
   DEFAULT_POLL_TIMEOUT_SECONDS,
@@ -24,6 +23,7 @@ import {
 } from './config';
 import {
   resolveAuthFromFlags,
+  resolveAuthWithRefresh,
   selectProfileFromFlags,
 } from './credential-resolver';
 import {
@@ -32,15 +32,16 @@ import {
   type OAuthCredential,
   type PatCredential,
   type Profile,
+  type UpdateStoreOptions,
   assertValidProfileName,
   emptyStore,
   getProfile,
   loadStore,
   oauthCredentialSchema,
   removeProfile,
-  saveStore,
   setDefault,
   setProfile,
+  updateStore,
 } from './credential-store';
 import { toOAuthError } from './oauthError';
 import {
@@ -155,7 +156,7 @@ export function targetProfileName(
 /**
  * Wraps a phase response in the `{ status, message, data | error }` envelope
  * every agent-driven auth verb emits. `status` is always a string enum;
- * secrets (`device_code`, `code_verifier`) must never be passed in `data`.
+ * secrets (`device_code`) must never be passed in `data`.
  */
 export function authFlowJson(
   payload: {
@@ -185,7 +186,7 @@ export interface AuthStartDeps {
 
 /**
  * `amp auth login start` — device-flow phase 1. Requests a device
- * authorization, stashes the secret `device_code`/`code_verifier` in the
+ * authorization, stashes the secret `device_code` in the
  * pending-logins store (never emitted), and prints the JSON envelope an agent
  * relays to the human: the `user_code` to confirm and the poll command to run
  * next.
@@ -231,10 +232,7 @@ export async function runAuthLoginStart(
     }
 
     const request = deps.request ?? createAnonymousRequest(baseUrl);
-    const { codeVerifier, codeChallenge } = generatePkcePair();
     const response = await request('POST', '/v1/auth/device-authorization', {
-      code_challenge: codeChallenge,
-      code_challenge_method: 'S256',
       scope: DEFAULT_SCOPES,
     });
     if (response.status < 200 || response.status >= 300) {
@@ -271,7 +269,6 @@ export async function runAuthLoginStart(
     const expiresAt = new Date(now() + device.expires_in * 1000).toISOString();
     const entry: PendingEntry = {
       device_code: device.device_code,
-      code_verifier: codeVerifier,
       base_url: baseUrl,
       expires_at: expiresAt,
       interval: device.interval ?? 5,
@@ -397,6 +394,8 @@ function loginStartRestartHint(baseUrl?: string): string {
 
 export interface AuthPollDeps extends AuthStartDeps {
   sleep?: (seconds: number) => Promise<void>;
+  lock?: UpdateStoreOptions['lock'];
+  save?: UpdateStoreOptions['save'];
 }
 
 /**
@@ -422,7 +421,7 @@ function parseTimeoutSeconds(raw: string | undefined): number | undefined {
  * against `/v1/auth/token`: `authorized` saves + activates the profile and
  * clears the pending entry; `pending` reports back (exit 75) for the agent to
  * retry; `expired`/`error` clear the pending entry and exit non-zero. Never
- * emits the pending entry's secret `device_code`/`code_verifier`.
+ * emits the pending entry's secret `device_code`.
  */
 export async function runAuthLoginPoll(
   flags: Record<string, FlagValue>,
@@ -518,7 +517,6 @@ export async function runAuthLoginPoll(
     const result = await pollDeviceTokenBounded({
       request,
       deviceCode: entry.device_code,
-      codeVerifier: entry.code_verifier,
       intervalSeconds: entry.interval,
       codeExpiresAtMs: Date.parse(entry.expires_at),
       timeoutSeconds,
@@ -533,11 +531,18 @@ export async function runAuthLoginPoll(
         saved_at: new Date(now()).toISOString(),
         store: 'file',
       };
-      // Re-load right before the write: a concurrent auth may have saved to
-      // the store during the poll's long wait; the stale `store` would clobber it.
-      saveStore(
-        setDefault(setProfile(loadStore(deps.path), name, profile), name),
+      // updateStore locks, reloads, and writes atomically, so a concurrent
+      // auth saved during the poll's long wait isn't clobbered.
+      await updateStore(
         deps.path,
+        (fresh) => setDefault(setProfile(fresh, name, profile), name),
+        {
+          lock: deps.lock,
+          save: deps.save,
+          retryMode: 'rotation_recovery',
+          acquireError: completedSignInSaveError,
+          persistError: completedSignInWriteError,
+        },
       );
       // Profile is now authenticated, so any pending code for it is moot —
       // clear unconditionally (unlike the error/expired paths, which guard on
@@ -665,6 +670,18 @@ function clearPendingLogin(pendingPath: string, name: string): void {
   savePending(removePending(pending, name), pendingPath);
 }
 
+function completedSignInSaveError(): CliError {
+  return authError(
+    'Sign-in succeeded, but the session could not be saved. Run `amp auth login` again.',
+  );
+}
+
+function completedSignInWriteError(): CliError {
+  return authError(
+    'Sign-in succeeded, but the session could not be saved. Check available disk space and file permissions, then run `amp auth login` again.',
+  );
+}
+
 export interface AuthLoginDeps {
   requestToken?: (options: DeviceFlowOptions) => Promise<TokenResponse>;
   now?: () => number;
@@ -673,6 +690,8 @@ export interface AuthLoginDeps {
   stdout?: (line: string) => void;
   stderr?: (line: string) => void;
   confirm?: (message: string) => Promise<boolean>;
+  lock?: UpdateStoreOptions['lock'];
+  save?: UpdateStoreOptions['save'];
 }
 
 /**
@@ -740,10 +759,20 @@ export async function runAuthLogin(
     store: 'file',
   };
 
+  // updateStore locks, reloads, and writes atomically, so a transparent
+  // refresh (or other auth command) that landed during the long device flow
+  // isn't clobbered.
   const previousDefault = store.default;
-  saveStore(
-    setDefault(setProfile(store, profileName, profile), profileName),
+  await updateStore(
     deps.path,
+    (fresh) => setDefault(setProfile(fresh, profileName, profile), profileName),
+    {
+      lock: deps.lock,
+      save: deps.save,
+      retryMode: 'rotation_recovery',
+      acquireError: completedSignInSaveError,
+      persistError: completedSignInWriteError,
+    },
   );
   clearPendingLogin(deps.pendingPath ?? defaultPendingPath(), profileName);
 
@@ -870,10 +899,12 @@ export async function runAuthPat(
     store: 'file',
   };
 
+  // updateStore locks, reloads, and writes atomically, so a transparent
+  // refresh (or other auth command) that landed during interactive PAT entry
+  // isn't clobbered.
   const previousDefault = store.default;
-  saveStore(
-    setDefault(setProfile(store, profileName, profile), profileName),
-    deps.path,
+  await updateStore(deps.path, (fresh) =>
+    setDefault(setProfile(fresh, profileName, profile), profileName),
   );
   clearPendingLogin(deps.pendingPath ?? defaultPendingPath(), profileName);
 
@@ -1019,25 +1050,29 @@ export function runAuthList(
 }
 
 /** `amp auth use <name>` — repoint the default with no re-auth. */
-export function runAuthUse(
+export async function runAuthUse(
   name: string | undefined,
   deps: ProfileCommandDeps = {},
-): void {
+): Promise<void> {
   if (!name) {
     throw usageError(
       '`amp auth use` requires a profile name: amp auth use <name>.',
     );
   }
   const emitStdout = deps.stdout ?? ((line) => console.log(line));
-  const store = loadStore(deps.path);
-  if (!getProfile(store, name)) {
-    const known = Object.keys(store.profiles);
-    throw usageError(
-      `No such profile: ${name}.${known.length ? ` Known: ${known.join(', ')}.` : ' Run `amp auth login`.'}`,
-    );
-  }
-  const previousDefault = store.default;
-  saveStore(setDefault(store, name), deps.path);
+  const previousDefault = loadStore(deps.path).default;
+  // updateStore locks, reloads, and writes atomically, so repointing the
+  // default can't clobber a rotation a transparent refresh persisted since.
+  // The profile check belongs inside too — it may have been logged out.
+  await updateStore(deps.path, (fresh) => {
+    if (!getProfile(fresh, name)) {
+      const known = Object.keys(fresh.profiles);
+      throw usageError(
+        `No such profile: ${name}.${known.length ? ` Known: ${known.join(', ')}.` : ' Run `amp auth login`.'}`,
+      );
+    }
+    return setDefault(fresh, name);
+  });
   const wasNote =
     previousDefault && previousDefault !== name
       ? ` (was "${previousDefault}")`
@@ -1098,7 +1133,7 @@ export async function runLogout(
       }
     }
 
-    saveStore(emptyStore(), deps.path);
+    await updateStore(deps.path, () => emptyStore());
     savePending(emptyPending(), pPath);
     emitStdout(
       terminal.success(
@@ -1155,15 +1190,16 @@ export async function runLogout(
     return;
   }
 
-  // Re-read before the write for the same reason as the pending clear above:
-  // another auth for a different profile may have landed since the snapshot at
-  // the top, and removing `target` from a stale store would clobber it.
-  const current = loadStore(deps.path);
-  const wasDefault = current.default === target;
-  const next = removeProfile(current, target);
-  saveStore(next, deps.path);
+  // updateStore locks, reloads, and writes atomically, so removing `target`
+  // can't clobber a concurrent auth to a different profile.
+  const next = await updateStore(deps.path, (fresh) =>
+    removeProfile(fresh, target),
+  );
 
-  if (wasDefault) {
+  // Confirm against the persisted store rather than the snapshot: an `auth use`
+  // that landed since keeps its own default, so there's nothing to warn about.
+  const lostDefault = store.default === target && next.default === undefined;
+  if (lostDefault) {
     const remaining = Object.keys(next.profiles);
     const pick = remaining.length
       ? `select another (${remaining.join(', ')}) with \`amp auth use <profile>\``
@@ -1188,11 +1224,14 @@ export function maskToken(token: string): string {
 
 interface AuthStatusDeps {
   store?: CredentialStore;
+  path?: string;
   now?: () => number;
   env?: NodeJS.ProcessEnv;
   stdout?: (line: string) => void;
   isTTY?: boolean;
 }
+
+type AuthTokenDeps = Omit<AuthStatusDeps, 'store' | 'isTTY'>;
 
 /**
  * `amp auth status` — local inspection of the active credential. Resolves via
@@ -1215,7 +1254,7 @@ export function runAuthStatus(
   const emitStdout = deps.stdout ?? ((line) => console.log(line));
   const isTTY = deps.isTTY ?? Boolean(process.stdout.isTTY);
   const now = deps.now?.() ?? Date.now();
-  const store = deps.store ?? loadStore();
+  const store = deps.store ?? loadStore(deps.path);
 
   if (shouldUseJsonOutput({ jsonFlag: isFlagEnabled(flags.json), isTTY })) {
     const auth = resolveAuthFromFlags(flags, { store, now, env: deps.env });
@@ -1297,17 +1336,18 @@ export function runAuthStatus(
 /**
  * `amp auth token` — print the resolved access token to stdout, nothing else,
  * so it pipes cleanly (`TOKEN=$(amp auth token)`). Reads the store via the
- * shared resolver instead of running a flow; when no credential resolves (or
- * the selected one has expired) the resolver throws and the CLI exits non-zero
- * with no stdout.
+ * shared resolver instead of running a flow, transparently refreshing an
+ * expired-but-refreshable profile first; when no credential resolves (or the
+ * selected one has expired with no refresh token) the resolver throws and the
+ * CLI exits non-zero with no stdout.
  */
-export function runAuthToken(
+export async function runAuthToken(
   flags: Record<string, FlagValue>,
-  deps: AuthStatusDeps = {},
-): void {
+  deps: AuthTokenDeps = {},
+): Promise<void> {
   const emitStdout = deps.stdout ?? ((line) => console.log(line));
-  const auth = resolveAuthFromFlags(flags, {
-    store: deps.store,
+  const auth = await resolveAuthWithRefresh(flags, {
+    path: deps.path,
     now: deps.now?.(),
     env: deps.env,
   });

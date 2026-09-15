@@ -1,30 +1,22 @@
-import { createHash } from 'node:crypto';
 import { PassThrough } from 'node:stream';
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  type AnonymousRequest,
   createAnonymousRequest,
   formatVerificationPrompt,
-  generatePkcePair,
   pollDeviceTokenBounded,
   pollForToken,
   requestDeviceToken,
   runAuthTokenCommand,
   startWaitingIndicator,
 } from './authToken';
+import { deviceIdHeader } from './client-identity';
 
-describe('generatePkcePair', () => {
-  it('derives an S256 challenge from a base64url verifier', () => {
-    const { codeVerifier, codeChallenge } = generatePkcePair();
-
-    // 32 random bytes, base64url, no padding => 43 chars from the URL-safe set.
-    expect(codeVerifier).toMatch(/^[A-Za-z0-9_-]{43}$/);
-    expect(codeChallenge).toBe(
-      createHash('sha256').update(codeVerifier).digest('base64url'),
-    );
-  });
-});
+vi.mock('./client-identity', () => ({
+  deviceIdHeader: vi.fn(() => ({ 'Amp-Device-Id': 'device-123' })),
+}));
 
 describe('formatVerificationPrompt', () => {
   it('shows the user_code and verification URL but never the device_code', () => {
@@ -261,9 +253,15 @@ describe('runAuthTokenCommand', () => {
     expect(stdout).toContain('ACCESS-TOKEN');
     expect(stdout).toContain('openid');
 
+    const deviceCall = calls.find((c) =>
+      c.path.endsWith('/v1/auth/device-authorization'),
+    );
+    expect(deviceCall?.body).toEqual({ scope: undefined });
+
     // device_code was sent in the token request body...
     const tokenCall = calls.find((c) => c.path.endsWith('/v1/auth/token'));
-    expect(tokenCall?.body).toMatchObject({
+    expect(tokenCall?.body).toEqual({
+      grant_type: 'urn:ietf:params:oauth:grant-type:device_code',
       device_code: 'DEVICE-CODE-SECRET',
     });
 
@@ -418,6 +416,30 @@ describe('createAnonymousRequest', () => {
     expect(new Headers(init?.headers).get('user-agent')).toMatch(
       /^amp-cli\/\S+$/,
     );
+    expect(new Headers(init?.headers).get('amp-device-id')).toBe('device-123');
+  });
+
+  it('resolves one device identity lazily per request factory', async () => {
+    const identityHeader = vi.mocked(deviceIdHeader);
+    identityHeader.mockClear();
+    const fetchMock = vi.fn<typeof fetch>(() =>
+      Promise.resolve(new Response(null, { status: 204 })),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const request = createAnonymousRequest('https://api.test');
+    expect(identityHeader).not.toHaveBeenCalled();
+
+    await request('GET', '/first');
+    await request('GET', '/second');
+
+    expect(identityHeader).toHaveBeenCalledTimes(1);
+    expect(
+      new Headers(fetchMock.mock.calls[0][1]?.headers).get('amp-device-id'),
+    ).toBe('device-123');
+    expect(
+      new Headers(fetchMock.mock.calls[1][1]?.headers).get('amp-device-id'),
+    ).toBe('device-123');
   });
 
   it('throws a readable error when the API is unreachable', async () => {
@@ -458,15 +480,22 @@ const token = { access_token: 'at', token_type: 'bearer', expires_in: 3600 };
 
 describe('pollDeviceTokenBounded', () => {
   it('returns authorized when the exchange succeeds', async () => {
+    const request = vi.fn<AnonymousRequest>(async () => ({
+      status: 200,
+      body: token,
+    }));
     const res = await pollDeviceTokenBounded({
-      request: async () => ({ status: 200, body: token }),
+      request,
       deviceCode: 'dc',
-      codeVerifier: 'cv',
       intervalSeconds: 1,
       codeExpiresAtMs: 10_000,
       timeoutSeconds: 5,
       now: () => 0,
       sleep: noSleep,
+    });
+    expect(request).toHaveBeenCalledWith('POST', '/v1/auth/token', {
+      grant_type: 'urn:ietf:params:oauth:grant-type:device_code',
+      device_code: 'dc',
     });
     expect(res).toEqual({ status: 'authorized', token });
   });
@@ -479,7 +508,6 @@ describe('pollDeviceTokenBounded', () => {
         body: { error: 'authorization_pending' },
       }),
       deviceCode: 'dc',
-      codeVerifier: 'cv',
       intervalSeconds: 1,
       codeExpiresAtMs: 1_000_000,
       timeoutSeconds: 2,
@@ -499,7 +527,6 @@ describe('pollDeviceTokenBounded', () => {
         return { status: 400, body: { error: 'authorization_pending' } };
       },
       deviceCode: 'dc',
-      codeVerifier: 'cv',
       intervalSeconds: 5,
       codeExpiresAtMs: 1_000_000,
       timeoutSeconds: 12,
@@ -522,7 +549,6 @@ describe('pollDeviceTokenBounded', () => {
     const res = await pollDeviceTokenBounded({
       request: async () => ({ status: 500, body: { error: 'server_error' } }),
       deviceCode: 'dc',
-      codeVerifier: 'cv',
       intervalSeconds: 1,
       codeExpiresAtMs: 1_000_000,
       timeoutSeconds: 2,
@@ -537,7 +563,6 @@ describe('pollDeviceTokenBounded', () => {
     const res = await pollDeviceTokenBounded({
       request: async () => ({ status: 400, body: { error: 'slow_down' } }),
       deviceCode: 'dc',
-      codeVerifier: 'cv',
       intervalSeconds: 1,
       codeExpiresAtMs: 1_000_000,
       timeoutSeconds: 2,
@@ -555,7 +580,6 @@ describe('pollDeviceTokenBounded', () => {
         body: { error: 'authorization_pending' },
       }),
       deviceCode: 'dc',
-      codeVerifier: 'cv',
       intervalSeconds: 1,
       codeExpiresAtMs: 1500,
       timeoutSeconds: 999,
@@ -569,7 +593,6 @@ describe('pollDeviceTokenBounded', () => {
     const res = await pollDeviceTokenBounded({
       request: async () => ({ status: 400, body: { error: 'access_denied' } }),
       deviceCode: 'dc',
-      codeVerifier: 'cv',
       intervalSeconds: 1,
       codeExpiresAtMs: 10_000,
       timeoutSeconds: 5,
@@ -590,7 +613,6 @@ describe('pollDeviceTokenBounded', () => {
         },
       }),
       deviceCode: 'dc',
-      codeVerifier: 'cv',
       intervalSeconds: 1,
       codeExpiresAtMs: 10_000,
       timeoutSeconds: 5,

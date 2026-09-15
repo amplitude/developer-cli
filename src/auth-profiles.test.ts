@@ -1,8 +1,9 @@
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
+import { stripVTControlCharacters } from 'node:util';
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   envLabel,
@@ -34,12 +35,12 @@ import {
   savePending,
   setPending,
 } from './pending-store';
+import * as tokenRefresh from './token-refresh';
 
 const NOW = Date.parse('2026-06-23T12:00:00.000Z');
 
 const pendingEntry = (baseUrl: string) => ({
   device_code: 'DC',
-  code_verifier: 'CV',
   base_url: baseUrl,
   expires_at: '2999-01-01T00:00:00Z',
   interval: 5,
@@ -288,26 +289,26 @@ describe('runAuthUse', () => {
     return { path, store };
   }
 
-  it('repoints the default and announces the previous one', () => {
+  it('repoints the default and announces the previous one', async () => {
     const { path } = seeded();
     const out: string[] = [];
-    runAuthUse('staging', { path, stdout: (l) => out.push(l) });
+    await runAuthUse('staging', { path, stdout: (l) => out.push(l) });
 
     expect(loadStore(path).default).toBe('staging');
     expect(out.join('\n')).toMatch(/now "staging" \(was "amplitude"\)/);
   });
 
-  it('throws listing known profiles on an unknown name', () => {
+  it('throws listing known profiles on an unknown name', async () => {
     const { path } = seeded();
-    expect(() => runAuthUse('nope', { path })).toThrow(
+    await expect(runAuthUse('nope', { path })).rejects.toThrow(
       /Known: amplitude, staging/,
     );
   });
 
-  it('requires a name', () => {
-    expect(() => runAuthUse(undefined, { path: seeded().path })).toThrow(
-      /requires a profile name/,
-    );
+  it('requires a name', async () => {
+    await expect(
+      runAuthUse(undefined, { path: seeded().path }),
+    ).rejects.toThrow(/requires a profile name/);
   });
 });
 
@@ -359,12 +360,25 @@ describe('runLogout', () => {
     return path;
   }
 
+  type LogoutDeps = NonNullable<Parameters<typeof runLogout>[1]>;
+
+  function logoutDeps(
+    path: string,
+    overrides: Omit<LogoutDeps, 'path' | 'pendingPath'> = {},
+  ): LogoutDeps {
+    return {
+      path,
+      pendingPath: join(dirname(path), 'pending.json'),
+      ...overrides,
+    };
+  }
+
   it('removes a non-default profile and leaves the default untouched', async () => {
     const path = seeded();
     const out: string[] = [];
     await runLogout(
       { profile: 'staging' },
-      { path, stdout: (l) => out.push(l) },
+      logoutDeps(path, { stdout: (l) => out.push(l) }),
     );
 
     const after = loadStore(path);
@@ -376,7 +390,7 @@ describe('runLogout', () => {
   it('clears the default (never auto-promotes) when logging out the default', async () => {
     const path = seeded();
     const out: string[] = [];
-    await runLogout({}, { path, stdout: (l) => out.push(l) });
+    await runLogout({}, logoutDeps(path, { stdout: (l) => out.push(l) }));
 
     const after = loadStore(path);
     expect(after.profiles.amplitude).toBeUndefined();
@@ -387,9 +401,9 @@ describe('runLogout', () => {
 
   it('errors with known names on an unknown target', async () => {
     const path = seeded();
-    await expect(runLogout({ profile: 'nope' }, { path })).rejects.toThrow(
-      /Known: amplitude, staging/,
-    );
+    await expect(
+      runLogout({ profile: 'nope' }, logoutDeps(path)),
+    ).rejects.toThrow(/Known: amplitude, staging/);
   });
 
   it('errors when there is nothing to log out of', async () => {
@@ -397,7 +411,7 @@ describe('runLogout', () => {
     dirs.push(dir);
     const path = join(dir, 'credentials.json');
     saveStore(emptyStore(), path);
-    await expect(runLogout({}, { path })).rejects.toThrow(
+    await expect(runLogout({}, logoutDeps(path))).rejects.toThrow(
       /No profile to log out of/,
     );
   });
@@ -407,7 +421,7 @@ describe('runLogout', () => {
     const out: string[] = [];
     await runLogout(
       { all: true, yes: true },
-      { path, stdout: (l) => out.push(l), isTTY: false },
+      logoutDeps(path, { stdout: (l) => out.push(l), isTTY: false }),
     );
 
     const after = loadStore(path);
@@ -422,14 +436,17 @@ describe('runLogout', () => {
     const path = join(dir, 'credentials.json');
     saveStore(emptyStore(), path);
     const out: string[] = [];
-    await runLogout({ all: true }, { path, stdout: (l) => out.push(l) });
+    await runLogout(
+      { all: true },
+      logoutDeps(path, { stdout: (l) => out.push(l) }),
+    );
     expect(out.join('\n')).toMatch(/No profiles to remove/);
   });
 
   it('blocks --all without --yes in a non-interactive shell', async () => {
     const path = seeded();
     await expect(
-      runLogout({ all: true }, { path, isTTY: false }),
+      runLogout({ all: true }, logoutDeps(path, { isTTY: false })),
     ).rejects.toThrow(/Pass --yes to remove every stored profile/);
     expect(Object.keys(loadStore(path).profiles)).toEqual([
       'amplitude',
@@ -442,11 +459,10 @@ describe('runLogout', () => {
     await expect(
       runLogout(
         { all: true },
-        {
-          path,
+        logoutDeps(path, {
           isTTY: true,
           confirm: () => Promise.resolve(false),
-        },
+        }),
       ),
     ).rejects.toThrow(/Aborted/);
     expect(Object.keys(loadStore(path).profiles)).toEqual([
@@ -460,12 +476,11 @@ describe('runLogout', () => {
     const out: string[] = [];
     await runLogout(
       { all: true },
-      {
-        path,
+      logoutDeps(path, {
         isTTY: true,
         confirm: () => Promise.resolve(true),
         stdout: (l) => out.push(l),
-      },
+      }),
     );
 
     const after = loadStore(path);
@@ -475,7 +490,7 @@ describe('runLogout', () => {
 
   it('rejects --all combined with --profile', async () => {
     await expect(
-      runLogout({ all: true, profile: 'staging' }, { path: seeded() }),
+      runLogout({ all: true, profile: 'staging' }, logoutDeps(seeded())),
     ).rejects.toThrow(/not both/);
   });
 
@@ -663,7 +678,7 @@ describe('runAuthStatus', () => {
         stdout: (l) => out.push(l),
       },
     );
-    const text = out.join('\n');
+    const text = stripVTControlCharacters(out.join('\n'));
 
     expect(text).toMatch(/Source: {3}default profile amplitude/);
     expect(text).toMatch(/Profile: {2}amplitude \(default\)/);
@@ -746,7 +761,7 @@ describe('runAuthStatus', () => {
         stdout: (l) => out.push(l),
       },
     );
-    const text = out.join('\n');
+    const text = stripVTControlCharacters(out.join('\n'));
 
     expect(text).toMatch(/AMP_TOKEN is set/);
     expect(text).toMatch(/Source: {3}AMP_TOKEN env var/);
@@ -946,6 +961,8 @@ describe('runAuthStatus', () => {
 });
 
 describe('runAuthToken', () => {
+  const dirs: string[] = [];
+
   function tokenStore(expiresAt: string): CredentialStore {
     const store = setProfile(
       emptyStore(),
@@ -955,12 +972,43 @@ describe('runAuthToken', () => {
     return setDefault(store, 'amplitude');
   }
 
-  it('prints only the resolved access token (pipeable)', () => {
+  function tokenStoreWithRefresh(
+    expiresAt: string,
+    refreshToken: string,
+  ): CredentialStore {
+    const profile = oauthProfile(
+      'https://developer-api.amplitude.com',
+      expiresAt,
+    );
+    const store = setProfile(emptyStore(), 'amplitude', {
+      ...profile,
+      credential: { ...profile.credential, refresh_token: refreshToken },
+    });
+    return setDefault(store, 'amplitude');
+  }
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    for (const dir of dirs.splice(0)) {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  function seed(store: CredentialStore): string {
+    const dir = mkdtempSync(join(tmpdir(), 'amp-auth-token-'));
+    dirs.push(dir);
+    const path = join(dir, 'credentials.json');
+    saveStore(store, path);
+    return path;
+  }
+
+  it('prints only the resolved access token (pipeable)', async () => {
     const out: string[] = [];
-    runAuthToken(
+    const path = seed(tokenStore('2026-06-23T14:00:00.000Z'));
+    await runAuthToken(
       {},
       {
-        store: tokenStore('2026-06-23T14:00:00.000Z'),
+        path,
         now: () => NOW,
         env: {},
         stdout: (l) => out.push(l),
@@ -969,23 +1017,64 @@ describe('runAuthToken', () => {
     expect(out).toEqual(['eyJ.jwt']);
   });
 
-  it('throws (no stdout) when no credential resolves', () => {
-    expect(() =>
-      runAuthToken({}, { store: emptyStore(), now: () => NOW, env: {} }),
-    ).toThrow(/amp auth login/);
+  it('refreshes an expired profile with a refresh token and prints the fresh token', async () => {
+    const path = seed(tokenStoreWithRefresh('2026-06-23T11:00:00.000Z', 'rt'));
+    const credential = {
+      type: 'oauth',
+      access_token: 'fresh-token',
+      token_type: 'bearer',
+      expires_at: '2026-06-23T15:00:00.000Z',
+      refresh_token: 'rt2',
+    } as const;
+    vi.spyOn(tokenRefresh, 'refreshProfileTokenLocked').mockImplementation(
+      async (params) => {
+        if (params.path !== path) {
+          throw new Error('refresh did not receive the temporary path');
+        }
+        const latest = loadStore(path);
+        saveStore(
+          setProfile(latest, 'amplitude', {
+            ...latest.profiles.amplitude,
+            credential,
+            saved_at: new Date(NOW).toISOString(),
+          }),
+          path,
+        );
+        return { credential, rotated: true };
+      },
+    );
+    const out: string[] = [];
+    await runAuthToken(
+      {},
+      {
+        path,
+        now: () => NOW,
+        env: {},
+        stdout: (l) => out.push(l),
+      },
+    );
+    expect(out).toEqual(['fresh-token']);
   });
 
-  it('throws when the selected token has expired', () => {
-    expect(() =>
+  it('throws (no stdout) when no credential resolves', async () => {
+    const path = seed(emptyStore());
+    await expect(
+      runAuthToken({}, { path, now: () => NOW, env: {} }),
+    ).rejects.toThrow(/amp auth login/);
+  });
+
+  it('throws when the selected token has expired and has no refresh token', async () => {
+    const path = seed(tokenStore('2026-06-23T11:00:00.000Z'));
+    await expect(
       runAuthToken(
         {},
         {
-          store: tokenStore('2026-06-23T11:00:00.000Z'),
+          path,
           now: () => NOW,
           env: {},
         },
       ),
-    ).toThrow(/expired/i);
+    ).rejects.toThrow(/expired/i);
   });
 });
 

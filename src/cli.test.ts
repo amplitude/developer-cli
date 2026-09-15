@@ -129,6 +129,16 @@ describe('main routing', () => {
     expect(parsed.message).toMatch(/Unknown --region "bogus"/);
   });
 
+  it('renders the real skills get usage error as JSON when --json is passed', async () => {
+    await runWith(['skills', 'get', '--json']);
+
+    expect(process.exitCode).toBe(2);
+    const parsed = JSON.parse(String(errSpy.mock.calls[0]?.[0]));
+    expect(parsed.error.error_code).toBe('usage_error');
+    expect(parsed.message).toContain('Pass the skill name');
+    expect(parsed.message).not.toContain('does not support --json');
+  });
+
   it('routes `amp help <unknown>` through the error envelope (stderr, exit 2), not stdout', async () => {
     await runWith(['help', 'frobnicate']);
 
@@ -137,6 +147,41 @@ describe('main routing', () => {
     const parsed = JSON.parse(String(errSpy.mock.calls[0]?.[0]));
     expect(parsed.error.error_code).toBe('usage_error');
     expect(parsed.message).toMatch(/Unknown command: frobnicate/);
+  });
+
+  it.each([
+    {
+      argv: ['skills', 'get', 'integrating-amplitude', '--help'],
+      expectedCommand: 'skills get',
+    },
+    {
+      argv: ['help', 'skills', 'get', 'integrating-amplitude'],
+      expectedCommand: 'skills get',
+    },
+    {
+      argv: ['auth', 'use', 'work', '--help'],
+      expectedCommand: 'auth use',
+    },
+  ])(
+    'renders $expectedCommand help when its positional value is present',
+    async ({ argv, expectedCommand }) => {
+      await runWith(argv);
+
+      expect(process.exitCode).toBeUndefined();
+      expect(errSpy).not.toHaveBeenCalled();
+      const parsed = JSON.parse(String(logSpy.mock.calls[0]?.[0]));
+      expect(parsed.command).toBe(expectedCommand);
+    },
+  );
+
+  it('does not treat an undeclared trailing value as part of a help topic', async () => {
+    await runWith(['flags', 'list', 'unexpected', '--help']);
+
+    expect(process.exitCode).toBe(2);
+    const parsed = JSON.parse(String(errSpy.mock.calls[0]?.[0]));
+    expect(parsed.error.error_code).toBe('usage_error');
+    expect(parsed.message).toMatch(/Unknown command: flags list unexpected/);
+    expect(logSpy).not.toHaveBeenCalled();
   });
 
   it('renders a structured auth error (exit 3) for an unknown --profile on an API command', async () => {
@@ -220,6 +265,63 @@ describe('main routing', () => {
     const parsed = JSON.parse(String(errSpy.mock.calls[0]?.[0]));
     expect(parsed.error.error_code).toBe('usage_error');
     expect(parsed.message).toMatch(/Did you mean --project/);
+    expect(logSpy).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['toekn', 'token'],
+    ['profiel', 'profile'],
+  ])(
+    'does not suggest --%s as --%s for an unauthenticated command',
+    async (misspelledFlag, credentialFlag) => {
+      await runWith([
+        'events',
+        'check-ingestion-by-api-key',
+        '--api-key',
+        'project-api-key',
+        `--${misspelledFlag}`,
+        'value',
+      ]);
+
+      expect(process.exitCode).toBe(2);
+      const parsed = JSON.parse(String(errSpy.mock.calls[0]?.[0]));
+      expect(parsed.error.error_code).toBe('usage_error');
+      expect(parsed.message).not.toContain(`Did you mean --${credentialFlag}`);
+      expect(logSpy).not.toHaveBeenCalled();
+    },
+  );
+
+  it('does not treat an API key matching a command name as suggestion context', async () => {
+    await runWith([
+      'events',
+      'check-ingestion-by-api-key',
+      '--api-key',
+      'context',
+      '--toekn',
+      'value',
+    ]);
+
+    expect(process.exitCode).toBe(2);
+    const parsed = JSON.parse(String(errSpy.mock.calls[0]?.[0]));
+    expect(parsed.error.error_code).toBe('usage_error');
+    expect(parsed.message).not.toContain('Did you mean --token');
+    expect(logSpy).not.toHaveBeenCalled();
+  });
+
+  it('does not suggest credential flags when an unknown option precedes the command', async () => {
+    await runWith([
+      '--toekn',
+      'value',
+      'events',
+      'check-ingestion-by-api-key',
+      '--api-key',
+      'project-api-key',
+    ]);
+
+    expect(process.exitCode).toBe(2);
+    const parsed = JSON.parse(String(errSpy.mock.calls[0]?.[0]));
+    expect(parsed.error.error_code).toBe('usage_error');
+    expect(parsed.message).toBe("unknown option '--toekn'");
     expect(logSpy).not.toHaveBeenCalled();
   });
 

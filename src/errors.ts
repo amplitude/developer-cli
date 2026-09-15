@@ -42,6 +42,8 @@ export function hintForErrorCode(
     case 'auth_unavailable':
     case 'upstream_error':
       return 'Retry the request. If it persists, check API status or try a different region with --region.';
+    case 'transport_error':
+      return 'Check network connectivity and retry.';
     default:
       return undefined;
   }

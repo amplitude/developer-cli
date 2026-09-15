@@ -115,11 +115,15 @@ export function authError(
   });
 }
 
-export function transportError(message: string): CliError {
+export function transportError(
+  message: string,
+  hint = hintForErrorCode('transport_error'),
+): CliError {
   return new CliError({
     message,
     errorCode: 'transport_error',
     exitCode: 5,
+    hint,
   });
 }
 

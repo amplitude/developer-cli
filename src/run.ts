@@ -1,9 +1,15 @@
 /* eslint-disable no-console */
+import { setTimeout as sleep } from 'node:timers/promises';
+
+import { z } from 'zod';
+
 import { type FlagValue, isFlagEnabled } from './args';
 import { cliErrorFromResponse, transportError, usageError } from './cli-error';
+import { deviceIdHeader } from './client-identity';
+import { resolveBaseUrl } from './config';
 import {
   authorizationHeaderForToken,
-  resolveAuthFromFlags,
+  resolveAuthWithRefresh,
 } from './credential-resolver';
 import type { CliOperation } from './generated/cli-manifest';
 import {
@@ -19,8 +25,83 @@ import {
   operationSupportsDryRun,
   parseResponseBody,
 } from './request';
+import { refreshProfileTokenLocked } from './token-refresh';
 
 export type DeleteGateDecision = 'block' | 'confirm' | 'proceed';
+
+const ingestionPollingRequestSchema = z.object({
+  polling_timeout_seconds: z.number().int().min(1).max(120).optional(),
+});
+const ingestionCheckResponseSchema = z.object({
+  data: z.object({
+    status: z.enum(['observed', 'not_observed', 'inconclusive']),
+    poll_after_seconds: z.number().int().positive().optional(),
+  }),
+});
+
+function resolveRequestPollingDurationSeconds(
+  operation: CliOperation,
+  body: Record<string, unknown> | undefined,
+): number | undefined {
+  if (
+    operation.operationId !== 'checkRecentEventIngestion' &&
+    operation.operationId !== 'checkRecentEventIngestionByApiKey'
+  ) {
+    return undefined;
+  }
+  const ingestionPollingRequest = ingestionPollingRequestSchema.safeParse(
+    body ?? {},
+  );
+  if (!ingestionPollingRequest.success) {
+    throw usageError(
+      'Expected --timeout-seconds to be an integer from 1 to 120.',
+    );
+  }
+  return ingestionPollingRequest.data.polling_timeout_seconds;
+}
+
+function resolveSecondsToNextPoll(options: {
+  maxRuntimeMs: number;
+  elapsedMs: number;
+  responseBody: unknown;
+  response: Response;
+}): number | undefined {
+  if (!options.response.ok) {
+    return undefined;
+  }
+
+  const ingestionCheckResponse = ingestionCheckResponseSchema.safeParse(
+    options.responseBody,
+  );
+  if (!ingestionCheckResponse.success) {
+    return undefined;
+  }
+  const { data: ingestionCheck } = ingestionCheckResponse.data;
+  if (ingestionCheck.status === 'observed') return undefined;
+
+  const pollAfterSeconds = ingestionCheck.poll_after_seconds;
+  if (
+    pollAfterSeconds === undefined ||
+    options.elapsedMs + pollAfterSeconds * 1000 >= options.maxRuntimeMs
+  ) {
+    return undefined;
+  }
+  return pollAfterSeconds;
+}
+
+type TimedOut = {
+  kind: 'timed_out';
+};
+
+const TIMED_OUT: TimedOut = { kind: 'timed_out' };
+
+type CompletedRequest = {
+  kind: 'response';
+  response: Response;
+  responseBody: unknown;
+};
+
+type RequestAttemptResult = TimedOut | CompletedRequest;
 
 /**
  * Decides whether a destructive (DELETE) command may run. A `--dry-run` only
@@ -94,26 +175,143 @@ export async function runOperation(
   flags: Record<string, FlagValue>,
 ): Promise<void> {
   const request = buildRequest(operation, flags);
+  const headers = { ...request.headers, ...deviceIdHeader() };
+  const requestPollingDurationSeconds = resolveRequestPollingDurationSeconds(
+    operation,
+    request.body,
+  );
   await ensureDeleteAllowed(operation, flags);
-  const auth = resolveAuthFromFlags(flags);
-  let response: Response;
-  try {
-    response = await fetch(`${auth.baseUrl}${request.path}`, {
-      method: operation.method,
-      headers: {
-        ...request.headers,
-        Authorization: authorizationHeaderForToken(auth.token),
-      },
-      body:
-        request.body === undefined ? undefined : JSON.stringify(request.body),
+  const maxRuntimeMs =
+    requestPollingDurationSeconds === undefined
+      ? undefined
+      : performance.now() + requestPollingDurationSeconds * 1000;
+  const sendHttpRequest = async (options: {
+    baseUrl: string;
+    headers: Record<string, string>;
+    signal?: AbortSignal;
+  }): Promise<CompletedRequest> => {
+    try {
+      const response = await fetch(`${options.baseUrl}${request.path}`, {
+        method: operation.method,
+        headers: options.headers,
+        body:
+          request.body === undefined ? undefined : JSON.stringify(request.body),
+        signal: options.signal,
+      });
+      return {
+        kind: 'response',
+        response,
+        responseBody: parseResponseBody(await response.text()),
+      };
+    } catch (error) {
+      if (options.signal?.aborted) throw error;
+      throw transportError(`Could not reach the API at ${options.baseUrl}.`);
+    }
+  };
+  const sendAuthenticatedRequest = async (
+    signal?: AbortSignal,
+  ): Promise<CompletedRequest> => {
+    const apiAccess = await resolveAuthWithRefresh(flags);
+    const sendAuthenticatedHttpRequest = (token: string) =>
+      sendHttpRequest({
+        baseUrl: apiAccess.baseUrl,
+        headers: {
+          ...headers,
+          Authorization: authorizationHeaderForToken(token),
+        },
+        signal,
+      });
+
+    const requestAttempt = await sendAuthenticatedHttpRequest(apiAccess.token);
+    if (
+      requestAttempt.response.status === 401 &&
+      apiAccess.refreshable &&
+      apiAccess.profile &&
+      !apiAccess.refreshed
+    ) {
+      const refreshedCredentials = await refreshProfileTokenLocked({
+        name: apiAccess.profile,
+        now: Date.now(),
+        staleAccessToken: apiAccess.token,
+        expectedProfileBaseUrl: apiAccess.profileBaseUrl,
+      });
+      return sendAuthenticatedHttpRequest(
+        refreshedCredentials.credential.access_token,
+      );
+    }
+    return requestAttempt;
+  };
+  const sendUnauthenticatedRequest = async (
+    signal?: AbortSignal,
+  ): Promise<CompletedRequest> =>
+    sendHttpRequest({
+      baseUrl: resolveBaseUrl(flags),
+      headers,
+      signal,
     });
-  } catch {
-    throw transportError(`Could not reach the API at ${auth.baseUrl}.`);
+  const sendRequest =
+    operation.authentication === 'none'
+      ? sendUnauthenticatedRequest
+      : sendAuthenticatedRequest;
+
+  const sendPollingAttempt = async (
+    maxRuntimeForRequestMs: number,
+  ): Promise<RequestAttemptResult> => {
+    const remainingMsOfRequestedRuntime =
+      maxRuntimeForRequestMs - performance.now();
+    if (remainingMsOfRequestedRuntime <= 0) return TIMED_OUT;
+
+    const signal = AbortSignal.timeout(
+      Math.max(1, Math.ceil(remainingMsOfRequestedRuntime)),
+    );
+    try {
+      // Let an in-flight credential rotation finish safely; aborting it can
+      // strand the saved profile on a consumed refresh token.
+      const completedRequest = await sendRequest(signal);
+      return performance.now() >= maxRuntimeForRequestMs
+        ? TIMED_OUT
+        : completedRequest;
+    } catch (error) {
+      if (signal.aborted || performance.now() >= maxRuntimeForRequestMs) {
+        return TIMED_OUT;
+      }
+      throw error;
+    }
+  };
+
+  // The initial request counts toward the polling window but is never
+  // interrupted or discarded.
+  const initialAttempt = await sendRequest();
+
+  let { response, responseBody } = initialAttempt;
+  if (maxRuntimeMs !== undefined) {
+    let secondsToNextPoll = resolveSecondsToNextPoll({
+      maxRuntimeMs,
+      elapsedMs: performance.now(),
+      response,
+      responseBody,
+    });
+
+    while (secondsToNextPoll !== undefined) {
+      await sleep(secondsToNextPoll * 1000);
+      const pollingAttempt = await sendPollingAttempt(maxRuntimeMs);
+      if (pollingAttempt.kind === 'timed_out') break;
+      ({ response, responseBody } = pollingAttempt);
+      secondsToNextPoll = resolveSecondsToNextPoll({
+        maxRuntimeMs,
+        elapsedMs: performance.now(),
+        response,
+        responseBody,
+      });
+    }
   }
-  const parsed = parseResponseBody(await response.text());
 
   if (!response.ok) {
-    throw cliErrorFromResponse(response.status, response.statusText, parsed);
+    throw cliErrorFromResponse(
+      response.status,
+      response.statusText,
+      responseBody,
+    );
   }
 
   const isTTY = Boolean(process.stdout.isTTY);
@@ -122,7 +320,7 @@ export async function runOperation(
     isTTY,
   });
 
-  if (isNoContentSuccess(response.status, parsed)) {
+  if (isNoContentSuccess(response.status, responseBody)) {
     const output = useJson
       ? formatJsonOutput(null, isTTY)
       : formatNoContentSuccess(operation);
@@ -130,7 +328,7 @@ export async function runOperation(
     return;
   }
 
-  const payload = parsed ?? SYNTHETIC_OK;
+  const payload = responseBody ?? SYNTHETIC_OK;
 
   // When piped or non-interactive (the path agents and scripts take), emit
   // compact JSON to avoid spending tokens on indentation. Pretty-print only

@@ -3,6 +3,9 @@ import { jsonRecordSchema } from './schemas';
 
 type Row = Record<string, string>;
 
+/** Per-call width overrides for {@link formatTable}, keyed by column name. */
+export type ColumnWidths = Record<string, number>;
+
 const DEFAULT_CELL_WIDTH = 40;
 const COLUMN_WIDTHS: Record<string, number> = {
   description: 80,
@@ -42,13 +45,17 @@ function normalizeCell(value: string): string {
   return normalizeWhitespace(value);
 }
 
-function maxWidth(column: string): number {
-  return COLUMN_WIDTHS[column] ?? DEFAULT_CELL_WIDTH;
+function maxWidth(column: string, overrides: ColumnWidths): number {
+  return overrides[column] ?? COLUMN_WIDTHS[column] ?? DEFAULT_CELL_WIDTH;
 }
 
-function truncateCell(value: string, column: string): string {
+function truncateCell(
+  value: string,
+  column: string,
+  overrides: ColumnWidths,
+): string {
   const normalized = normalizeCell(value);
-  const width = maxWidth(column);
+  const width = maxWidth(column, overrides);
   if (normalized.length <= width) {
     return normalized;
   }
@@ -101,12 +108,16 @@ function pickColumns(rows: Row[]): string[] {
   return dropDuplicateColumns(rows, Array.from(available)).slice(0, 4);
 }
 
-function formatTable(rows: Row[], columns: string[]): string {
+export function formatTable(
+  rows: Row[],
+  columns: string[],
+  columnWidths: ColumnWidths = {},
+): string {
   const displayRows = rows.map((row) =>
     Object.fromEntries(
       columns.map((column) => [
         column,
-        truncateCell(row[column] ?? '', column),
+        truncateCell(row[column] ?? '', column, columnWidths),
       ]),
     ),
   );

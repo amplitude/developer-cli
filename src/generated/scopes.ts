@@ -4,3 +4,15 @@
 // Base MCP scopes the CLI requests at login, sourced from the centralized
 // OAuth scope catalog (amplitude/auth/oauth-scopes).
 export const MCP_BASE_SCOPES = ['mcp:read', 'mcp:write'] as const;
+
+// OIDC meta-scopes the CLI requests at login (beyond resource scopes).
+// `offline_access` issues a refresh token (OIDC-standard offline access);
+// `openid` issues an id_token carrying the stable `auth_time` claim (the
+// anchor a future absolute re-auth cap reads). Values sourced from the
+// centralized OAuth scope catalog (OidcScope).
+export const LOGIN_META_SCOPES = ['offline_access', 'openid'] as const;
+
+// Exact default requested by `amp auth login`. Generated alongside the CLI
+// manifest so hosted OAuth client verification consumes the same contract.
+export const DEFAULT_CLI_LOGIN_SCOPES =
+  'analytics:read destinations:read destinations:write flags:read flags:write mcp:read mcp:write offline_access openid projects:read taxonomy:read taxonomy:write';

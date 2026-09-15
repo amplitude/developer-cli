@@ -31,7 +31,10 @@ echo "    $TARBALL"
 echo "==> Installing tarball into throwaway global prefix"
 export npm_config_prefix="$PREFIX"
 export PATH="$PREFIX/bin:$PATH"
-npm install -g "$TARBALL"
+# Validate the public consumer install path directly. CI configures npm to use
+# CodeArtifact globally, but that proxy can briefly lag newly published public
+# transitive versions and turn this packaging check into a registry-sync test.
+npm install -g --registry=https://registry.npmjs.org "$TARBALL"
 
 echo "==> amp --version"
 amp --version
