@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.3.0](https://github.com/amplitude/developer-cli/compare/developer-cli-v0.2.0...developer-cli-v0.3.0) (2026-09-15)
+
+
+### Features
+
+* update Developer CLI capabilities ([16172fe](https://github.com/amplitude/developer-cli/commit/16172fe4dcfd75efafc02f2728a7a30d13ef29f6))
+* update Developer CLI capabilities ([dbc3251](https://github.com/amplitude/developer-cli/commit/dbc325160c30efd8c3b720f4e4e485589c4758b5))
+
+
+### Bug Fixes
+
+* align lockfile install settings ([a156bc0](https://github.com/amplitude/developer-cli/commit/a156bc05c4cb45b295bd3c7999fb2c2ec39f9d62))
+
 ## [0.2.0](https://github.com/amplitude/developer-cli/compare/developer-cli-v0.1.0...developer-cli-v0.2.0) (2026-08-04)
 
 

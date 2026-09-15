@@ -1,6 +1,6 @@
 {
   "name": "@amplitude/developer-cli",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "amp CLI and developer artifacts for managing Amplitude platform primitives via the Developer API",
   "type": "commonjs",
   "license": "MIT",
