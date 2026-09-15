@@ -1,6 +1,7 @@
 import packageJson from '../package.json';
-import { buildCatalog, catalogGroups } from './catalog';
-import type { CatalogCommand } from './catalog';
+import type { GlobalOptionAlias } from './args';
+import { buildCatalog, catalogGroups, findCatalogCommand } from './catalog';
+import type { CatalogCommand, CatalogPositional } from './catalog';
 import { usageError } from './cli-error';
 import type { CliOperation } from './generated/cli-manifest';
 import { API_SPEC_VERSION, CLI_OPERATIONS } from './generated/cli-manifest';
@@ -33,12 +34,32 @@ export interface CatalogIndexEntry {
   requiredScopes: string[];
 }
 
-export type CatalogDetail = Omit<CatalogCommand, 'order' | 'command'> & {
+// `order` is presentation-only and `globalFlags` is validation-only, so neither
+// is serialized. `positional` is — a required argument is part of a command's
+// input contract, and `flags` already carries `required`, so omitting it would
+// report a command that takes an argument as taking no input at all.
+// See catalog-shape.test.ts.
+export type CatalogDetail = Omit<
+  CatalogCommand,
+  'order' | 'command' | 'globalFlags'
+> & {
   command: string;
 };
 
 const JSON_DRILLDOWN_HINT =
   "Run `amp <command> --help --json` for a command's flags and parameters.";
+
+// The globals worth naming in a per-command footer, in display order. Each is
+// printed only when the command's own `globalFlags` set accepts it — a footer
+// that names a flag the command answers with `usage_error` is worse than no
+// footer, and the full accepted set (--region, --profile, …) belongs in
+// `amp help`, not repeated under every command.
+const ADVERTISED_GLOBAL_FLAGS: readonly GlobalOptionAlias[] = [
+  'token',
+  'json',
+  'yes',
+  'body-json',
+];
 
 export interface CatalogDump {
   cli: string;
@@ -57,7 +78,7 @@ function toIndexEntry(c: CatalogCommand): CatalogIndexEntry {
 }
 
 function toDetail(c: CatalogCommand): CatalogDetail {
-  const { order, ...rest } = c;
+  const { order, globalFlags, ...rest } = c;
   return { ...rest, command: c.command.join(' ') };
 }
 
@@ -156,7 +177,8 @@ Explore commands:
   amp <surface> <cmd> --help     Flags and examples for one command
 
 Output:
-  Human-readable at a terminal; JSON when piped or with --json.
+  Human-readable at a terminal. Most commands use JSON when piped or with --json.
+  amp skills get remains raw when piped unless --json is passed.
   amp help --json                 Full command catalog (compact index)
   amp <command> --help --json     One command's parameters
   Errors: non-zero exit + JSON {"status":"error","error":{"error_code",…}} on stderr
@@ -165,7 +187,7 @@ Global flags:
   --region <us|eu>     Target region (us|eu); sets the base URL
   --profile <name>     Use a stored profile for this command
   --token <token>      Raw PAT, PAT=<token>, or bearer-compatible token
-  --json               Print raw JSON (default when piped)
+  --json               Print raw JSON (most commands default when piped)
   --yes                Skip interactive confirmation for DELETE commands
   --dry-run            Preview supported DELETE commands without applying changes
   --body-json '{...}'  Merge raw JSON into request bodies for fields not yet modeled as flags
@@ -247,8 +269,20 @@ export function printCommandHelp(
 
   const matches = operationsMatchingPrefix(command);
   if (matches.length > 0 && matches.length < CLI_OPERATIONS.length) {
-    printGroupHelp(command, matches);
+    printGroupHelp(command, operationGroupRows(matches));
     return;
+  }
+
+  // Bespoke groups (auth, skills) are excluded from the generated manifest by
+  // tag, so `operationsMatchingPrefix` finds nothing for them. The catalog knows
+  // every group, generated or not — so fall back to it rather than teaching this
+  // function each bespoke group by name.
+  if (command.length === 1) {
+    const grouped = buildCatalog().filter((c) => c.group === command[0]);
+    if (grouped.length > 0) {
+      printGroupHelp(command, catalogGroupRows(grouped));
+      return;
+    }
   }
 
   throw usageError(
@@ -256,12 +290,14 @@ export function printCommandHelp(
   );
 }
 
-function findCatalogCommand(command: string[]): CatalogCommand | undefined {
-  return buildCatalog().find(
-    (c) =>
-      c.command.length === command.length &&
-      c.command.every((part, i) => part === command[i]),
-  );
+function usagePositional(positional: CatalogPositional | undefined): string[] {
+  if (positional === undefined) {
+    return [];
+  }
+
+  return positional.required
+    ? [`<${positional.name}>`]
+    : [`[<${positional.name}>]`];
 }
 
 function printCatalogCommandHelp(entry: CatalogCommand): void {
@@ -275,8 +311,9 @@ function printCatalogCommandHelp(entry: CatalogCommand): void {
       ? `--${f.aliases[0]} <${f.name}>`
       : `[--${f.aliases[0]} <${f.name}>]`,
   );
+  const usageArgs = [...usagePositional(entry.positional), ...usageFlags];
   lines.push(
-    `  amp ${entry.command.join(' ')} ${usageFlags.join(' ')}`.trimEnd(),
+    `  amp ${entry.command.join(' ')} ${usageArgs.join(' ')}`.trimEnd(),
   );
 
   const described = entry.flags.filter((f) => f.description);
@@ -295,28 +332,53 @@ function printCatalogCommandHelp(entry: CatalogCommand): void {
   if (entry.requiredScopes.length > 0) {
     lines.push('', 'Required scopes:', `  ${entry.requiredScopes.join(', ')}`);
   }
-  lines.push(
-    '',
-    'Global flags: --token, --json, --yes, --body-json',
-    'Run `amp help` for product surfaces.',
+  lines.push('');
+  const advertised = ADVERTISED_GLOBAL_FLAGS.filter((flag) =>
+    entry.globalFlags.includes(flag),
   );
+  if (advertised.length > 0) {
+    lines.push(
+      `Global flags: ${advertised.map((flag) => `--${flag}`).join(', ')}`,
+    );
+  }
+  lines.push('Run `amp help` for product surfaces.');
   console.log(lines.join('\n'));
 }
 
-function printGroupHelp(command: string[], operations: CliOperation[]): void {
+interface GroupHelpRow {
+  command: string[];
+  summary: string;
+  example?: string;
+}
+
+function printGroupHelp(command: string[], rows: GroupHelpRow[]): void {
   const label = command.join(' ');
   console.log(`amp ${label} — available commands:\n`);
-  for (const operation of operations) {
-    const summary = operation.summary ?? '';
-    console.log(`  ${operation.command.join(' ')}`);
-    if (summary) {
-      console.log(`    ${summary}`);
+  for (const row of rows) {
+    console.log(`  ${row.command.join(' ')}`);
+    if (row.summary) {
+      console.log(`    ${row.summary}`);
     }
-    const example = findCatalogCommand(operation.command)?.example;
-    if (example) {
-      console.log(`    e.g. ${example}`);
+    if (row.example) {
+      console.log(`    e.g. ${row.example}`);
     }
     console.log('');
   }
   console.log('Run `amp help <surface>` to explore another product surface.');
+}
+
+function operationGroupRows(operations: CliOperation[]): GroupHelpRow[] {
+  return operations.map((operation) => ({
+    command: operation.command,
+    summary: operation.summary ?? '',
+    example: findCatalogCommand(operation.command)?.example,
+  }));
+}
+
+function catalogGroupRows(commands: CatalogCommand[]): GroupHelpRow[] {
+  return commands.map((c) => ({
+    command: c.command,
+    summary: c.summary,
+    example: c.example,
+  }));
 }

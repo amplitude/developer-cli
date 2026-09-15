@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { parseArgs } from './args';
 import { CliError } from './cli-error';
 import { CLI_OPERATIONS, type CliOperation } from './generated/cli-manifest';
+import { findOperation } from './help';
 import {
   buildRequest,
   operationSupportsDryRun,
@@ -10,11 +11,7 @@ import {
 } from './request';
 
 function operation(command: string[]): CliOperation {
-  const found = CLI_OPERATIONS.find(
-    (candidate) =>
-      candidate.command.length === command.length &&
-      candidate.command.every((part, index) => part === command[index]),
-  );
+  const found = findOperation(command);
 
   if (!found) {
     throw new Error(`Missing CLI operation ${command.join(' ')}.`);
@@ -44,15 +41,114 @@ describe('manifest invariants', () => {
     }
   });
 
+  it('does not expose duplicate public commands', () => {
+    const commands = CLI_OPERATIONS.map((cliOperation) =>
+      cliOperation.command.join(' '),
+    );
+
+    expect(new Set(commands).size).toBe(commands.length);
+  });
+
   it('excludes Auth-tagged operations from the generated manifest', () => {
     const authOps = CLI_OPERATIONS.filter((cliOperation) =>
       cliOperation.path.startsWith('/v1/auth/'),
     );
     expect(authOps).toEqual([]);
   });
+
+  it('generates the ingestion check under its public command', () => {
+    expect(CLI_OPERATIONS).toContainEqual(
+      expect.objectContaining({
+        command: ['events', 'check-ingestion'],
+        operationId: 'checkRecentEventIngestion',
+        path: '/v1/projects/{project_id}/events/check-recent-ingestion',
+      }),
+    );
+  });
+
+  it('generates the API-key ingestion check as an unauthenticated public command', () => {
+    expect(CLI_OPERATIONS).toContainEqual(
+      expect.objectContaining({
+        authentication: 'none',
+        body: [
+          expect.objectContaining({
+            aliases: ['api-key'],
+            name: 'api_key',
+            required: true,
+          }),
+          expect.objectContaining({
+            aliases: ['timeout-seconds'],
+            name: 'polling_timeout_seconds',
+            required: false,
+          }),
+        ],
+        command: ['events', 'check-ingestion-by-api-key'],
+        operationId: 'checkRecentEventIngestionByApiKey',
+        path: '/v1/events/check-recent-ingestion',
+      }),
+    );
+  });
 });
 
 describe('buildRequest', () => {
+  it('builds the filtered ingestion check without an idempotency key', () => {
+    const checkOperation = operation(['events', 'check-ingestion']);
+    const built = request(
+      ['events', 'check-ingestion'],
+      [
+        '--project',
+        '187520',
+        '--event-type',
+        'Checkout Completed',
+        '--lookback-minutes',
+        '30',
+        '--timeout-seconds',
+        '120',
+      ],
+    );
+
+    expect(checkOperation.method).toBe('POST');
+    expect(built).toEqual({
+      body: {
+        event_type: 'Checkout Completed',
+        lookback_minutes: 30,
+        polling_timeout_seconds: 120,
+      },
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+      },
+      path: '/v1/projects/187520/events/check-recent-ingestion',
+    });
+  });
+
+  it('allows the ingestion check filters to be omitted', () => {
+    const built = request(
+      ['events', 'check-ingestion'],
+      ['--project', '187520'],
+    );
+
+    expect(built.body).toEqual({});
+    expect(built.headers).not.toHaveProperty('Idempotency-Key');
+  });
+
+  it.each([
+    ['project', '187520'],
+    ['event-type', 'Checkout Completed'],
+    ['lookback-minutes', '30'],
+    ['token', 'amp_test'],
+    ['profile', 'default'],
+  ])('rejects --%s for the API-key ingestion check', (flag, value) => {
+    expect(() =>
+      request(
+        ['events', 'check-ingestion-by-api-key'],
+        ['--api-key', 'project-api-key', `--${flag}`, value],
+      ),
+    ).toThrowError(
+      `Unknown flag --${flag} for \`amp events check-ingestion-by-api-key\`.`,
+    );
+  });
+
   it('builds headers without an Authorization value — credentials are attached later, at fetch time', () => {
     const built = request(
       ['events', 'get'],

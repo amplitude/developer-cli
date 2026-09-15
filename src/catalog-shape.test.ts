@@ -22,6 +22,7 @@ const DETAIL_ALLOWLIST = [
   'example',
   'flags',
   'group',
+  'positional',
   'requiredScopes',
   'summary',
 ];
@@ -72,5 +73,35 @@ describe('catalog shape — serialized field allowlist', () => {
         ).not.toContain(forbidden);
       }
     }
+  });
+
+  // A required argument is part of the input contract. `flags` already carries
+  // `required`, so a command whose only input is positional would otherwise
+  // serialize as taking no input at all — an agent would have to fail once, or
+  // parse prose, to discover it.
+  it('serializes a required positional argument for every command that takes one', () => {
+    for (const command of buildCatalog()) {
+      if (command.positional === undefined) {
+        continue;
+      }
+
+      const detail = captureJson(() =>
+        printCommandHelp(command.command, { json: true, isTTY: false }),
+      );
+
+      expect(
+        detail.positional,
+        `\`${command.command.join(' ')}\` hides its positional argument`,
+      ).toEqual(command.positional);
+    }
+  });
+
+  it('declares the positional on the two commands that take one', () => {
+    const withPositional = buildCatalog()
+      .filter((command) => command.positional !== undefined)
+      .map((command) => command.command.join(' '))
+      .sort();
+
+    expect(withPositional).toEqual(['auth use', 'skills get']);
   });
 });

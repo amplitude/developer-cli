@@ -2,7 +2,7 @@ import { Command, CommanderError, Option } from 'commander';
 import { distance } from 'fastest-levenshtein';
 
 import { usageError } from './cli-error';
-import { CLI_OPERATIONS } from './generated/cli-manifest';
+import { CLI_OPERATIONS, type CliOperation } from './generated/cli-manifest';
 
 export type FlagValue = boolean | string;
 
@@ -12,6 +12,7 @@ export interface ParsedArgs {
 }
 
 type ValueRequirement = 'optional' | 'required';
+const BARE_BOOLEAN_SENTINEL = '\u0000amp-bare-boolean';
 
 interface ParseableOption {
   aliases: string[];
@@ -26,36 +27,132 @@ interface CliOptionDefinition extends ParseableOption {
   // there would silently drop the flag and mislead the caller. See
   // apiGlobalOptionAliases().
   onApiCommands: boolean;
+  requiresAuthentication?: true;
+  visible: boolean;
 }
 
-const GLOBAL_OPTIONS: CliOptionDefinition[] = [
-  { aliases: ['token'], valueRequirement: 'required', onApiCommands: true },
-  { aliases: ['base-url'], valueRequirement: 'required', onApiCommands: true },
-  { aliases: ['body-json'], valueRequirement: 'required', onApiCommands: true },
-  { aliases: ['json'], valueRequirement: 'optional', onApiCommands: true },
-  { aliases: ['yes'], valueRequirement: 'optional', onApiCommands: true },
-  { aliases: ['open'], valueRequirement: 'optional', onApiCommands: false },
-  { aliases: ['flow'], valueRequirement: 'required', onApiCommands: false },
-  { aliases: ['scope'], valueRequirement: 'required', onApiCommands: false },
-  { aliases: ['profile'], valueRequirement: 'required', onApiCommands: true },
-  { aliases: ['env'], valueRequirement: 'required', onApiCommands: true },
-  { aliases: ['region'], valueRequirement: 'required', onApiCommands: true },
-  { aliases: ['timeout'], valueRequirement: 'required', onApiCommands: false },
+function defineGlobalOptions<
+  const Options extends readonly CliOptionDefinition[],
+>(options: Options): Options {
+  return options;
+}
+
+const GLOBAL_OPTIONS = defineGlobalOptions([
+  {
+    aliases: ['token'],
+    valueRequirement: 'required',
+    onApiCommands: true,
+    requiresAuthentication: true,
+    visible: true,
+  },
+  {
+    aliases: ['base-url'],
+    valueRequirement: 'required',
+    onApiCommands: true,
+    visible: false,
+  },
+  {
+    aliases: ['body-json'],
+    valueRequirement: 'required',
+    onApiCommands: true,
+    visible: true,
+  },
+  {
+    aliases: ['json'],
+    valueRequirement: 'optional',
+    onApiCommands: true,
+    visible: true,
+  },
+  {
+    aliases: ['yes'],
+    valueRequirement: 'optional',
+    onApiCommands: true,
+    visible: true,
+  },
+  {
+    aliases: ['open'],
+    valueRequirement: 'optional',
+    onApiCommands: false,
+    visible: true,
+  },
+  {
+    aliases: ['flow'],
+    valueRequirement: 'required',
+    onApiCommands: false,
+    visible: true,
+  },
+  {
+    aliases: ['scope'],
+    valueRequirement: 'required',
+    onApiCommands: false,
+    visible: true,
+  },
+  {
+    aliases: ['profile'],
+    valueRequirement: 'required',
+    onApiCommands: true,
+    requiresAuthentication: true,
+    visible: true,
+  },
+  {
+    aliases: ['env'],
+    valueRequirement: 'required',
+    onApiCommands: true,
+    visible: false,
+  },
+  {
+    aliases: ['region'],
+    valueRequirement: 'required',
+    onApiCommands: true,
+    visible: true,
+  },
+  {
+    aliases: ['timeout'],
+    valueRequirement: 'required',
+    onApiCommands: false,
+    visible: true,
+  },
   {
     aliases: ['with-token'],
     valueRequirement: 'optional',
     onApiCommands: false,
+    visible: true,
   },
-  { aliases: ['all'], valueRequirement: 'optional', onApiCommands: false },
-  { aliases: ['force'], valueRequirement: 'optional', onApiCommands: false },
-  { aliases: ['dry-run'], valueRequirement: 'optional', onApiCommands: true },
-  { aliases: ['help', 'h'], valueRequirement: 'optional', onApiCommands: true },
+  {
+    aliases: ['all'],
+    valueRequirement: 'optional',
+    onApiCommands: false,
+    visible: true,
+  },
+  {
+    aliases: ['force'],
+    valueRequirement: 'optional',
+    onApiCommands: false,
+    visible: true,
+  },
+  {
+    aliases: ['dry-run'],
+    valueRequirement: 'optional',
+    onApiCommands: true,
+    visible: true,
+  },
+  {
+    aliases: ['help', 'h'],
+    valueRequirement: 'optional',
+    onApiCommands: true,
+    visible: true,
+  },
   {
     aliases: ['version', 'v'],
     valueRequirement: 'optional',
     onApiCommands: true,
+    visible: true,
   },
-];
+]);
+
+/** Every alias any global flag answers to. */
+export type GlobalOptionAlias =
+  (typeof GLOBAL_OPTIONS)[number]['aliases'][number];
 
 // `--dry-run` is defined per-operation in the manifest (only DELETE
 // operations declare a `dry_run` parameter), but `run.ts`'s delete gate reads
@@ -64,7 +161,7 @@ const GLOBAL_OPTIONS: CliOptionDefinition[] = [
 // must stay globally parseable so that check can run before flag validation.
 
 /** Every flag alias accepted on any command, regardless of the resolved operation. */
-export function globalOptionAliases(): string[] {
+export function globalOptionAliases(): GlobalOptionAlias[] {
   return [...new Set(GLOBAL_OPTIONS.flatMap((option) => option.aliases))];
 }
 
@@ -73,12 +170,16 @@ export function globalOptionAliases(): string[] {
  * auth-flow-only globals, so `amp projects list --timeout 5` is rejected as an
  * unknown flag instead of silently accepted-and-dropped.
  */
-export function apiGlobalOptionAliases(): string[] {
+export function apiGlobalOptionAliases(
+  authentication?: CliOperation['authentication'],
+): GlobalOptionAlias[] {
   return [
     ...new Set(
-      GLOBAL_OPTIONS.filter((option) => option.onApiCommands).flatMap(
-        (option) => option.aliases,
-      ),
+      GLOBAL_OPTIONS.filter(
+        (option) =>
+          option.onApiCommands &&
+          (authentication !== 'none' || !('requiresAuthentication' in option)),
+      ).flatMap((option) => option.aliases),
     ),
   ];
 }
@@ -121,8 +222,8 @@ function optionDefinitions(): ParseableOption[] {
         const previous = byAlias.get(alias);
         // If an alias is ever shared across commands with different shapes,
         // optional boolean parsing is the safer universal form: bare flags
-        // still work, and explicit string values keep flowing to request
-        // validation for command-specific errors.
+        // still work, and explicit `--flag=<value>` strings keep flowing to
+        // request validation for command-specific errors.
         byAlias.set(
           alias,
           previous === 'optional' || valueRequirement === 'optional'
@@ -155,6 +256,43 @@ function createParser(): Command {
   return program;
 }
 
+function normalizeOptionalValues(argv: string[]): string[] {
+  const optionalAliases = new Set(
+    optionDefinitions()
+      .filter((option) => option.valueRequirement === 'optional')
+      .map((option) => option.aliases[0]),
+  );
+  const normalized: string[] = [];
+
+  for (let index = 0; index < argv.length; index += 1) {
+    const token = argv[index];
+    if (token === '--') {
+      normalized.push(...argv.slice(index));
+      break;
+    }
+
+    const alias = token.startsWith('--')
+      ? token.slice(2)
+      : token.startsWith('-') && token.length === 2
+        ? token.slice(1)
+        : undefined;
+    if (alias === undefined || !optionalAliases.has(alias)) {
+      normalized.push(token);
+      continue;
+    }
+
+    const next = argv[index + 1];
+    if (next === 'true' || next === 'false') {
+      normalized.push(`--${alias}=${next}`);
+      index += 1;
+    } else {
+      normalized.push(`--${alias}=${BARE_BOOLEAN_SENTINEL}`);
+    }
+  }
+
+  return normalized;
+}
+
 // Relative similarity (not a raw edit-distance cutoff) so short aliases like
 // --yes or --all don't become coincidental "did you mean" matches for an
 // unrelated short flag — mirrors commander's own suggestSimilar heuristic.
@@ -185,7 +323,37 @@ export function nearestAlias(
   return best;
 }
 
-function withUnknownOptionSuggestion(error: CommanderError): string {
+function operationFromCommandArgs(
+  commandArgs: string[],
+): CliOperation | undefined {
+  return CLI_OPERATIONS.find((operation) =>
+    operation.command.every(
+      (commandPart, commandIndex) => commandArgs[commandIndex] === commandPart,
+    ),
+  );
+}
+
+function suggestionAliases(commandArgs: string[]): string[] {
+  const operation = operationFromCommandArgs(commandArgs);
+  if (operation) {
+    return [
+      ...apiGlobalOptionAliases(operation.authentication),
+      ...operation.parameters.flatMap((parameter) => parameter.aliases),
+      ...operation.body.flatMap((property) => property.aliases),
+    ];
+  }
+
+  if (commandArgs[0]?.startsWith('-')) {
+    return [];
+  }
+
+  return optionDefinitions().map((option) => option.aliases[0]);
+}
+
+function withUnknownOptionSuggestion(
+  error: CommanderError,
+  commandArgs: string[],
+): string {
   const message = error.message.replace(/^error: /, '');
   const match =
     error.code === 'commander.unknownOption'
@@ -196,7 +364,14 @@ function withUnknownOptionSuggestion(error: CommanderError): string {
     return message;
   }
 
-  const knownAliases = optionDefinitions().map((option) => option.aliases[0]);
+  const hiddenAliases = new Set<string>(
+    GLOBAL_OPTIONS.filter((option) => !option.visible).flatMap(
+      (option) => option.aliases,
+    ),
+  );
+  const knownAliases = suggestionAliases(commandArgs).filter(
+    (alias) => !hiddenAliases.has(alias),
+  );
   const suggestion = nearestAlias(match[1].replace(/^--?/, ''), knownAliases);
   return suggestion ? `${message} Did you mean --${suggestion}?` : message;
 }
@@ -204,13 +379,14 @@ function withUnknownOptionSuggestion(error: CommanderError): string {
 export function parseArgs(argv: string[]): ParsedArgs {
   const flags: Record<string, FlagValue> = {};
   const program = createParser();
-  const normalizedArgv = argv[0] === '--' ? argv.slice(1) : argv;
+  const withoutRunScriptSeparator = argv[0] === '--' ? argv.slice(1) : argv;
+  const normalizedArgv = normalizeOptionalValues(withoutRunScriptSeparator);
 
   try {
     program.parse(normalizedArgv, { from: 'user' });
   } catch (error) {
     if (error instanceof CommanderError) {
-      throw usageError(withUnknownOptionSuggestion(error));
+      throw usageError(withUnknownOptionSuggestion(error, program.args));
     }
     throw error;
   }
@@ -220,7 +396,7 @@ export function parseArgs(argv: string[]): ParsedArgs {
     const alias = option.aliases[0];
     const value = opts[attributeName(alias)];
     if (value !== undefined) {
-      flags[alias] = value;
+      flags[alias] = value === BARE_BOOLEAN_SENTINEL ? true : value;
     }
   }
 

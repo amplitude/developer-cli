@@ -1,3 +1,8 @@
+import {
+  type GlobalOptionAlias,
+  apiGlobalOptionAliases,
+  globalOptionAliases,
+} from './args';
 import { DEFAULT_POLL_TIMEOUT_SECONDS } from './config';
 import type { CliOperation } from './generated/cli-manifest';
 import { CLI_OPERATIONS } from './generated/cli-manifest';
@@ -11,6 +16,11 @@ export interface CatalogFlag {
   description?: string;
 }
 
+export interface CatalogPositional {
+  name: string;
+  required: boolean;
+}
+
 export interface CatalogCommand {
   command: string[];
   summary: string;
@@ -18,8 +28,47 @@ export interface CatalogCommand {
   group: string;
   order?: number;
   flags: CatalogFlag[];
+  /** Argument typed after the command, if it takes one (e.g. `skills get <name>`). */
+  positional?: CatalogPositional;
+  /**
+   * Global flag aliases this command honors. The single source of truth for both
+   * the help footer and the command's flag validation, so help cannot advertise a
+   * flag the command rejects.
+   */
+  globalFlags: GlobalOptionAlias[];
   example?: string;
   requiredScopes: string[];
+}
+
+/** A group's commands before their shared `globalFlags` set is attached. */
+type BespokeCommand = Omit<CatalogCommand, 'globalFlags'>;
+
+function withGlobalFlags(
+  commands: BespokeCommand[],
+  globalFlags: GlobalOptionAlias[],
+): CatalogCommand[] {
+  return commands.map((command) => ({ ...command, globalFlags }));
+}
+
+export function findCatalogCommand(
+  command: string[],
+): CatalogCommand | undefined {
+  const catalog = buildCatalog();
+  const exact = catalog.find(
+    (candidate) =>
+      candidate.command.length === command.length &&
+      candidate.command.every((part, index) => part === command[index]),
+  );
+
+  return (
+    exact ??
+    catalog.find(
+      (candidate) =>
+        candidate.positional !== undefined &&
+        candidate.command.length + 1 === command.length &&
+        candidate.command.every((part, index) => part === command[index]),
+    )
+  );
 }
 
 // Curated presentation overlay. Generation fills the rest; curation wins where
@@ -32,6 +81,9 @@ const GROUP_ORDER: Partial<Record<string, number>> = {
   'user-properties': 4,
   flags: 5,
   charts: 6,
+  'destination-types': 7,
+  destinations: 8,
+  skills: 10,
   auth: 20,
 };
 
@@ -43,6 +95,10 @@ const GROUP_DESCRIPTIONS: Partial<Record<string, string>> = {
   'user-properties': 'User properties',
   flags: 'Feature flags',
   charts: 'Saved and ad-hoc charts',
+  'destination-types': 'Available destination partners and their schemas',
+  destinations: 'Configured destinations in a project',
+  skills:
+    'Skill documents for implementing Amplitude, intended for AI agents. Run amp skills list to discover them.',
   auth: 'Authentication and credential profiles',
 };
 
@@ -53,6 +109,10 @@ const EXAMPLES: Partial<Record<string, string>> = {
   'events create':
     'amp events create --project <project_id> --event-type my_event',
   'events get': 'amp events get --project <project_id> --event <event_type>',
+  'events check-ingestion':
+    'amp events check-ingestion --project <project_id> --event-type <event_type>',
+  'events check-ingestion-by-api-key':
+    'amp events check-ingestion-by-api-key --api-key <api_key>',
   'flags list': 'amp flags list --project <project_id> --limit 5',
   'flags create':
     'amp flags create --project <project_id> --key my-flag --name "My Flag"',
@@ -94,6 +154,7 @@ function apiCommands(): CatalogCommand[] {
       group,
       order: GROUP_ORDER[group],
       flags: flagsForOperation(operation),
+      globalFlags: apiGlobalOptionAliases(operation.authentication),
       example: EXAMPLES[key],
       requiredScopes: operation.requiredScopes,
     };
@@ -109,7 +170,7 @@ function apiCommands(): CatalogCommand[] {
 //
 // auth-flag-coverage.test.ts enforces that handlers only read declared/global
 // flags, so the misplaced-flag reject can't false-positive.
-const AUTH_COMMANDS: CatalogCommand[] = [
+const AUTH_COMMANDS: BespokeCommand[] = [
   {
     command: ['auth', 'login'],
     summary: 'Authenticate and save a profile (interactive device flow)',
@@ -253,6 +314,7 @@ const AUTH_COMMANDS: CatalogCommand[] = [
     group: 'auth',
     order: GROUP_ORDER.auth,
     flags: [],
+    positional: { name: 'profile', required: true },
     example: 'amp auth use eu',
     requiredScopes: [],
   },
@@ -309,8 +371,55 @@ const AUTH_COMMANDS: CatalogCommand[] = [
   },
 ];
 
+// Hand-authored because generated API commands require authentication and always format responses.
+const SKILLS_COMMON_FLAGS: readonly GlobalOptionAlias[] = [
+  'help',
+  'h',
+  'version',
+  'v',
+];
+
+export type SkillsVerb = 'list' | 'get';
+
+export const SKILLS_GLOBAL_FLAGS: Record<SkillsVerb, GlobalOptionAlias[]> = {
+  list: ['json', 'env', ...SKILLS_COMMON_FLAGS],
+  get: ['json', 'env', 'region', ...SKILLS_COMMON_FLAGS],
+};
+
+const SKILLS_COMMANDS: CatalogCommand[] = [
+  {
+    command: ['skills', 'list'],
+    summary: 'List available skills',
+    group: 'skills',
+    order: GROUP_ORDER.skills,
+    description:
+      "Lists the skills currently available for implementing Amplitude, with each skill's name and when-to-use description.",
+    flags: [],
+    globalFlags: SKILLS_GLOBAL_FLAGS.list,
+    example: 'amp skills list --json',
+    requiredScopes: [],
+  },
+  {
+    command: ['skills', 'get'],
+    summary: 'Print one skill document',
+    group: 'skills',
+    order: GROUP_ORDER.skills,
+    description:
+      'Prints a named implementation skill as markdown, including frontmatter. Use amp skills list to find names; add --json to return the document in data.document.',
+    flags: [],
+    positional: { name: 'name', required: true },
+    globalFlags: SKILLS_GLOBAL_FLAGS.get,
+    example: 'amp skills get integrating-amplitude',
+    requiredScopes: [],
+  },
+];
+
 export function buildCatalog(): CatalogCommand[] {
-  return [...apiCommands(), ...AUTH_COMMANDS];
+  return [
+    ...apiCommands(),
+    ...withGlobalFlags(AUTH_COMMANDS, globalOptionAliases()),
+    ...SKILLS_COMMANDS,
+  ];
 }
 
 export function catalogGroups(): {
