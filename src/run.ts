@@ -3,10 +3,15 @@ import { setTimeout as sleep } from 'node:timers/promises';
 
 import { z } from 'zod';
 
-import { type FlagValue, isFlagEnabled } from './args';
-import { cliErrorFromResponse, transportError, usageError } from './cli-error';
+import { type FlagValue, isFlagEnabled, stringFlag } from './args';
+import {
+  CliError,
+  cliErrorFromResponse,
+  transportError,
+  usageError,
+} from './cli-error';
 import { deviceIdHeader } from './client-identity';
-import { resolveBaseUrl } from './config';
+import { resolveBaseUrl, resolveExplicitBaseUrl } from './config';
 import {
   authorizationHeaderForToken,
   resolveAuthWithRefresh,
@@ -38,6 +43,59 @@ const ingestionCheckResponseSchema = z.object({
     poll_after_seconds: z.number().int().positive().optional(),
   }),
 });
+
+const API_KEY_INGESTION_RATE_LIMIT_HINT =
+  'If you continue to see this error, retry with `amp events check-ingestion`.';
+
+function errorForOperationResponse(options: {
+  operation: CliOperation;
+  response: Response;
+  responseBody: unknown;
+}): CliError {
+  const error = cliErrorFromResponse(
+    options.response.status,
+    options.response.statusText,
+    options.responseBody,
+  );
+  if (
+    options.operation.operationId === 'checkRecentEventIngestionByApiKey' &&
+    options.response.status === 429
+  ) {
+    error.hint = API_KEY_INGESTION_RATE_LIMIT_HINT;
+  }
+  return error;
+}
+
+function resolveUnauthenticatedOperationBaseUrl(
+  operation: CliOperation,
+  flags: Record<string, FlagValue>,
+): string {
+  if (operation.operationId !== 'checkRecentEventIngestionByApiKey') {
+    return resolveBaseUrl(flags);
+  }
+
+  const hasHiddenEndpointSelector =
+    flags['base-url'] !== undefined || flags.env !== undefined;
+  let explicitBaseUrl: string | undefined;
+  try {
+    explicitBaseUrl = resolveExplicitBaseUrl({
+      baseUrlFlag: stringFlag(flags, ['base-url']),
+      envFlag: stringFlag(flags, ['env']),
+      regionFlag: stringFlag(flags, ['region']),
+    });
+  } catch (error) {
+    if (hasHiddenEndpointSelector && error instanceof CliError) {
+      throw usageError(
+        'Checking ingestion by API key requires --region <us|eu>.',
+      );
+    }
+    throw error;
+  }
+  if (explicitBaseUrl) {
+    return explicitBaseUrl;
+  }
+  throw usageError('Checking ingestion by API key requires --region <us|eu>.');
+}
 
 function resolveRequestPollingDurationSeconds(
   operation: CliOperation,
@@ -245,7 +303,7 @@ export async function runOperation(
     signal?: AbortSignal,
   ): Promise<CompletedRequest> =>
     sendHttpRequest({
-      baseUrl: resolveBaseUrl(flags),
+      baseUrl: resolveUnauthenticatedOperationBaseUrl(operation, flags),
       headers,
       signal,
     });
@@ -307,11 +365,7 @@ export async function runOperation(
   }
 
   if (!response.ok) {
-    throw cliErrorFromResponse(
-      response.status,
-      response.statusText,
-      responseBody,
-    );
+    throw errorForOperationResponse({ operation, response, responseBody });
   }
 
   const isTTY = Boolean(process.stdout.isTTY);

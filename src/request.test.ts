@@ -26,6 +26,35 @@ function request(command: string[], argv: string[]) {
 }
 
 describe('manifest invariants', () => {
+  it('builds saved insight list/get requests and preserves project-level filtering', () => {
+    const list = ['agent-analytics', 'insights', 'list'];
+    expect(operation(list).requiredScopes).toEqual(['analytics:read']);
+    expect(
+      request(list, [
+        '--project',
+        '12345',
+        '--agent-name',
+        '',
+        '--limit',
+        '7',
+        '--cursor',
+        '',
+      ]).path,
+    ).toBe('/v1/projects/12345/agent-analytics/insights?limit=7&agent_name=');
+    expect(request(list, ['--project', '12345']).path).toBe(
+      '/v1/projects/12345/agent-analytics/insights',
+    );
+    expect(request(['projects', 'list'], ['--cursor', '']).path).toBe(
+      '/v1/projects',
+    );
+    const id = 'a37cf684-96ca-48d8-86ca-9c6213b0ade5';
+    expect(
+      request(
+        ['agent-analytics', 'insights', 'get'],
+        ['--project', '12345', '--insight-id', id],
+      ).path,
+    ).toBe(`/v1/projects/12345/agent-analytics/insights/${id}`);
+  });
   it('does not generate duplicate aliases within a command', () => {
     for (const cliOperation of CLI_OPERATIONS) {
       const aliases = new Map<string, string>();

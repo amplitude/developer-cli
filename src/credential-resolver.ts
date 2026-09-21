@@ -1,10 +1,6 @@
 import { type FlagValue, stringFlag } from './args';
 import { authError } from './cli-error';
-import {
-  assertRegionAndEnvNotBothSet,
-  DEFAULT_API_BASE_URL,
-  resolveNamedBaseUrl,
-} from './config';
+import { DEFAULT_API_BASE_URL, resolveExplicitBaseUrl } from './config';
 import {
   type CredentialStore,
   type Profile,
@@ -225,21 +221,17 @@ export function resolveAuth(input: ResolveInput = {}): ResolvedAuth {
 
 /**
  * The base-url override carried by the request flags: explicit `--base-url`
- * wins, else `--region`/`--env` is mapped through resolveNamedBaseUrl. Mirrors
- * `loginBaseUrl`'s precedence so a command and a login agree on what a region
- * or env name means.
+ * wins, else `--region`/`--env` is mapped through resolveExplicitBaseUrl.
+ * Mirrors `loginBaseUrl`'s precedence so a command and a login agree on what
+ * a region or env name means.
  */
 function baseUrlOverrideFromFlags(
   flags: Record<string, FlagValue>,
 ): string | undefined {
   const envFlag = stringFlag(flags, ['env']);
   const regionFlag = stringFlag(flags, ['region']);
-  assertRegionAndEnvNotBothSet({ envFlag, regionFlag });
-  const baseUrl = stringFlag(flags, ['base-url']);
-  if (baseUrl) {
-    return baseUrl;
-  }
-  return resolveNamedBaseUrl({
+  return resolveExplicitBaseUrl({
+    baseUrlFlag: stringFlag(flags, ['base-url']),
     envFlag,
     regionFlag,
   });

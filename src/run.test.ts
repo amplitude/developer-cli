@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import type { FlagValue } from './args';
 import { CliError } from './cli-error';
 import * as credentialResolver from './credential-resolver';
 import type { OAuthCredential } from './credential-store';
@@ -201,6 +202,7 @@ describe('runOperation', () => {
 
   afterEach(() => {
     vi.useRealTimers();
+    vi.unstubAllEnvs();
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
     logSpy.mockRestore();
@@ -280,6 +282,94 @@ describe('runOperation', () => {
     expect(logSpy).toHaveBeenCalledWith(JSON.stringify(envelope));
   });
 
+  it('suggests the authenticated ingestion check after an API-key rate limit', async () => {
+    fetchMock.mockResolvedValue(jsonResponse(429, { title: 'Rate limited' }));
+
+    const error: unknown = await runOperation(
+      operation(['events', 'check-ingestion-by-api-key']),
+      {
+        'api-key': 'project-api-key',
+        'base-url': 'https://developer-api.example.com',
+      },
+    ).catch((caught: unknown) => caught);
+
+    expect(error).toBeInstanceOf(CliError);
+    if (!(error instanceof CliError)) {
+      throw new Error('Expected a CliError.');
+    }
+    expect(error.httpStatus).toBe(429);
+    expect(error.hint).toBe(
+      'If you continue to see this error, retry with `amp events check-ingestion`.',
+    );
+  });
+
+  it('requires an explicit endpoint for an API-key ingestion check', async () => {
+    vi.stubEnv('AMP_API_BASE_URL', 'https://configured.example.com');
+
+    await expect(
+      runOperation(operation(['events', 'check-ingestion-by-api-key']), {
+        'api-key': 'project-api-key',
+      }),
+    ).rejects.toMatchObject({
+      errorCode: 'usage_error',
+      message: 'Checking ingestion by API key requires --region <us|eu>.',
+    });
+
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('keys the API-key endpoint requirement to its generated operation ID', async () => {
+    const apiKeyIngestionOperation: CliOperation = {
+      ...operation(['events', 'check-ingestion-by-api-key']),
+      command: ['events', 'renamed-ingestion-check'],
+    };
+
+    await expect(
+      runOperation(apiKeyIngestionOperation, { 'api-key': 'project-api-key' }),
+    ).rejects.toMatchObject({
+      errorCode: 'usage_error',
+      message: 'Checking ingestion by API key requires --region <us|eu>.',
+    });
+
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('does not disclose an invalid hidden environment selector for an API-key ingestion check', async () => {
+    await expect(
+      runOperation(operation(['events', 'check-ingestion-by-api-key']), {
+        'api-key': 'project-api-key',
+        env: 'not-a-real-environment',
+      }),
+    ).rejects.toMatchObject({
+      errorCode: 'usage_error',
+      message: 'Checking ingestion by API key requires --region <us|eu>.',
+    });
+
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  const hiddenEndpointFlagSets: Array<Record<string, FlagValue>> = [
+    { 'base-url': true },
+    { env: 'staging', region: 'us' },
+  ];
+
+  it.each(hiddenEndpointFlagSets)(
+    'does not disclose hidden endpoint selectors in API-key ingestion errors',
+    async (hiddenFlags) => {
+      await expect(
+        runOperation(operation(['events', 'check-ingestion-by-api-key']), {
+          'api-key': 'project-api-key',
+          ...hiddenFlags,
+        }),
+      ).rejects.toMatchObject({
+        errorCode: 'usage_error',
+        message: 'Checking ingestion by API key requires --region <us|eu>.',
+      });
+
+      expect(fetchMock).not.toHaveBeenCalled();
+    },
+  );
+
   it('targets the selected region for an API-key ingestion check', async () => {
     fetchMock.mockResolvedValue(
       jsonResponse(200, {
@@ -302,6 +392,31 @@ describe('runOperation', () => {
 
     expect(fetchMock.mock.calls[0]?.[0]).toBe(
       'https://developer-api.eu.amplitude.com/v1/events/check-recent-ingestion',
+    );
+  });
+
+  it('targets an explicit environment for an API-key ingestion check', async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse(200, {
+        data: {
+          status: 'observed',
+          window: {
+            lookback_hours: 8,
+            start: '2026-09-03T09:00:00Z',
+            end: '2026-09-03T17:00:00Z',
+            basis: 'server_upload_time',
+          },
+        },
+      }),
+    );
+
+    await runOperation(operation(['events', 'check-ingestion-by-api-key']), {
+      'api-key': 'project-api-key',
+      env: 'staging',
+    });
+
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(
+      'https://developer-api.stag2.amplitude.com/v1/events/check-recent-ingestion',
     );
   });
 

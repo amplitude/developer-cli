@@ -44,13 +44,13 @@ describe('help', () => {
         .map((call) => String(call[0]))
         .join('\n');
       expect(apiKeyCommandHelp).toContain(
-        'amp events check-ingestion-by-api-key --api-key <api_key> [--timeout-seconds <polling_timeout_seconds>]',
+        'amp events check-ingestion-by-api-key --region <us|eu> --api-key <api_key> [--timeout-seconds <polling_timeout_seconds>]',
       );
-      expect(apiKeyCommandHelp).toContain(
-        'amp events check-ingestion-by-api-key --api-key <api_key>',
-      );
+      expect(apiKeyCommandHelp).toContain('requires --region <us|eu>');
       expect(apiKeyCommandHelp).not.toContain('--project');
       expect(apiKeyCommandHelp).not.toContain('--token');
+      expect(apiKeyCommandHelp).not.toContain('--base-url');
+      expect(apiKeyCommandHelp).not.toContain('--env');
     } finally {
       log.mockRestore();
     }
@@ -239,6 +239,7 @@ describe('help', () => {
       'destination-types',
       'destinations',
       'skills',
+      'agent-analytics',
     ]);
     expect(groups.indexOf('auth')).toBeGreaterThan(groups.indexOf('charts'));
   });
@@ -385,6 +386,21 @@ describe('help JSON', () => {
       true,
     );
     expect(parsed).not.toHaveProperty('order');
+  });
+
+  it('describes the required visible endpoint selector in API-key ingestion JSON help', () => {
+    const parsed = JSON.parse(
+      capture(() =>
+        printCommandHelp(['events', 'check-ingestion-by-api-key'], {
+          json: true,
+          isTTY: false,
+        }),
+      ),
+    );
+
+    expect(parsed.description).toContain('requires --region <us|eu>');
+    expect(JSON.stringify(parsed)).not.toContain('--base-url');
+    expect(JSON.stringify(parsed)).not.toContain('--env');
   });
 
   it('surface + json → compact index entries for that group only', () => {

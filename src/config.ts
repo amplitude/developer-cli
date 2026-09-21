@@ -68,10 +68,9 @@ export function assertRegionAndEnvNotBothSet(options: {
   }
 }
 
-// Centralizes the "--region xor --env" precedence shared by loginBaseUrl
-// (auth-commands.ts) and baseUrlOverrideFromFlags (credential-resolver.ts) so
-// both call sites agree on what each flag means and on the same
-// mutual-exclusivity error.
+// Centralizes the "--region xor --env" precedence shared by every caller that
+// accepts the named endpoint selectors. This deliberately does not consider
+// defaults such as AMP_API_BASE_URL or a saved profile.
 export function resolveNamedBaseUrl(options: {
   envFlag?: string;
   regionFlag?: string;
@@ -86,14 +85,31 @@ export function resolveNamedBaseUrl(options: {
   return undefined;
 }
 
+/**
+ * Resolves only an endpoint that the caller explicitly selected. Commands can
+ * apply their own fallback policy when this returns undefined (for example,
+ * login may reuse a saved profile while an API-key ingestion check must fail).
+ */
+export function resolveExplicitBaseUrl(options: {
+  baseUrlFlag?: string;
+  envFlag?: string;
+  regionFlag?: string;
+}): string | undefined {
+  assertRegionAndEnvNotBothSet(options);
+  if (options.baseUrlFlag) {
+    return options.baseUrlFlag.replace(/\/$/, '');
+  }
+  return resolveNamedBaseUrl(options);
+}
+
 export function resolveBaseUrl(flags: Record<string, FlagValue>): string {
-  const namedBaseUrl = resolveNamedBaseUrl({
+  const explicitBaseUrl = resolveExplicitBaseUrl({
+    baseUrlFlag: stringFlag(flags, ['base-url']),
     envFlag: stringFlag(flags, ['env']),
     regionFlag: stringFlag(flags, ['region']),
   });
   return (
-    stringFlag(flags, ['base-url']) ??
-    namedBaseUrl ??
+    explicitBaseUrl ??
     apiBaseUrlFromEnv() ??
     DEFAULT_API_BASE_URL
   ).replace(/\/$/, '');

@@ -12,6 +12,7 @@ export interface CliParameter {
   required: boolean;
   aliases: string[];
   type: string;
+  allowEmptyValue?: boolean;
 }
 
 export interface CliBodyProperty {
@@ -37,6 +38,73 @@ export interface CliOperation {
 }
 
 export const CLI_OPERATIONS = [
+  {
+    command: ['agent-analytics', 'insights', 'list'],
+    method: 'GET',
+    operationId: 'listAgentAnalyticsInsights',
+    path: '/v1/projects/{project_id}/agent-analytics/insights',
+    requiredScopes: ['analytics:read'],
+    summary: 'List saved Agent Analytics insights',
+    successStatus: 200,
+    parameters: [
+      {
+        name: 'project_id',
+        in: 'path',
+        required: true,
+        aliases: ['project', 'project-id'],
+        type: 'string',
+      },
+      {
+        name: 'limit',
+        in: 'query',
+        required: false,
+        aliases: ['limit'],
+        type: 'integer',
+      },
+      {
+        name: 'cursor',
+        in: 'query',
+        required: false,
+        aliases: ['cursor'],
+        type: 'string',
+      },
+      {
+        name: 'agent_name',
+        in: 'query',
+        required: false,
+        allowEmptyValue: true,
+        aliases: ['agent-name'],
+        type: 'string',
+      },
+    ],
+    body: [],
+  },
+  {
+    command: ['agent-analytics', 'insights', 'get'],
+    method: 'GET',
+    operationId: 'getAgentAnalyticsInsight',
+    path: '/v1/projects/{project_id}/agent-analytics/insights/{insight_id}',
+    requiredScopes: ['analytics:read'],
+    summary: 'Get a saved Agent Analytics insight',
+    successStatus: 200,
+    parameters: [
+      {
+        name: 'project_id',
+        in: 'path',
+        required: true,
+        aliases: ['project', 'project-id'],
+        type: 'string',
+      },
+      {
+        name: 'insight_id',
+        in: 'path',
+        required: true,
+        aliases: ['insight-id'],
+        type: 'string',
+      },
+    ],
+    body: [],
+  },
   {
     command: ['context'],
     method: 'GET',
