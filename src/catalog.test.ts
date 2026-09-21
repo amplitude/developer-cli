@@ -58,7 +58,9 @@ describe('buildCatalog — API operations', () => {
     );
 
     expect(check).toMatchObject({
-      example: 'amp events check-ingestion-by-api-key --api-key <api_key>',
+      description: expect.stringContaining('requires --region <us|eu>'),
+      example:
+        'amp events check-ingestion-by-api-key --api-key <api_key> --region <us|eu>',
       requiredScopes: [],
       summary: 'Check recent event ingestion with an ingestion API key',
     });

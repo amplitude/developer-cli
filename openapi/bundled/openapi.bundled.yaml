@@ -19,6 +19,8 @@ servers:
 security:
   - bearerAuth: []
 tags:
+  - name: Agent Analytics
+    description: Saved findings about agent cost, efficiency, and quality.
   - name: Projects
     description: Project discovery and project-scoped navigation.
   - name: Taxonomy Events
@@ -38,6 +40,100 @@ tags:
   - name: Auth
     description: OAuth device-flow and token endpoints (RFC 8628 / RFC 6749).
 paths:
+  /v1/projects/{project_id}/agent-analytics/insights:
+    get:
+      tags:
+        - Agent Analytics
+      operationId: listAgentAnalyticsInsights
+      summary: List saved Agent Analytics insights
+      description: |
+        Returns saved cost, efficiency, and quality findings, ranked by magnitude
+        times confidence. These are periodically evaluated findings, not live
+        queries. Healthy and closed findings can remain visible. Thumbs-downed
+        findings are excluded. Use each finding's project_id for individual reads.
+      x-required-scopes:
+        - analytics:read
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+        - name: agent_name
+          in: query
+          allowEmptyValue: true
+          description: Exact agent name. Omit for all scopes; an empty string selects project-level findings only.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Saved findings and an opaque next-page cursor. Keep the same project and agent filter when paging.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                  - pagination
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AgentInsight'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+        '400':
+          $ref: '#/components/responses/ValidationProblem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '429':
+          $ref: '#/components/responses/RateLimitProblem'
+        '502':
+          $ref: '#/components/responses/Problem'
+  /v1/projects/{project_id}/agent-analytics/insights/{insight_id}:
+    get:
+      tags:
+        - Agent Analytics
+      operationId: getAgentAnalyticsInsight
+      summary: Get a saved Agent Analytics insight
+      description: Returns one finding by its stable UUID and own project_id. Missing, cross-project, and thumbs-downed findings return 404.
+      x-required-scopes:
+        - analytics:read
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - name: insight_id
+          in: path
+          required: true
+          description: Stable insight UUID returned by the list operation, not a finding key such as tool-failures.
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Saved finding.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/AgentInsight'
+        '400':
+          $ref: '#/components/responses/ValidationProblem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '429':
+          $ref: '#/components/responses/RateLimitProblem'
+        '502':
+          $ref: '#/components/responses/Problem'
   /v1/auth/device-authorization:
     post:
       tags:
@@ -3201,6 +3297,119 @@ components:
           type: string
         id_token:
           type: string
+    AgentInsight:
+      type: object
+      required:
+        - id
+        - object
+        - project_id
+        - agent_name
+        - finding_key
+        - category
+        - title
+        - summary
+        - recommendation
+        - measurements
+        - evidence
+        - magnitude
+        - confidence
+        - score
+        - status
+        - window_start
+        - window_end
+        - evaluated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        object:
+          type: string
+          const: agent_analytics_insight
+        project_id:
+          type: string
+          description: The finding's own project, including when listed through a portfolio.
+        agent_name:
+          type: string
+          description: Empty for project-level findings.
+        finding_key:
+          type: string
+          description: Rule key, such as tool-failures. Not a unique finding identifier.
+        category:
+          type: string
+          enum:
+            - cost
+            - efficiency
+            - quality
+        title:
+          type: string
+        summary:
+          type: string
+        recommendation:
+          type: string
+        measurements:
+          type: array
+          items:
+            type: object
+            required:
+              - key
+              - label
+              - value
+              - unit
+            properties:
+              key:
+                type: string
+              label:
+                type: string
+              value:
+                type: number
+              unit:
+                type:
+                  - string
+                  - 'null'
+        evidence:
+          type: object
+          required:
+            - session_ids
+            - chart_definition
+          properties:
+            session_ids:
+              type: array
+              items:
+                type: string
+            chart_definition:
+              type:
+                - object
+                - 'null'
+              additionalProperties: true
+              description: Opaque, read-only chart definition. Its nested keys are preserved; the shape is not intended for authoring.
+        magnitude:
+          type: number
+          minimum: 0
+          maximum: 1
+        confidence:
+          type: number
+          minimum: 0
+          maximum: 1
+        score:
+          type: number
+          description: 100 times magnitude times confidence; higher ranks first.
+          minimum: 0
+          maximum: 100
+        status:
+          type: string
+          enum:
+            - opened
+            - in_progress
+            - closed
+        window_start:
+          type: string
+          format: date-time
+        window_end:
+          type: string
+          format: date-time
+        evaluated_at:
+          type: string
+          format: date-time
     DeviceCodeTokenRequest:
       type: object
       required:
