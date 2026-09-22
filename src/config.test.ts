@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import {
   resolveBaseUrl,
+  resolveExplicitBaseUrl,
   resolveNamedBaseUrl,
   resolveRegionBaseUrl,
 } from './config';
@@ -79,6 +80,27 @@ describe('resolveNamedBaseUrl', () => {
   it('throws when both --region and --env are given', () => {
     expect(() =>
       resolveNamedBaseUrl({ regionFlag: 'us', envFlag: 'staging' }),
+    ).toThrow('Pass either --region or --env, not both.');
+  });
+});
+
+describe('resolveExplicitBaseUrl', () => {
+  it('uses a trailing-slash-trimmed base URL over a selected region', () => {
+    expect(
+      resolveExplicitBaseUrl({
+        baseUrlFlag: 'https://preview.example.com/',
+        regionFlag: 'eu',
+      }),
+    ).toBe('https://preview.example.com');
+  });
+
+  it('returns undefined when no endpoint selector is supplied', () => {
+    expect(resolveExplicitBaseUrl({})).toBeUndefined();
+  });
+
+  it('rejects region and environment selectors together', () => {
+    expect(() =>
+      resolveExplicitBaseUrl({ regionFlag: 'us', envFlag: 'staging' }),
     ).toThrow('Pass either --region or --env, not both.');
   });
 });

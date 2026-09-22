@@ -21,6 +21,12 @@ export interface CatalogPositional {
   required: boolean;
 }
 
+/** A visible global selector that must appear in a command's usage line. */
+export interface RequiredUsageGlobalFlag {
+  alias: GlobalOptionAlias;
+  valueName: string;
+}
+
 export interface CatalogCommand {
   command: string[];
   summary: string;
@@ -36,6 +42,11 @@ export interface CatalogCommand {
    * flag the command rejects.
    */
   globalFlags: GlobalOptionAlias[];
+  /**
+   * Curated usage-only selectors. Kept out of JSON detail because global flags
+   * are validation metadata rather than operation parameters.
+   */
+  requiredUsageGlobalFlags?: RequiredUsageGlobalFlag[];
   example?: string;
   requiredScopes: string[];
 }
@@ -112,13 +123,26 @@ const EXAMPLES: Partial<Record<string, string>> = {
   'events check-ingestion':
     'amp events check-ingestion --project <project_id> --event-type <event_type>',
   'events check-ingestion-by-api-key':
-    'amp events check-ingestion-by-api-key --api-key <api_key>',
+    'amp events check-ingestion-by-api-key --api-key <api_key> --region <us|eu>',
   'flags list': 'amp flags list --project <project_id> --limit 5',
   'flags create':
     'amp flags create --project <project_id> --key my-flag --name "My Flag"',
   'flags get': 'amp flags get --project <project_id> --flag <flag_id>',
   'flags archive':
     'amp flags archive --project <project_id> --flag <flag_id> --dry-run',
+};
+
+const API_COMMAND_DESCRIPTIONS: Partial<Record<string, string>> = {
+  'events check-ingestion-by-api-key':
+    'Checks recent event ingestion using an ingestion API key. This command requires --region <us|eu> and never infers an endpoint from credentials or configuration.',
+};
+
+const REQUIRED_USAGE_GLOBAL_FLAGS: Partial<
+  Record<string, RequiredUsageGlobalFlag[]>
+> = {
+  'events check-ingestion-by-api-key': [
+    { alias: 'region', valueName: 'us|eu' },
+  ],
 };
 
 // Uncurated groups get a stable order *after* curated ones (alphabetical),
@@ -155,7 +179,9 @@ function apiCommands(): CatalogCommand[] {
       order: GROUP_ORDER[group],
       flags: flagsForOperation(operation),
       globalFlags: apiGlobalOptionAliases(operation.authentication),
+      requiredUsageGlobalFlags: REQUIRED_USAGE_GLOBAL_FLAGS[key],
       example: EXAMPLES[key],
+      description: API_COMMAND_DESCRIPTIONS[key],
       requiredScopes: operation.requiredScopes,
     };
   });

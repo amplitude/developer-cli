@@ -16,10 +16,9 @@ import {
 } from './authToken';
 import { authError, CliError, usageError } from './cli-error';
 import {
-  assertRegionAndEnvNotBothSet,
   DEFAULT_POLL_TIMEOUT_SECONDS,
   ENV_BASE_URLS,
-  resolveNamedBaseUrl,
+  resolveExplicitBaseUrl,
 } from './config';
 import {
   resolveAuthFromFlags,
@@ -108,16 +107,13 @@ export function loginBaseUrl(args: {
   regionFlag?: string;
   existing?: Profile;
 }): string {
-  assertRegionAndEnvNotBothSet(args);
-  if (args.baseUrlFlag) {
-    return args.baseUrlFlag.replace(/\/$/, '');
-  }
-  const named = resolveNamedBaseUrl({
+  const explicitBaseUrl = resolveExplicitBaseUrl({
+    baseUrlFlag: args.baseUrlFlag,
     envFlag: args.envFlag,
     regionFlag: args.regionFlag,
   });
-  if (named) {
-    return named;
+  if (explicitBaseUrl) {
+    return explicitBaseUrl;
   }
   if (args.existing) {
     return args.existing.base_url;

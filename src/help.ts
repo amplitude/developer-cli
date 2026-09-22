@@ -41,7 +41,7 @@ export interface CatalogIndexEntry {
 // See catalog-shape.test.ts.
 export type CatalogDetail = Omit<
   CatalogCommand,
-  'order' | 'command' | 'globalFlags'
+  'order' | 'command' | 'globalFlags' | 'requiredUsageGlobalFlags'
 > & {
   command: string;
 };
@@ -78,7 +78,7 @@ function toIndexEntry(c: CatalogCommand): CatalogIndexEntry {
 }
 
 function toDetail(c: CatalogCommand): CatalogDetail {
-  const { order, globalFlags, ...rest } = c;
+  const { order, globalFlags, requiredUsageGlobalFlags, ...rest } = c;
   return { ...rest, command: c.command.join(' ') };
 }
 
@@ -311,7 +311,14 @@ function printCatalogCommandHelp(entry: CatalogCommand): void {
       ? `--${f.aliases[0]} <${f.name}>`
       : `[--${f.aliases[0]} <${f.name}>]`,
   );
-  const usageArgs = [...usagePositional(entry.positional), ...usageFlags];
+  const requiredUsageFlags = (entry.requiredUsageGlobalFlags ?? []).map(
+    (flag) => `--${flag.alias} <${flag.valueName}>`,
+  );
+  const usageArgs = [
+    ...usagePositional(entry.positional),
+    ...requiredUsageFlags,
+    ...usageFlags,
+  ];
   lines.push(
     `  amp ${entry.command.join(' ')} ${usageArgs.join(' ')}`.trimEnd(),
   );

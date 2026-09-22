@@ -145,11 +145,22 @@ function parseBodyJson(
   return result.data;
 }
 
-function withQuery(path: string, query: Record<string, QueryValue>): string {
+function withQuery(
+  path: string,
+  query: Record<string, QueryValue>,
+  operation: CliOperation,
+): string {
   const params = new URLSearchParams();
 
   for (const [key, value] of Object.entries(query)) {
-    if (value !== undefined && value !== null && value !== '') {
+    if (
+      value !== undefined &&
+      value !== null &&
+      (value !== '' ||
+        operation.parameters.some(
+          (parameter) => parameter.name === key && parameter.allowEmptyValue,
+        ))
+    ) {
       params.set(key, String(value));
     }
   }
@@ -297,6 +308,6 @@ export function buildRequest(
         ? body
         : undefined,
     headers,
-    path: withQuery(path, query),
+    path: withQuery(path, query, operation),
   };
 }
