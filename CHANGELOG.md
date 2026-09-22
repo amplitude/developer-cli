@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.3.1](https://github.com/amplitude/developer-cli/compare/developer-cli-v0.3.0...developer-cli-v0.3.1) (2026-09-22)
+
+
+### Bug Fixes
+
+* update dependencies ([33358b3](https://github.com/amplitude/developer-cli/commit/33358b3c561da41088ede5e9c85840b962fc1dd6))
+* update dependencies ([8cb37bb](https://github.com/amplitude/developer-cli/commit/8cb37bb8c901bd3042364e933fd45cb098b91840))
+
 ## [0.3.0](https://github.com/amplitude/developer-cli/compare/developer-cli-v0.2.0...developer-cli-v0.3.0) (2026-09-15)
 
 
