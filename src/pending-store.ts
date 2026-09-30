@@ -9,7 +9,7 @@ import { dirname, join } from 'node:path';
 
 import { z } from 'zod';
 
-import { amplitudeDataFiles, amplitudeDataPath } from './amplitude-data-path';
+import { amplitudeDataFiles, amplitudeDataPath } from './amplitude-paths';
 
 export const CURRENT_PENDING_VERSION = 1;
 

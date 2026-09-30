@@ -11,7 +11,7 @@ import { debuglog } from 'node:util';
 import { lock } from 'proper-lockfile';
 import { z } from 'zod';
 
-import { amplitudeDataFiles, amplitudeDataPath } from './amplitude-data-path';
+import { amplitudeDataFiles, amplitudeDataPath } from './amplitude-paths';
 import { transportError, usageError } from './cli-error';
 
 /**

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { isFlagEnabled, parseArgs } from './args';
+import { authGlobalOptionAliases, isFlagEnabled, parseArgs } from './args';
 
 describe('parseArgs', () => {
   it('separates command tokens from flags', () => {
@@ -17,12 +17,23 @@ describe('parseArgs', () => {
     expect(parseArgs(['--dry-run']).flags).toEqual({ 'dry-run': true });
   });
 
+  it.each([
+    [['skills', 'get', 'integrating-amplitude', '--save'], true],
+    [['skills', 'get', 'integrating-amplitude', '--save=true'], 'true'],
+    [['skills', 'get', 'integrating-amplitude', '--save=false'], 'false'],
+  ])('parses --save as an optional boolean value', (argv, expectedSave) => {
+    const { command, flags } = parseArgs(argv);
+
+    expect(command).toEqual(['skills', 'get', 'integrating-amplitude']);
+    expect(flags.save).toBe(expectedSave);
+  });
+
   it('parses short switches -h and -v as booleans', () => {
     expect(parseArgs(['-h']).flags).toEqual({ h: true });
     expect(parseArgs(['-v']).flags).toEqual({ v: true });
   });
 
-  it.each(['json', 'help', 'version'])(
+  it.each(['json', 'help', 'version', 'save'])(
     'keeps the skills name positional when --%s precedes it',
     (alias) => {
       const { command, flags } = parseArgs([
@@ -40,7 +51,7 @@ describe('parseArgs', () => {
     },
   );
 
-  it.each(['json', 'help', 'version'])(
+  it.each(['json', 'help', 'version', 'save'])(
     'keeps the skills name positional when --%s follows it',
     (alias) => {
       const { command, flags } = parseArgs([
@@ -63,6 +74,17 @@ describe('parseArgs', () => {
 
     expect(command).toEqual(['skills', 'get', 'integrating-amplitude']);
     expect(flags.json).toBe('false');
+  });
+
+  it('does not suggest the hidden --save flag for a typo', () => {
+    expect(() => parseArgs(['skills', 'get', 'example', '--svae'])).toThrow(
+      "unknown option '--svae'",
+    );
+    try {
+      parseArgs(['skills', 'get', 'example', '--svae']);
+    } catch (error) {
+      expect(String(error)).not.toContain('Did you mean --save');
+    }
   });
 
   it('does not suggest the hidden --env flag for a typo', () => {
@@ -131,6 +153,10 @@ describe('parseArgs', () => {
 
     expect(command).toEqual(['auth', 'token']);
     expect(flags).toMatchObject({ flow: 'device', scope: 'openid email' });
+  });
+
+  it('keeps --save out of auth command globals', () => {
+    expect(authGlobalOptionAliases()).not.toContain('save');
   });
 });
 

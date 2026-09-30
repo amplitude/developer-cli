@@ -177,6 +177,7 @@ describe('buildCatalog — auth/meta commands', () => {
     ]);
     expect(get?.globalFlags).toEqual([
       'json',
+      'save',
       'env',
       'region',
       'help',
@@ -184,5 +185,14 @@ describe('buildCatalog — auth/meta commands', () => {
       'version',
       'v',
     ]);
+  });
+
+  it('describes document output without revealing the internal save flag', () => {
+    const get = buildCatalog().find(
+      (command) => command.command.join(' ') === 'skills get',
+    );
+
+    expect(get?.description).toContain('data.document');
+    expect(get?.description).not.toContain('--save');
   });
 });

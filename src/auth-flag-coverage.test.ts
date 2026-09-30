@@ -3,7 +3,7 @@ import { join } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { globalOptionAliases } from './args';
+import { authGlobalOptionAliases } from './args';
 import { buildCatalog } from './catalog';
 
 /**
@@ -72,7 +72,7 @@ function allowedAuthFlagAliases(): Set<string> {
   const catalogAuthAliases = buildCatalog()
     .filter((entry) => entry.group === 'auth')
     .flatMap((entry) => entry.flags.flatMap((flag) => flag.aliases));
-  return new Set([...globalOptionAliases(), ...catalogAuthAliases]);
+  return new Set([...authGlobalOptionAliases(), ...catalogAuthAliases]);
 }
 
 describe('auth handler flag-read coverage', () => {

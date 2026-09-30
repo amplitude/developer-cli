@@ -73,12 +73,12 @@ granular `read:`/`write:` scopes below plus the legacy `mcp:read`/`mcp:write`
 org scopes), so all commands work immediately after login. The per-command
 scopes below document what each command needs.
 
-| Command family             | Scopes                            |
-| -------------------------- | --------------------------------- |
-| `context`, `projects list` | `projects:read`                   |
-| `events *`                 | `taxonomy:read`, `taxonomy:write` |
-| `flags *`                  | `flags:read`, `flags:write`       |
-| `charts *`                 | `analytics:read`                  |
+| Command family                       | Scopes                            |
+| ------------------------------------ | --------------------------------- |
+| `context`, `projects list`           | `projects:read`                   |
+| `events *`                           | `taxonomy:read`, `taxonomy:write` |
+| `flags *`                            | `flags:read`, `flags:write`       |
+| `charts *`, `heatmaps *`, `zoning *` | `analytics:read`                  |
 
 Route-level scopes are defined on each OpenAPI operation (`x-required-scopes`).
 

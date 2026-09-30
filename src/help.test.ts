@@ -116,10 +116,24 @@ describe('help', () => {
       const output = log.mock.calls.map((c) => String(c[0])).join('\n');
       expect(output).toContain('--json');
       expect(output).toContain('data.document');
+      expect(output).not.toContain('--save');
     } finally {
       log.mockRestore();
     }
   });
+
+  it.each([false, true])(
+    'hides --save in skills get help (JSON: %s)',
+    (json) => {
+      const log = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+      try {
+        printCommandHelp(['skills', 'get'], { json, isTTY: false });
+        expect(log.mock.calls.flat().join('\n')).not.toContain('--save');
+      } finally {
+        log.mockRestore();
+      }
+    },
+  );
 
   it.each([
     ['skills', 'list'],
@@ -236,6 +250,8 @@ describe('help', () => {
       'user-properties',
       'flags',
       'charts',
+      'heatmaps',
+      'zoning',
       'destination-types',
       'destinations',
       'skills',
@@ -416,6 +432,18 @@ describe('help JSON', () => {
       expect(entry).not.toHaveProperty('flags');
       expect(entry).not.toHaveProperty('order');
     }
+  });
+
+  it('one-token topic + json keeps group members that are not prefixed by the group (auth → logout)', () => {
+    const parsed = JSON.parse(
+      capture(() => printCommandHelp(['auth'], { json: true, isTTY: false })),
+    );
+    const commands = parsed.commands.map((c: { command: string }) => c.command);
+    expect(commands).toContain('logout');
+    expect(commands).toContain('auth login');
+    expect(
+      parsed.commands.every((c: { group: string }) => c.group === 'auth'),
+    ).toBe(true);
   });
 
   it('exact command wins over group filter for `context` (both a command and a group)', () => {

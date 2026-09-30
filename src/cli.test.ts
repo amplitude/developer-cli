@@ -111,6 +111,35 @@ describe('main routing', () => {
     expect(logSpy).toHaveBeenCalledTimes(2);
   });
 
+  it.each([
+    ['version --save', ['version', '--save']],
+    ['--version --save', ['--version', '--save']],
+    ['--save', ['--save']],
+    ['help --save', ['help', '--save']],
+    ['skills list --save --help', ['skills', 'list', '--save', '--help']],
+  ])(
+    'rejects %s before early routing can bypass flag validation',
+    async (_, argv) => {
+      await runWith(argv);
+
+      expect(process.exitCode).toBe(2);
+      const parsed = JSON.parse(String(errSpy.mock.calls[0]?.[0]));
+      expect(parsed.error.error_code).toBe('usage_error');
+      expect(parsed.message).toContain('--save');
+      expect(logSpy).not.toHaveBeenCalled();
+    },
+  );
+
+  it('keeps normal help routing when --save is absent', async () => {
+    await runWith(['help']);
+
+    expect(process.exitCode).toBeUndefined();
+    expect(errSpy).not.toHaveBeenCalled();
+    expect(JSON.parse(String(logSpy.mock.calls[0]?.[0]))).toHaveProperty(
+      'commands',
+    );
+  });
+
   it('renders a helpful error for an unknown command as a JSON usage error on stderr', async () => {
     await runWith(['frobnicate']);
 
@@ -238,6 +267,18 @@ describe('main routing', () => {
     expect(parsed.error.error_code).toBe('usage_error');
     expect(parsed.message).toBe('Unknown flag --key for `amp flags list`.');
     expect(logSpy).not.toHaveBeenCalled();
+  });
+
+  it('rejects --save outside skills get', async () => {
+    await runWith(['auth', 'pat', '--save']);
+
+    expect(process.exitCode).toBe(2);
+    const parsed = JSON.parse(String(errSpy.mock.calls[0]?.[0]));
+    expect(parsed.error.error_code).toBe('usage_error');
+    expect(parsed.message).toBe(
+      'The --save flag is only supported by `amp skills get <name>`.',
+    );
+    expect(authCommands.runAuthPat).not.toHaveBeenCalled();
   });
 
   it('validates flags before the delete-confirmation gate: an unknown flag on a DELETE with no --yes surfaces usage_error, not the "Pass --yes" gate error', async () => {

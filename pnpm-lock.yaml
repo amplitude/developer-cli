@@ -17,9 +17,15 @@ importers:
       commander:
         specifier: ^15.0.0
         version: 15.0.0
+      env-paths:
+        specifier: ^3.0.0
+        version: 3.0.0
       fastest-levenshtein:
         specifier: ^1.0.16
         version: 1.0.16
+      filename-reserved-regex:
+        specifier: ^4.0.1
+        version: 4.0.1
       open:
         specifier: ^11.0.0
         version: 11.0.0
@@ -30,6 +36,9 @@ importers:
         specifier: ^4.3.6
         version: 4.4.3
     devDependencies:
+      '@types/filename-reserved-regex':
+        specifier: ^3.0.0
+        version: 3.0.0
       '@types/node':
         specifier: 26.5.1
         version: 26.5.1
@@ -50,7 +59,7 @@ importers:
         version: 6.0.3
       vitest:
         specifier: ^4.1.4
-        version: 4.1.9(@types/node@26.5.1)(vite@8.1.0)
+        version: 4.1.9(@types/node@26.5.1)(vite@8.1.0(@types/node@26.5.1)(tsx@4.7.2))
 
 packages:
 
@@ -460,6 +469,9 @@ packages:
   '@types/estree@1.0.9':
     resolution: {integrity: sha512-GhdPgy1el4/ImP05X05Uw4cw2/M93BCUmnEvWZNStlCzEKME4Fkk+YpoA5OiHNQmoS7Cafb8Xa3Pya8m1Qrzeg==}
 
+  '@types/filename-reserved-regex@3.0.0':
+    resolution: {integrity: sha512-DusFb+cKDTVxXZ5ZwqUY9n7McLR9Y5T1CbG21r61Kk0zPuSkWMdeXm9rubxJrynQP9x8hXJphdCJiMJACG2cSw==}
+
   '@types/node@26.5.1':
     resolution: {integrity: sha512-CzNm2FezW4VR/LjG6yUdiEgLE/rAQ9Slj5gCu/C2VrdcW7I0ahNZ8DRbHT7zOZ6r3ONgd/bsQIeSaoDGrd1C6g==}
 
@@ -611,6 +623,10 @@ packages:
     resolution: {integrity: sha512-Btj2BOOO83o3WyH59e8MgXsxEQVcarkUOpEYrubB0urwnN10yQ364rsiByU11nZlqWYZm05i/of7io4mzihBtQ==}
     engines: {node: '>=8'}
 
+  env-paths@3.0.0:
+    resolution: {integrity: sha512-dtJUTepzMW3Lm/NPxRf3wP4642UWhjL2sQxc+ym2YMj1m/H2zDNQOlezafzkHwn6sMstjHTwG6iQQsctDW/b1A==}
+    engines: {node: ^12.20.0 || ^14.13.1 || >=16.0.0}
+
   es-module-lexer@2.1.0:
     resolution: {integrity: sha512-n27zTYMjYu1aj4MjCWzSP7G9r75utsaoc8m61weK+W8JMBGGQybd43GstCXZ3WNmSFtGT9wi59qQTW6mhTR5LQ==}
 
@@ -647,6 +663,10 @@ packages:
     peerDependenciesMeta:
       picomatch:
         optional: true
+
+  filename-reserved-regex@4.0.1:
+    resolution: {integrity: sha512-qUet2faQFKvtvVUsEf7wCrTURwxBOIZpspsLHGifw9QCWk55ITE2FrG8XhfQqG/uxMA1xEGFVQbL+Yfm0O94+Q==}
+    engines: {node: '>=20'}
 
   fs.realpath@1.0.0:
     resolution: {integrity: sha512-OO0pH2lK6a0hZnAdau5ItzHPI6pUlvI7jMVnxUQRtw4owF2wk8lOSabtGDCTP4Ggrg2MbGnWO9X8K1t4+fGMDw==}
@@ -1286,6 +1306,8 @@ snapshots:
 
   '@types/estree@1.0.9': {}
 
+  '@types/filename-reserved-regex@3.0.0': {}
+
   '@types/node@26.5.1':
     dependencies:
       undici-types: 8.9.0
@@ -1336,7 +1358,7 @@ snapshots:
       chai: 6.2.2
       tinyrainbow: 3.1.0
 
-  '@vitest/mocker@4.1.9(vite@8.1.0)':
+  '@vitest/mocker@4.1.9(vite@8.1.0(@types/node@26.5.1)(tsx@4.7.2))':
     dependencies:
       '@vitest/spy': 4.1.9
       estree-walker: 3.0.3
@@ -1419,6 +1441,8 @@ snapshots:
 
   detect-libc@2.1.2: {}
 
+  env-paths@3.0.0: {}
+
   es-module-lexer@2.1.0: {}
 
   esbuild@0.19.12:
@@ -1468,6 +1492,8 @@ snapshots:
   fdir@6.5.0(picomatch@4.0.4):
     optionalDependencies:
       picomatch: 4.0.4
+
+  filename-reserved-regex@4.0.1: {}
 
   fs.realpath@1.0.0: {}
 
@@ -1698,10 +1724,10 @@ snapshots:
       fsevents: 2.3.3
       tsx: 4.7.2
 
-  vitest@4.1.9(@types/node@26.5.1)(vite@8.1.0):
+  vitest@4.1.9(@types/node@26.5.1)(vite@8.1.0(@types/node@26.5.1)(tsx@4.7.2)):
     dependencies:
       '@vitest/expect': 4.1.9
-      '@vitest/mocker': 4.1.9(vite@8.1.0)
+      '@vitest/mocker': 4.1.9(vite@8.1.0(@types/node@26.5.1)(tsx@4.7.2))
       '@vitest/pretty-format': 4.1.9
       '@vitest/runner': 4.1.9
       '@vitest/snapshot': 4.1.9

@@ -11,7 +11,7 @@ import { dirname, join } from 'node:path';
 
 import { z } from 'zod';
 
-import { amplitudeDataFiles, amplitudeDataPath } from './amplitude-data-path';
+import { amplitudeDataFiles, amplitudeDataPath } from './amplitude-paths';
 
 const CURRENT_VERSION = 1;
 export const AMP_DEVICE_ID_HEADER = 'Amp-Device-Id';

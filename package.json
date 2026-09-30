@@ -45,12 +45,15 @@
     "@inquirer/prompts": "^8.5.2",
     "chalk": "^4.1.2",
     "commander": "^15.0.0",
+    "env-paths": "^3.0.0",
     "fastest-levenshtein": "^1.0.16",
+    "filename-reserved-regex": "^4.0.1",
     "open": "^11.0.0",
     "proper-lockfile": "^4.1.2",
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@types/filename-reserved-regex": "^3.0.0",
     "@types/node": "26.5.1",
     "@types/proper-lockfile": "^4.1.4",
     "@typescript/native-preview": "7.0.0-dev.20260601.1",
