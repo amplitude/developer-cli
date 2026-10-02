@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.4.0](https://github.com/amplitude/developer-cli/compare/developer-cli-v0.3.1...developer-cli-v0.4.0) (2026-10-02)
+
+
+### Features
+
+* sync developer-cli from amplitude/javascript@4b6729b6eb11 ([16307f2](https://github.com/amplitude/developer-cli/commit/16307f2bee010c38ce2c239d6b90b024829f46c2))
+* sync developer-cli from amplitude/javascript@4b6729b6eb11 ([1de219e](https://github.com/amplitude/developer-cli/commit/1de219efbdc7198e774cd181f7ed59a4578a1dda))
+
 ## [0.3.1](https://github.com/amplitude/developer-cli/compare/developer-cli-v0.3.0...developer-cli-v0.3.1) (2026-09-22)
 
 
