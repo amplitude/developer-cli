@@ -5,8 +5,14 @@
 
 ### Features
 
-* sync developer-cli from amplitude/javascript@4b6729b6eb11 ([16307f2](https://github.com/amplitude/developer-cli/commit/16307f2bee010c38ce2c239d6b90b024829f46c2))
-* sync developer-cli from amplitude/javascript@4b6729b6eb11 ([1de219e](https://github.com/amplitude/developer-cli/commit/1de219efbdc7198e774cd181f7ed59a4578a1dda))
+* **heatmaps:** add `amp heatmaps click-map` and `amp heatmaps scroll-map` for click and scroll-depth data on a page URL ([16307f2](https://github.com/amplitude/developer-cli/commit/16307f2bee010c38ce2c239d6b90b024829f46c2))
+* **zoning:** add `amp zoning zone-metrics` for per-zone engagement metrics on a page URL ([16307f2](https://github.com/amplitude/developer-cli/commit/16307f2bee010c38ce2c239d6b90b024829f46c2))
+* **skills:** `amp skills get --save` writes a skill document to a local directory ([16307f2](https://github.com/amplitude/developer-cli/commit/16307f2bee010c38ce2c239d6b90b024829f46c2))
+
+
+### Bug Fixes
+
+* **help:** `--help --json` now expands multi-level command prefixes, and `amp help auth --json` lists `logout` again ([16307f2](https://github.com/amplitude/developer-cli/commit/16307f2bee010c38ce2c239d6b90b024829f46c2))
 
 ## [0.3.1](https://github.com/amplitude/developer-cli/compare/developer-cli-v0.3.0...developer-cli-v0.3.1) (2026-09-22)
 
