@@ -1,6 +1,7 @@
 import {
   type GlobalOptionAlias,
   apiGlobalOptionAliases,
+  authGlobalOptionAliases,
   globalOptionAliases,
 } from './args';
 import { DEFAULT_POLL_TIMEOUT_SECONDS } from './config';
@@ -92,9 +93,11 @@ const GROUP_ORDER: Partial<Record<string, number>> = {
   'user-properties': 4,
   flags: 5,
   charts: 6,
-  'destination-types': 7,
-  destinations: 8,
-  skills: 10,
+  heatmaps: 7,
+  zoning: 8,
+  'destination-types': 9,
+  destinations: 10,
+  skills: 11,
   auth: 20,
 };
 
@@ -106,6 +109,8 @@ const GROUP_DESCRIPTIONS: Partial<Record<string, string>> = {
   'user-properties': 'User properties',
   flags: 'Feature flags',
   charts: 'Saved and ad-hoc charts',
+  heatmaps: 'Click map and scroll map data for a page URL',
+  zoning: 'Zone metrics for a page URL',
   'destination-types': 'Available destination partners and their schemas',
   destinations: 'Configured destinations in a project',
   skills:
@@ -130,6 +135,12 @@ const EXAMPLES: Partial<Record<string, string>> = {
   'flags get': 'amp flags get --project <project_id> --flag <flag_id>',
   'flags archive':
     'amp flags archive --project <project_id> --flag <flag_id> --dry-run',
+  'heatmaps click-map':
+    'amp heatmaps click-map --project <project_id> --page-url https://example.com/pricing --limit 25',
+  'heatmaps scroll-map':
+    'amp heatmaps scroll-map --project <project_id> --page-url https://example.com/pricing --device mobile',
+  'zoning zone-metrics':
+    'amp zoning zone-metrics --project <project_id> --page-url https://example.com/pricing --metric rage_click_rate_session',
 };
 
 const API_COMMAND_DESCRIPTIONS: Partial<Record<string, string>> = {
@@ -409,8 +420,26 @@ export type SkillsVerb = 'list' | 'get';
 
 export const SKILLS_GLOBAL_FLAGS: Record<SkillsVerb, GlobalOptionAlias[]> = {
   list: ['json', 'env', ...SKILLS_COMMON_FLAGS],
-  get: ['json', 'env', 'region', ...SKILLS_COMMON_FLAGS],
+  get: ['json', 'save', 'env', 'region', ...SKILLS_COMMON_FLAGS],
 };
+
+const SKILLS_GET_COMMAND: CatalogCommand = {
+  command: ['skills', 'get'],
+  summary: 'Print one skill document',
+  group: 'skills',
+  order: GROUP_ORDER.skills,
+  description:
+    'Prints a named implementation skill as raw markdown, including frontmatter. Use amp skills list to find names; add --json to return the document in data.document.',
+  flags: [],
+  positional: { name: 'name', required: true },
+  globalFlags: SKILLS_GLOBAL_FLAGS.get,
+  example: 'amp skills get integrating-amplitude',
+  requiredScopes: [],
+};
+
+export function isSkillsGetCommand(command: string[]): boolean {
+  return findCatalogCommand(command) === SKILLS_GET_COMMAND;
+}
 
 const SKILLS_COMMANDS: CatalogCommand[] = [
   {
@@ -425,25 +454,13 @@ const SKILLS_COMMANDS: CatalogCommand[] = [
     example: 'amp skills list --json',
     requiredScopes: [],
   },
-  {
-    command: ['skills', 'get'],
-    summary: 'Print one skill document',
-    group: 'skills',
-    order: GROUP_ORDER.skills,
-    description:
-      'Prints a named implementation skill as markdown, including frontmatter. Use amp skills list to find names; add --json to return the document in data.document.',
-    flags: [],
-    positional: { name: 'name', required: true },
-    globalFlags: SKILLS_GLOBAL_FLAGS.get,
-    example: 'amp skills get integrating-amplitude',
-    requiredScopes: [],
-  },
+  SKILLS_GET_COMMAND,
 ];
 
 export function buildCatalog(): CatalogCommand[] {
   return [
     ...apiCommands(),
-    ...withGlobalFlags(AUTH_COMMANDS, globalOptionAliases()),
+    ...withGlobalFlags(AUTH_COMMANDS, authGlobalOptionAliases()),
     ...SKILLS_COMMANDS,
   ];
 }

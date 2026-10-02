@@ -1,12 +1,13 @@
 import { type FlagValue, isFlagEnabled } from './args';
 import { SKILLS_GLOBAL_FLAGS, type SkillsVerb } from './catalog';
-import { usageError } from './cli-error';
+import { CliError, transportError, usageError } from './cli-error';
 import {
   formatJsonOutput,
   normalizeWhitespace,
   shouldUseJsonOutput,
 } from './output';
 import { assertFlagsAllowed } from './request';
+import { materializeSkill, type MaterializedSkill } from './skill-materializer';
 import {
   type SkillIndexEntry,
   fetchSkillDocument,
@@ -43,6 +44,7 @@ export interface SkillsCommandDeps {
   path?: string;
   fetchIndex?: (baseUrl: string) => Promise<SkillIndexEntry[]>;
   fetchDocument?: (baseUrl: string, name: string) => Promise<string>;
+  materialize?: (name: string, document: string) => MaterializedSkill;
 }
 
 function writeStdout(chunk: string): void {
@@ -114,6 +116,37 @@ export async function runSkillsGet(
     name,
   );
   const isTTY = deps.isTTY ?? Boolean(process.stdout.isTTY);
+
+  if (isFlagEnabled(flags.save)) {
+    const materialize = deps.materialize ?? materializeSkill;
+    let saved: MaterializedSkill;
+    try {
+      saved = materialize(name, document);
+    } catch (error) {
+      const failure =
+        error instanceof CliError
+          ? error
+          : transportError(
+              `Could not save skill: ${error instanceof Error ? error.message : String(error)}.`,
+              'Check permissions for the skill cache and available disk space, then retry.',
+            );
+      failure.hint = [
+        failure.hint,
+        'Alternatively, omit `--save` to output the skill document directly',
+      ]
+        .filter((hint) => hint !== undefined && hint.length > 0)
+        .join('\n\n');
+      throw failure;
+    }
+
+    if (isFlagEnabled(flags.json)) {
+      write(`${formatJsonOutput({ data: saved }, isTTY)}\n`);
+      return;
+    }
+
+    write(`${saved.instruction}\n`);
+    return;
+  }
 
   if (isFlagEnabled(flags.json)) {
     write(`${formatJsonOutput({ data: { name, document } }, isTTY)}\n`);

@@ -84,6 +84,7 @@ function pickColumns(rows: Row[]): string[] {
     'name',
     'display_name',
     'event_type',
+    'action',
     'enabled',
     'archived',
     'is_active',

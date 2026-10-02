@@ -91,6 +91,30 @@ export function serializeCatalog(): CatalogDump {
   };
 }
 
+/**
+ * Catalog commands listed under a help topic: `['flags']` returns every
+ * `flags *` command, and a longer prefix returns the commands nested under it.
+ * A prefix can be any depth, so a three-level command family expands like a
+ * one-token group. A one-token topic also includes the catalog `group`'s
+ * members whose command does not start with the group name (`logout` lives in
+ * `auth`), so `amp help auth --json` keeps listing it. Exact matches are
+ * excluded — callers resolve those with `findCatalogCommand` first.
+ */
+function catalogCommandsUnderTopic(command: string[]): CatalogCommand[] {
+  const isExact = (c: CatalogCommand): boolean =>
+    c.command.length === command.length &&
+    c.command.every((part, index) => part === command[index]);
+  const hasPrefix = (c: CatalogCommand): boolean =>
+    c.command.length > command.length &&
+    command.every((part, index) => c.command[index] === part);
+  const inGroup = (c: CatalogCommand): boolean =>
+    command.length === 1 && c.group === command[0];
+
+  return buildCatalog().filter(
+    (c) => !isExact(c) && (hasPrefix(c) || inGroup(c)),
+  );
+}
+
 function helpAsJson(command: string[], isTTY: boolean): string {
   if (command.length === 0) {
     return formatJsonOutput(serializeCatalog(), isTTY);
@@ -99,18 +123,16 @@ function helpAsJson(command: string[], isTTY: boolean): string {
   if (entry) {
     return formatJsonOutput(toDetail(entry), isTTY);
   }
-  if (command.length === 1) {
-    const commands = buildCatalog().filter((c) => c.group === command[0]);
-    if (commands.length > 0) {
-      return formatJsonOutput(
-        {
-          command: command.join(' '),
-          detail: JSON_DRILLDOWN_HINT,
-          commands: commands.map(toIndexEntry),
-        },
-        isTTY,
-      );
-    }
+  const commands = catalogCommandsUnderTopic(command);
+  if (commands.length > 0) {
+    return formatJsonOutput(
+      {
+        command: command.join(' '),
+        detail: JSON_DRILLDOWN_HINT,
+        commands: commands.map(toIndexEntry),
+      },
+      isTTY,
+    );
   }
   throw usageError(
     `Unknown command: ${command.join(' ')}. Run \`amp help\` to list commands.`,
@@ -277,12 +299,10 @@ export function printCommandHelp(
   // tag, so `operationsMatchingPrefix` finds nothing for them. The catalog knows
   // every group, generated or not — so fall back to it rather than teaching this
   // function each bespoke group by name.
-  if (command.length === 1) {
-    const grouped = buildCatalog().filter((c) => c.group === command[0]);
-    if (grouped.length > 0) {
-      printGroupHelp(command, catalogGroupRows(grouped));
-      return;
-    }
+  const grouped = catalogCommandsUnderTopic(command);
+  if (grouped.length > 0) {
+    printGroupHelp(command, catalogGroupRows(grouped));
+    return;
   }
 
   throw usageError(

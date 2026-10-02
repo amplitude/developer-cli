@@ -27,6 +27,8 @@ interface CliOptionDefinition extends ParseableOption {
   // there would silently drop the flag and mislead the caller. See
   // apiGlobalOptionAliases().
   onApiCommands: boolean;
+  /** Whether this global is meaningful on bespoke auth/logout commands. */
+  onAuthCommands?: boolean;
   requiresAuthentication?: true;
   visible: boolean;
 }
@@ -62,6 +64,13 @@ const GLOBAL_OPTIONS = defineGlobalOptions([
     valueRequirement: 'optional',
     onApiCommands: true,
     visible: true,
+  },
+  {
+    aliases: ['save'],
+    valueRequirement: 'optional',
+    onApiCommands: false,
+    onAuthCommands: false,
+    visible: false,
   },
   {
     aliases: ['yes'],
@@ -179,6 +188,18 @@ export function apiGlobalOptionAliases(
         (option) =>
           option.onApiCommands &&
           (authentication !== 'none' || !('requiresAuthentication' in option)),
+      ).flatMap((option) => option.aliases),
+    ),
+  ];
+}
+
+/** Global aliases meaningful on bespoke auth/logout commands. */
+export function authGlobalOptionAliases(): GlobalOptionAlias[] {
+  return [
+    ...new Set(
+      GLOBAL_OPTIONS.filter(
+        (option) =>
+          !('onAuthCommands' in option) || option.onAuthCommands !== false,
       ).flatMap((option) => option.aliases),
     ),
   ];

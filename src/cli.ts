@@ -2,7 +2,7 @@
 /* eslint-disable no-console */
 import {
   type FlagValue,
-  globalOptionAliases,
+  authGlobalOptionAliases,
   isFlagEnabled,
   parseArgs,
 } from './args';
@@ -17,7 +17,7 @@ import {
   runAuthUse,
   runLogout,
 } from './auth-commands';
-import { buildCatalog } from './catalog';
+import { buildCatalog, isSkillsGetCommand } from './catalog';
 import {
   CliError,
   formatErrorEnvelope,
@@ -62,7 +62,7 @@ function assertKnownAuthFlags(
       candidate.command.every((part, index) => part === command[index]),
   );
   const catalogAliases = entry?.flags.flatMap((flag) => flag.aliases) ?? [];
-  const allowed = new Set([...globalOptionAliases(), ...catalogAliases]);
+  const allowed = new Set([...authGlobalOptionAliases(), ...catalogAliases]);
   assertFlagsAllowed(allowed, `amp ${command.join(' ')}`, flags);
 }
 
@@ -86,6 +86,17 @@ export function isVersionRequested(
   );
 }
 
+function assertSaveFlagAllowed(
+  command: string[],
+  flags: Record<string, FlagValue>,
+): void {
+  if (flags.save !== undefined && !isSkillsGetCommand(command)) {
+    throw usageError(
+      'The --save flag is only supported by `amp skills get <name>`.',
+    );
+  }
+}
+
 export async function main(): Promise<void> {
   const isTTY = Boolean(process.stdout.isTTY);
   let flags: Record<string, FlagValue> | undefined;
@@ -93,6 +104,7 @@ export async function main(): Promise<void> {
     const parsed = parseArgs(process.argv.slice(2));
     flags = parsed.flags;
     const { command } = parsed;
+    assertSaveFlagAllowed(command, flags);
 
     if (isVersionRequested(command, flags)) {
       console.log(formatVersion());
@@ -126,7 +138,7 @@ export async function main(): Promise<void> {
         return;
       }
 
-      if (command[1] === 'get' && command.length <= 3) {
+      if (isSkillsGetCommand(command)) {
         assertSkillsFlags('get', flags);
         await runSkillsGet(command[2], flags);
         return;

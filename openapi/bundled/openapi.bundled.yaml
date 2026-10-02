@@ -31,6 +31,10 @@ tags:
     description: User-property taxonomy operations (scoped to a project).
   - name: Analytics
     description: Saved chart discovery and query operations.
+  - name: Heatmaps
+    description: Click map and scroll map queries for a page URL.
+  - name: Zoning
+    description: Zone metric queries for a page URL.
   - name: Feature Flags
     description: Feature flag configuration and rollout operations.
   - name: Destinations
@@ -38,7 +42,7 @@ tags:
   - name: Skills
     description: Skill documents for implementing Amplitude, intended for AI agents.
   - name: Auth
-    description: OAuth device-flow and token endpoints (RFC 8628 / RFC 6749).
+    description: Signup, OAuth device-flow, and token endpoints (RFC 8628 / RFC 6749).
 paths:
   /v1/projects/{project_id}/agent-analytics/insights:
     get:
@@ -180,6 +184,55 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/OAuthError'
+  /v1/auth/signup:
+    post:
+      tags:
+        - Auth
+      operationId: signup
+      summary: Sign up for an Amplitude account
+      description: |
+        Sign up for an Amplitude account. The response either provides credentials for the new account or starts an OAuth flow to complete signup.
+      x-required-scopes: []
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SignupRequest'
+      responses:
+        '200':
+          description: Signup result with credentials, an OAuth flow, or additional signup information.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SignupResponse'
+        '400':
+          description: Invalid signup request.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SignupError'
+        '429':
+          $ref: '#/components/responses/RateLimitProblem'
+        '500':
+          description: Signup could not be completed due to a server error.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SignupError'
+        '502':
+          description: Signup upstream service error.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SignupError'
+        '503':
+          description: Signup authentication service is temporarily unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SignupError'
   /v1/auth/token:
     post:
       tags:
@@ -1632,6 +1685,183 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/ProblemDetails'
+  /v1/projects/{project_id}/heatmaps/click-map:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+    post:
+      tags:
+        - Heatmaps
+      operationId: queryClickMap
+      summary: Query click map
+      description: |
+        Returns click counts for one page URL, grouped by the CSS selector of the
+        clicked element or by page coordinate, ranked by count. Filter by device
+        viewport band and date range. Results reflect the authenticated caller's
+        project access and data access controls.
+
+        This POST computes a result and does not mutate state. It is therefore a
+        read operation and does not require an `Idempotency-Key`.
+
+        Omitting `time_range` uses the last 30 days in the project timezone. The
+        span of `time_range` cannot exceed 90 days.
+      x-required-scopes:
+        - analytics:read
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ClickMapQueryRequest'
+      responses:
+        '200':
+          description: Click map computed successfully.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/ClickMap'
+        '400':
+          $ref: '#/components/responses/ValidationProblem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/HeatmapForbiddenProblem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '422':
+          $ref: '#/components/responses/NotConfiguredProblem'
+        '429':
+          $ref: '#/components/responses/RateLimitProblem'
+        '500':
+          $ref: '#/components/responses/Problem'
+        '502':
+          $ref: '#/components/responses/Problem'
+        '503':
+          $ref: '#/components/responses/AvailabilityUnavailableProblem'
+        '504':
+          $ref: '#/components/responses/UpstreamTimeoutProblem'
+  /v1/projects/{project_id}/heatmaps/scroll-map:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+    post:
+      tags:
+        - Heatmaps
+      operationId: queryScrollMap
+      summary: Query scroll map
+      description: |
+        Returns the scroll-depth distribution for one page URL as a cumulative
+        histogram from the top of the page, plus the average fold and the deepest
+        scroll observed. Filter by device viewport band and date range. Results
+        reflect the authenticated caller's project access and data access
+        controls.
+
+        This POST computes a result and does not mutate state. It is therefore a
+        read operation and does not require an `Idempotency-Key`.
+
+        Omitting `time_range` uses the last 30 days in the project timezone. The
+        span of `time_range` cannot exceed 90 days.
+      x-required-scopes:
+        - analytics:read
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ScrollMapQueryRequest'
+      responses:
+        '200':
+          description: Scroll map computed successfully.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/ScrollMap'
+        '400':
+          $ref: '#/components/responses/ValidationProblem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/HeatmapForbiddenProblem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '422':
+          $ref: '#/components/responses/NotConfiguredProblem'
+        '429':
+          $ref: '#/components/responses/RateLimitProblem'
+        '500':
+          $ref: '#/components/responses/Problem'
+        '502':
+          $ref: '#/components/responses/Problem'
+        '503':
+          $ref: '#/components/responses/AvailabilityUnavailableProblem'
+        '504':
+          $ref: '#/components/responses/UpstreamTimeoutProblem'
+  /v1/projects/{project_id}/zoning/zone-metrics:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+    post:
+      tags:
+        - Zoning
+      operationId: queryZoneMetrics
+      summary: Query zone metrics
+      description: |
+        Returns one metric for every zone on a page URL, ranked by value. A zone
+        is identified by the CSS selector of its element. Results reflect the
+        authenticated caller's project access and data access controls.
+
+        This POST computes a result and does not mutate state. It is therefore a
+        read operation and does not require an `Idempotency-Key`.
+
+        Omitting `time_range` uses the last 30 days in the project timezone. The
+        span of `time_range` cannot exceed 90 days.
+      x-required-scopes:
+        - analytics:read
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ZoneMetricsQueryRequest'
+      responses:
+        '200':
+          description: Zone metrics computed successfully.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/ZoneMetrics'
+        '400':
+          $ref: '#/components/responses/ValidationProblem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/ZoningForbiddenProblem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '422':
+          $ref: '#/components/responses/NotConfiguredProblem'
+        '429':
+          $ref: '#/components/responses/RateLimitProblem'
+        '500':
+          $ref: '#/components/responses/Problem'
+        '502':
+          $ref: '#/components/responses/Problem'
+        '503':
+          $ref: '#/components/responses/AvailabilityUnavailableProblem'
+        '504':
+          $ref: '#/components/responses/UpstreamTimeoutProblem'
   /v1/projects/{project_id}/flags:
     get:
       tags:
@@ -2438,6 +2668,145 @@ components:
             detail: Too many requests.
             error_code: rate_limit_exceeded
             retryable: true
+    HeatmapForbiddenProblem:
+      description: |
+        The caller cannot use this operation. `operation_not_enabled` means the
+        operation is not enabled for the caller's organization;
+        `insufficient_scope` means the token lacks `analytics:read`; `forbidden`
+        means the caller lacks permission to view heatmaps in the project;
+        `data_access_restricted` means data access controls exclude the requested
+        data.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+          examples:
+            operationNotEnabled:
+              summary: Endpoint unavailable
+              value:
+                type: https://developer-api.amplitude.com/problems/operation-not-enabled
+                title: Endpoint unavailable
+                status: 403
+                detail: This endpoint is unavailable for your organization.
+                error_code: operation_not_enabled
+                retryable: false
+            insufficientScope:
+              summary: Missing required scope
+              value:
+                type: https://developer-api.amplitude.com/problems/forbidden
+                title: Insufficient scope
+                status: 403
+                detail: Token missing required scopes.
+                error_code: insufficient_scope
+                retryable: false
+            forbidden:
+              summary: Missing project permission
+              value:
+                type: https://developer-api.amplitude.com/problems/forbidden
+                title: Forbidden
+                status: 403
+                detail: You do not have permission to view heatmaps in this project.
+                error_code: forbidden
+                retryable: false
+            dataAccessRestricted:
+              summary: Data access restricted
+              value:
+                type: https://developer-api.amplitude.com/problems/data-access-restricted
+                title: Data access restricted
+                status: 403
+                detail: Data access controls exclude the requested data.
+                error_code: data_access_restricted
+                retryable: false
+    NotConfiguredProblem:
+      description: |
+        The project does not capture the events or properties this query needs.
+        Returned with `error_code: session_replay_not_configured`; `detail` names
+        what is missing.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+          example:
+            type: https://developer-api.amplitude.com/problems/session-replay-not-configured
+            title: Session replay not configured
+            status: 422
+            detail: 'The project is missing required events: [Amplitude] Element Clicked.'
+            error_code: session_replay_not_configured
+            retryable: false
+    AvailabilityUnavailableProblem:
+      description: Endpoint availability could not be determined. Retry the request.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+          example:
+            type: https://developer-api.amplitude.com/problems/operation-availability-unavailable
+            title: Operation availability unavailable
+            status: 503
+            detail: Operation availability could not be determined. Retry the request.
+            error_code: operation_availability_unavailable
+            retryable: true
+    UpstreamTimeoutProblem:
+      description: The query exceeded the synchronous timeout. Narrow the date range and retry.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+          example:
+            type: https://developer-api.amplitude.com/problems/upstream-timeout
+            title: Upstream timeout
+            status: 504
+            detail: The query did not complete in time. Narrow the date range and retry.
+            error_code: upstream_timeout
+            retryable: true
+    ZoningForbiddenProblem:
+      description: |
+        The caller cannot use this operation. `operation_not_enabled` means the
+        operation is not enabled for the caller's organization;
+        `insufficient_scope` means the token lacks `analytics:read`; `forbidden`
+        means the caller lacks access to the project; `data_access_restricted`
+        means data access controls exclude the requested data.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+          examples:
+            operationNotEnabled:
+              summary: Endpoint unavailable
+              value:
+                type: https://developer-api.amplitude.com/problems/operation-not-enabled
+                title: Endpoint unavailable
+                status: 403
+                detail: This endpoint is unavailable for your organization.
+                error_code: operation_not_enabled
+                retryable: false
+            insufficientScope:
+              summary: Missing required scope
+              value:
+                type: https://developer-api.amplitude.com/problems/forbidden
+                title: Insufficient scope
+                status: 403
+                detail: Token missing required scopes.
+                error_code: insufficient_scope
+                retryable: false
+            forbidden:
+              summary: Missing project permission
+              value:
+                type: https://developer-api.amplitude.com/problems/forbidden
+                title: Forbidden
+                status: 403
+                detail: You do not have permission to view zoning in this project.
+                error_code: forbidden
+                retryable: false
+            dataAccessRestricted:
+              summary: Data access restricted
+              value:
+                type: https://developer-api.amplitude.com/problems/data-access-restricted
+                title: Data access restricted
+                status: 403
+                detail: Data access controls exclude the requested data.
+                error_code: data_access_restricted
+                retryable: false
   schemas:
     ObjectMeta:
       type: object
@@ -2985,6 +3354,348 @@ components:
                 event reached Amplitude.
           additionalProperties: false
       additionalProperties: false
+    TimeRange:
+      type: object
+      required:
+        - start
+        - end
+      properties:
+        start:
+          type: string
+          format: date
+          description: Inclusive start date (project timezone unless `timezone` is set on query).
+        end:
+          type: string
+          format: date
+          description: Inclusive end date.
+      additionalProperties: false
+    ClickMapQueryRequest:
+      type: object
+      description: |
+        Click map query. When `time_range` is omitted the last 30 days in the
+        project timezone are used. The span of `time_range` cannot exceed 90
+        days.
+      required:
+        - page_url
+      properties:
+        page_url:
+          $ref: '#/components/schemas/PageUrl'
+        url_match:
+          $ref: '#/components/schemas/HeatmapUrlMatch'
+        device_type:
+          $ref: '#/components/schemas/HeatmapDeviceType'
+        viewport_width:
+          $ref: '#/components/schemas/ViewportWidth'
+        time_range:
+          $ref: '#/components/schemas/TimeRange'
+        group_by:
+          type: string
+          description: |
+            `selector` groups clicks by the CSS selector of the clicked element;
+            `pixel` groups them by page coordinate.
+          enum:
+            - selector
+            - pixel
+          default: selector
+        metric:
+          type: string
+          description: |
+            `totals` counts every click; `uniques` counts distinct users who
+            clicked.
+          enum:
+            - totals
+            - uniques
+          default: totals
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 200
+          default: 50
+          description: Maximum number of rows returned after ranking by `count`.
+      additionalProperties: false
+    ScrollMapQueryRequest:
+      type: object
+      description: |
+        Scroll map query. When `time_range` is omitted the last 30 days in the
+        project timezone are used. The span of `time_range` cannot exceed 90
+        days.
+      required:
+        - page_url
+      properties:
+        page_url:
+          $ref: '#/components/schemas/PageUrl'
+        url_match:
+          $ref: '#/components/schemas/HeatmapUrlMatch'
+        device_type:
+          $ref: '#/components/schemas/HeatmapDeviceType'
+        viewport_width:
+          $ref: '#/components/schemas/ViewportWidth'
+        time_range:
+          $ref: '#/components/schemas/TimeRange'
+      additionalProperties: false
+    ClickMap:
+      type: object
+      description: |
+        Ranked click counts for one page. Exactly one of `selectors` and `pixels`
+        is populated, chosen by `group_by`; the other is `null`. Rows are sorted
+        by `count` descending. Results reflect the caller's data access.
+      required:
+        - id
+        - object
+        - project_id
+        - page_url
+        - url_match
+        - device_type
+        - viewport_width
+        - group_by
+        - metric
+        - time_range
+        - timezone
+        - result_count
+        - truncated
+        - selectors
+        - pixels
+        - warnings
+      properties:
+        id:
+          type: string
+          description: Identifier for this computation.
+        object:
+          type: string
+          const: click_map
+          description: Resource-type discriminator. Always `click_map`.
+        project_id:
+          type: string
+          pattern: ^[0-9]+$
+        page_url:
+          type: string
+          description: The page URL after normalization.
+        url_match:
+          $ref: '#/components/schemas/HeatmapUrlMatch'
+        device_type:
+          $ref: '#/components/schemas/HeatmapDeviceType'
+        viewport_width:
+          type:
+            - integer
+            - 'null'
+          description: Exact viewport width used when `device_type` is `custom`; otherwise `null`.
+        group_by:
+          type: string
+          enum:
+            - selector
+            - pixel
+        metric:
+          type: string
+          enum:
+            - totals
+            - uniques
+        time_range:
+          $ref: '#/components/schemas/TimeRange'
+        timezone:
+          type: string
+          description: IANA timezone used to resolve `time_range` day boundaries (the project timezone).
+        result_count:
+          type: integer
+          minimum: 0
+          description: Number of rows returned.
+        truncated:
+          type: boolean
+          description: |
+            `true` when more rows were available than `limit` allowed. The
+            underlying query is itself bounded, so `false` does not guarantee
+            that every clicked element on the page is listed.
+        selectors:
+          type:
+            - array
+            - 'null'
+          items:
+            $ref: '#/components/schemas/ClickMapSelectorRow'
+        pixels:
+          type:
+            - array
+            - 'null'
+          items:
+            $ref: '#/components/schemas/ClickMapPixelRow'
+        warnings:
+          type: array
+          items:
+            type: string
+          description: Non-fatal conditions, such as an empty result for the range.
+    ScrollMap:
+      type: object
+      description: |
+        Scroll-depth distribution for one page, as a cumulative histogram from the
+        top of the page. All buckets are returned in page order. Results reflect
+        the caller's data access.
+      required:
+        - id
+        - object
+        - project_id
+        - page_url
+        - url_match
+        - device_type
+        - viewport_width
+        - time_range
+        - timezone
+        - total_sessions
+        - average_fold_px
+        - max_scroll_depth_px
+        - bucket_count
+        - buckets
+        - warnings
+      properties:
+        id:
+          type: string
+          description: Identifier for this computation.
+        object:
+          type: string
+          const: scroll_map
+          description: Resource-type discriminator. Always `scroll_map`.
+        project_id:
+          type: string
+          pattern: ^[0-9]+$
+        page_url:
+          type: string
+          description: The page URL after normalization.
+        url_match:
+          $ref: '#/components/schemas/HeatmapUrlMatch'
+        device_type:
+          $ref: '#/components/schemas/HeatmapDeviceType'
+        viewport_width:
+          type:
+            - integer
+            - 'null'
+          description: Exact viewport width used when `device_type` is `custom`; otherwise `null`.
+        time_range:
+          $ref: '#/components/schemas/TimeRange'
+        timezone:
+          type: string
+          description: IANA timezone used to resolve `time_range` day boundaries (the project timezone).
+        total_sessions:
+          type: integer
+          minimum: 0
+          description: Sessions with a scroll event on the page in the range (the first bucket's count).
+        average_fold_px:
+          type:
+            - integer
+            - 'null'
+          description: Average viewport height in pixels, or `null` when unavailable.
+        max_scroll_depth_px:
+          type:
+            - integer
+            - 'null'
+          description: Deepest scroll position observed in page pixels, or `null` when unavailable.
+        bucket_count:
+          type: integer
+          minimum: 0
+        buckets:
+          type: array
+          items:
+            $ref: '#/components/schemas/ScrollMapBucket'
+        warnings:
+          type: array
+          items:
+            type: string
+          description: Non-fatal conditions, such as an empty result for the range.
+    ZoneMetricsQueryRequest:
+      type: object
+      required:
+        - page_url
+      properties:
+        page_url:
+          $ref: '#/components/schemas/PageUrl'
+        url_match:
+          $ref: '#/components/schemas/ZoningUrlMatch'
+        time_range:
+          $ref: '#/components/schemas/TimeRange'
+        metric:
+          $ref: '#/components/schemas/ZoneMetric'
+        zone_ids:
+          type: array
+          maxItems: 200
+          items:
+            type: string
+            minLength: 1
+          description: |
+            Restrict the result to these zones. A zone id is the CSS selector of
+            the element, as returned in `zones[].zone_id`. Omit to rank every zone
+            on the page.
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 200
+          default: 20
+          description: Maximum number of zones returned after ranking by `value`.
+      additionalProperties: false
+      description: |
+        Zone metrics query. When `time_range` is omitted the last 30 days in the
+        project timezone are used. The span of `time_range` cannot exceed 90
+        days. One metric is computed per request.
+    ZoneMetrics:
+      type: object
+      description: |
+        One metric for every zone on a page, ranked by `value` descending.
+        Results reflect the caller's data access.
+      required:
+        - id
+        - object
+        - project_id
+        - page_url
+        - url_match
+        - metric
+        - time_range
+        - timezone
+        - zone_count
+        - total_zone_count
+        - truncated
+        - zones
+        - warnings
+      properties:
+        id:
+          type: string
+          description: Identifier for this computation.
+        object:
+          type: string
+          const: zone_metrics
+          description: Resource-type discriminator. Always `zone_metrics`.
+        project_id:
+          type: string
+          pattern: ^[0-9]+$
+        page_url:
+          type: string
+          description: The page URL after normalization.
+        url_match:
+          $ref: '#/components/schemas/ZoningUrlMatch'
+        metric:
+          $ref: '#/components/schemas/ZoneMetric'
+        time_range:
+          $ref: '#/components/schemas/TimeRange'
+        timezone:
+          type: string
+          description: IANA timezone used to resolve `time_range` day boundaries (the project timezone).
+        zone_count:
+          type: integer
+          minimum: 0
+          description: Number of zones returned.
+        total_zone_count:
+          type: integer
+          minimum: 0
+          description: Number of zones with data before `limit` was applied.
+        truncated:
+          type: boolean
+          description: '`true` when `total_zone_count` exceeds `zone_count`.'
+        zones:
+          type: array
+          items:
+            $ref: '#/components/schemas/ZoneMetricRow'
+        warnings:
+          type: array
+          items:
+            type: string
+          description: |
+            Non-fatal conditions. Includes a warning when the numbers behind a
+            rate were computed from differently aged cache snapshots, which can
+            push a rate above its natural bound.
     FeatureFlag:
       allOf:
         - $ref: '#/components/schemas/FeatureFlagBase'
@@ -3253,6 +3964,62 @@ components:
           type: integer
         interval:
           type: integer
+    SignupRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - email
+      properties:
+        email:
+          type: string
+          format: email
+          description: Email address of the user signing up for the Amplitude account.
+        full_name:
+          type: string
+          minLength: 1
+          description: Full name of the user signing up for the Amplitude account.
+        scope:
+          type: string
+          minLength: 1
+          description: Space-delimited OAuth scopes to request.
+        terms_acceptance:
+          type: object
+          properties:
+            terms_of_service:
+              $ref: '#/components/schemas/SignupDocumentAcceptance'
+            privacy_policy:
+              $ref: '#/components/schemas/SignupDocumentAcceptance'
+    SignupResponse:
+      description: |
+        Signup result. The response provides credentials, triggers an OAuth flow, or requests additional signup information.
+      oneOf:
+        - $ref: '#/components/schemas/SignupCredentialsResponse'
+        - $ref: '#/components/schemas/SignupRequiresAuthResponse'
+        - $ref: '#/components/schemas/SignupNeedsInformationResponse'
+      discriminator:
+        propertyName: type
+        mapping:
+          credentials: '#/components/schemas/SignupCredentialsResponse'
+          requires_auth: '#/components/schemas/SignupRequiresAuthResponse'
+          needs_information: '#/components/schemas/SignupNeedsInformationResponse'
+    SignupError:
+      type: object
+      required:
+        - type
+        - error
+      properties:
+        type:
+          const: error
+        error:
+          type: object
+          required:
+            - code
+            - message
+          properties:
+            code:
+              type: string
+            message:
+              type: string
     OAuthError:
       type: object
       description: RFC 6749 §5.2 OAuth error response.
@@ -3410,6 +4177,61 @@ components:
         evaluated_at:
           type: string
           format: date-time
+    SignupDocumentAcceptance:
+      type: object
+      required:
+        - url
+        - accepted
+      properties:
+        url:
+          type: string
+          format: uri
+        accepted:
+          const: true
+    SignupCredentialsResponse:
+      type: object
+      required:
+        - type
+        - credentials
+      properties:
+        type:
+          const: credentials
+        credentials:
+          $ref: '#/components/schemas/TokenResponse'
+    SignupRequiresAuthResponse:
+      type: object
+      required:
+        - type
+        - requires_auth
+      properties:
+        type:
+          const: requires_auth
+        requires_auth:
+          type: object
+          required:
+            - type
+            - device_authorization
+          properties:
+            type:
+              const: device_authorization
+            device_authorization:
+              $ref: '#/components/schemas/DeviceAuthorizationResponse'
+    SignupNeedsInformationResponse:
+      type: object
+      required:
+        - type
+        - needs_information
+      properties:
+        type:
+          const: needs_information
+        needs_information:
+          type: object
+          required:
+            - schema
+          properties:
+            schema:
+              type: object
+              additionalProperties: true
     DeviceCodeTokenRequest:
       type: object
       required:
@@ -3473,21 +4295,6 @@ components:
         - event_mapping
         - transformation
         - ads_account
-    TimeRange:
-      type: object
-      required:
-        - start
-        - end
-      properties:
-        start:
-          type: string
-          format: date
-          description: Inclusive start date (project timezone unless `timezone` is set on query).
-        end:
-          type: string
-          format: date
-          description: Inclusive end date.
-      additionalProperties: false
     ResultKind:
       type: string
       description: |
@@ -3660,6 +4467,159 @@ components:
         reason:
           type: string
           description: Human-readable explanation of truncation.
+    PageUrl:
+      type: string
+      minLength: 1
+      maxLength: 2048
+      description: |
+        Page URL to analyze. Accepts `http` and `https` URLs; a URL without a
+        scheme is treated as `https`. The query string and fragment are removed
+        before matching, so `https://example.com/pricing?utm=x` and
+        `https://example.com/pricing` are the same page.
+      example: https://example.com/pricing
+    HeatmapUrlMatch:
+      type: string
+      description: |
+        How `page_url` is matched against the page URL recorded on each event.
+        `is` matches the exact URL, `contains` matches any URL containing it,
+        `has_prefix` matches URLs starting with it, and `glob` treats `*` as a
+        wildcard.
+      enum:
+        - is
+        - contains
+        - has_prefix
+        - glob
+      default: is
+    HeatmapDeviceType:
+      type: string
+      description: |
+        Viewport band to include, matching the device selector in the product:
+        `desktop` is at least 1440 px wide, `laptop` is 900 to 1440 px, `tablet`
+        is 500 to 900 px, `mobile` is at most 500 px. Use `custom` with
+        `viewport_width` to match one exact width.
+      enum:
+        - desktop
+        - laptop
+        - tablet
+        - mobile
+        - custom
+      default: desktop
+    ViewportWidth:
+      type: integer
+      minimum: 1
+      maximum: 20000
+      description: |
+        Exact viewport width in pixels. Required when `device_type` is `custom`
+        and not accepted otherwise.
+    ClickMapSelectorRow:
+      type: object
+      required:
+        - selector
+        - count
+      properties:
+        selector:
+          type: string
+          description: CSS selector of the clicked element.
+        count:
+          type: integer
+          minimum: 0
+          description: 'Clicks (`metric: totals`) or unique users (`metric: uniques`).'
+      additionalProperties: false
+    ClickMapPixelRow:
+      type: object
+      required:
+        - x
+        - 'y'
+        - count
+      properties:
+        x:
+          type: integer
+          description: Horizontal page coordinate in pixels.
+        'y':
+          type: integer
+          description: Vertical page coordinate in pixels.
+        count:
+          type: integer
+          minimum: 0
+          description: 'Clicks (`metric: totals`) or unique users (`metric: uniques`).'
+      additionalProperties: false
+    ScrollMapBucket:
+      type: object
+      required:
+        - depth_from_px
+        - depth_to_px
+        - sessions_reached
+        - percent_reached
+      properties:
+        depth_from_px:
+          type: integer
+          minimum: 0
+          description: Lower bound of the scroll-depth bucket in page pixels.
+        depth_to_px:
+          type: integer
+          minimum: 0
+          description: Upper bound of the scroll-depth bucket in page pixels.
+        sessions_reached:
+          type: integer
+          minimum: 0
+          description: Sessions that scrolled at least to this bucket.
+        percent_reached:
+          type: number
+          minimum: 0
+          maximum: 1
+          description: |
+            `sessions_reached` divided by the sessions counted in the first
+            bucket, as a fraction. The first bucket is always `1`.
+      additionalProperties: false
+    ZoningUrlMatch:
+      type: string
+      description: |
+        How `page_url` is matched against the page URL recorded on each event.
+        `is` matches the exact URL; `contains` matches any URL containing it.
+      enum:
+        - is
+        - contains
+      default: is
+    ZoneMetric:
+      type: string
+      description: |
+        Metric computed per zone. Rates are fractions (`0.18` is 18%).
+
+        - `click_rate_pageview`: page views with a click in the zone, divided by page views.
+        - `click_rate_session`: sessions with a click in the zone, divided by sessions.
+        - `rage_click_rate_pageview`: page views with a rage click in the zone, divided by page views.
+        - `rage_click_rate_session`: sessions with a rage click in the zone, divided by sessions.
+        - `click_distribution`: clicks in the zone, divided by all clicks on the page.
+        - `click_recurrence`: clicks in the zone, divided by page views. Can exceed 1.
+        - `rage_click_recurrence`: rage clicks in the zone, divided by page views. Can exceed 1.
+        - `exposure_rate`: page views where the zone was visible, divided by page views.
+        - `attractiveness_rate`: page views where the zone was visible and clicked, divided by page views where it was visible. Can exceed 1.
+        - `revenue_per_click`: revenue attributed to the zone, divided by sessions that clicked it, in the project's revenue unit.
+      enum:
+        - click_rate_pageview
+        - click_rate_session
+        - rage_click_rate_pageview
+        - rage_click_rate_session
+        - click_distribution
+        - click_recurrence
+        - rage_click_recurrence
+        - exposure_rate
+        - attractiveness_rate
+        - revenue_per_click
+      default: click_rate_pageview
+    ZoneMetricRow:
+      type: object
+      required:
+        - zone_id
+        - value
+      properties:
+        zone_id:
+          type: string
+          description: CSS selector identifying the zone.
+        value:
+          type: number
+          description: The metric value for this zone. Rates are fractions and are returned uncapped.
+      additionalProperties: false
     RolloutWeights:
       type: object
       additionalProperties:

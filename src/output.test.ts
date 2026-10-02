@@ -28,6 +28,16 @@ const listEvents: CliOperation = {
   body: [],
 };
 
+const listScheduledEventActions: CliOperation = {
+  command: ['events', 'scheduled-actions', 'list'],
+  method: 'GET',
+  operationId: 'listScheduledEventActions',
+  path: '/v1/projects/{project_id}/scheduled-event-actions',
+  requiredScopes: ['read:taxonomy'],
+  parameters: [],
+  body: [],
+};
+
 const getContext: CliOperation = {
   command: ['context'],
   method: 'GET',
@@ -147,6 +157,40 @@ describe('output formatting', () => {
     // event_type and display_name duplicate id on every row, so they collapse.
     expect(header).not.toContain('EVENT_TYPE');
     expect(header).not.toContain('DISPLAY_NAME');
+  });
+
+  it('shows action on scheduled event action lists', () => {
+    const output = formatSuccessOutput(
+      {
+        data: [
+          {
+            id: 'action-1',
+            object: 'scheduled_event_action',
+            event_type: 'A Brand New Event',
+            display_name: 'A Brand New Event',
+            action: 'delete',
+            status: 'pending',
+            target_date: '2026-09-28T00:00:00.000Z',
+          },
+          {
+            id: 'action-2',
+            object: 'scheduled_event_action',
+            event_type: 'Test_Event_2',
+            display_name: 'Test_Event_2',
+            action: 'block',
+            status: 'pending',
+            target_date: '2026-09-24T00:00:00.000Z',
+          },
+        ],
+      },
+      listScheduledEventActions,
+    );
+
+    const header = output.split('\n')[0];
+    expect(header).toContain('ID');
+    expect(header).toContain('ACTION');
+    expect(output).toContain('delete');
+    expect(output).toContain('block');
   });
 
   it('emits no trailing whitespace on any table row', () => {

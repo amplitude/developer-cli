@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
+import { CliError, transportError } from './cli-error';
 import { DEFAULT_API_BASE_URL } from './config';
 import {
   assertSkillsFlags,
@@ -51,6 +52,7 @@ describe('assertSkillsFlags', () => {
     expect(() =>
       assertSkillsFlags('get', {
         json: true,
+        save: true,
         env: 'local',
         region: 'us',
         help: true,
@@ -69,6 +71,12 @@ describe('assertSkillsFlags', () => {
 
   it.each(['profile', 'base-url'])('rejects --%s on get', (alias) => {
     expect(() => assertSkillsFlags('get', { [alias]: 'x' })).toThrowError(
+      /unknown|unrecognized|not supported/i,
+    );
+  });
+
+  it('rejects --save on list', () => {
+    expect(() => assertSkillsFlags('list', { save: true })).toThrowError(
       /unknown|unrecognized|not supported/i,
     );
   });
@@ -258,6 +266,16 @@ version: 1
 # Using Amplitude
 `;
 
+const MATERIALIZED_SKILL = {
+  name: 'integrating-amplitude',
+  path: '/tmp/amp/skills/integrating-amplitude/20260918T123456Z-123456789abc/SKILL.md',
+  sha256: '123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
+  bytes: 123,
+  lines: 8,
+  instruction:
+    'Read and follow the complete `integrating-amplitude` skill at `/tmp/amp/skills/integrating-amplitude/20260918T123456Z-123456789abc/SKILL.md` for the current task.',
+};
+
 describe('runSkillsGet', () => {
   it('writes a compact JSON envelope when requested without a TTY', async () => {
     const chunks: string[] = [];
@@ -351,6 +369,75 @@ describe('runSkillsGet', () => {
     expect(chunks.join('')).toBe(DOCUMENT);
   });
 
+  it.each([true, false])(
+    'writes only the saved-skill instruction and materializes once when isTTY=%s',
+    async (isTTY) => {
+      const chunks: string[] = [];
+      const materialize = vi.fn(() => MATERIALIZED_SKILL);
+
+      await runSkillsGet(
+        'integrating-amplitude',
+        { region: 'us', save: true },
+        {
+          write: (chunk) => chunks.push(chunk),
+          isTTY,
+          fetchDocument: async () => DOCUMENT,
+          materialize,
+        },
+      );
+
+      expect(chunks.join('')).toBe(`${MATERIALIZED_SKILL.instruction}\n`);
+      expect(materialize).toHaveBeenCalledTimes(1);
+      expect(materialize).toHaveBeenCalledWith(
+        'integrating-amplitude',
+        DOCUMENT,
+      );
+    },
+  );
+
+  it.each([true, false])(
+    'returns saved-skill metadata without the document as JSON when isTTY=%s',
+    async (isTTY) => {
+      const chunks: string[] = [];
+      const materialize = vi.fn(() => MATERIALIZED_SKILL);
+
+      await runSkillsGet(
+        'integrating-amplitude',
+        { region: 'us', save: true, json: true },
+        {
+          write: (chunk) => chunks.push(chunk),
+          isTTY,
+          fetchDocument: async () => DOCUMENT,
+          materialize,
+        },
+      );
+
+      const output = JSON.parse(chunks.join(''));
+      expect(output).toEqual({ data: MATERIALIZED_SKILL });
+      expect(output.data).not.toHaveProperty('document');
+      expect(materialize).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it('keeps raw output and skips materialization when --save=false', async () => {
+    const chunks: string[] = [];
+    const materialize = vi.fn(() => MATERIALIZED_SKILL);
+
+    await runSkillsGet(
+      'integrating-amplitude',
+      { region: 'us', save: 'false' },
+      {
+        write: (chunk) => chunks.push(chunk),
+        isTTY: false,
+        fetchDocument: async () => DOCUMENT,
+        materialize,
+      },
+    );
+
+    expect(chunks.join('')).toBe(DOCUMENT);
+    expect(materialize).not.toHaveBeenCalled();
+  });
+
   // Exercises the default stdout rather than an injected one: `console.log`
   // appends a newline to a document that already ends in one, so `amp skills get
   // X > f` would not be the bytes the server served.
@@ -374,6 +461,56 @@ describe('runSkillsGet', () => {
       write.mockRestore();
       log.mockRestore();
     }
+  });
+
+  it.each([
+    transportError('Permission denied', 'Check cache permissions.'),
+    new Error('Unexpected write failure'),
+  ])('recommends direct output when saving fails: %s', async (failure) => {
+    const write = vi.fn();
+    const operation = runSkillsGet(
+      'integrating-amplitude',
+      { save: true, region: 'us' },
+      {
+        write,
+        fetchDocument: async () => DOCUMENT,
+        materialize: () => {
+          throw failure;
+        },
+      },
+    );
+    await expect(operation).rejects.toMatchObject({
+      message: expect.stringContaining(failure.message),
+      errorCode: 'transport_error',
+      exitCode: 5,
+      hint: expect.stringContaining(
+        'Alternatively, omit `--save` to output the skill document directly',
+      ),
+    });
+    if (failure instanceof CliError) {
+      await expect(operation).rejects.toMatchObject({
+        hint: expect.stringContaining('Check cache permissions.'),
+      });
+    }
+    expect(write).not.toHaveBeenCalled();
+  });
+
+  it('preserves retrieval errors without suggesting that omitting save fixes them', async () => {
+    const failure = transportError(
+      'Registry unavailable',
+      'Check connectivity.',
+    );
+    await expect(
+      runSkillsGet(
+        'example',
+        { save: true, region: 'us' },
+        {
+          fetchDocument: async () => {
+            throw failure;
+          },
+        },
+      ),
+    ).rejects.toMatchObject({ hint: 'Check connectivity.' });
   });
 
   it('requires a skill name', async () => {

@@ -94,6 +94,8 @@ amp flags list --project <project_id> --limit 5
 amp flags create --project <project_id> --key my-flag --name "My Flag"
 amp flags get --project <project_id> --flag <flag_id>
 amp flags archive --project <project_id> --flag <flag_id> --dry-run
+amp heatmaps click-map --project <project_id> --page-url https://example.com/pricing
+amp zoning zone-metrics --project <project_id> --page-url https://example.com/pricing --metric click_rate_pageview
 ```
 
 ## Smoke test
