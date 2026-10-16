@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.5.0](https://github.com/amplitude/developer-cli/compare/developer-cli-v0.4.0...developer-cli-v0.5.0) (2026-10-16)
+
+
+### Features
+
+* **mcp-analytics:** add `amp mcp-analytics servers list`, `taxonomy get`, `topics get`, `episodes list`, and `episodes get` for the MCP taxonomy drill ([d2df2a6](https://github.com/amplitude/developer-cli/commit/d2df2a6f5f91f006514d9ec388ad8d055c51fb03))
+* **metrics:** add `amp metrics list` and `amp metrics get` ([d2df2a6](https://github.com/amplitude/developer-cli/commit/d2df2a6f5f91f006514d9ec388ad8d055c51fb03))
+* **auth:** add `amp auth signup` for non-interactive account signup ([d2df2a6](https://github.com/amplitude/developer-cli/commit/d2df2a6f5f91f006514d9ec388ad8d055c51fb03))
+
 ## [0.4.0](https://github.com/amplitude/developer-cli/compare/developer-cli-v0.3.1...developer-cli-v0.4.0) (2026-10-02)
 
 
