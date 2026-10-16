@@ -7,6 +7,7 @@ import {
 import { DEFAULT_POLL_TIMEOUT_SECONDS } from './config';
 import type { CliOperation } from './generated/cli-manifest';
 import { CLI_OPERATIONS } from './generated/cli-manifest';
+import { SIGNUP_DOCUMENT_URLS } from './signup-response';
 
 export interface CatalogFlag {
   name: string;
@@ -53,13 +54,18 @@ export interface CatalogCommand {
 }
 
 /** A group's commands before their shared `globalFlags` set is attached. */
-type BespokeCommand = Omit<CatalogCommand, 'globalFlags'>;
+type BespokeCommand = Omit<CatalogCommand, 'globalFlags'> & {
+  globalFlags?: GlobalOptionAlias[];
+};
 
 function withGlobalFlags(
   commands: BespokeCommand[],
   globalFlags: GlobalOptionAlias[],
 ): CatalogCommand[] {
-  return commands.map((command) => ({ ...command, globalFlags }));
+  return commands.map((command) => ({
+    ...command,
+    globalFlags: command.globalFlags ?? globalFlags,
+  }));
 }
 
 export function findCatalogCommand(
@@ -93,11 +99,12 @@ const GROUP_ORDER: Partial<Record<string, number>> = {
   'user-properties': 4,
   flags: 5,
   charts: 6,
-  heatmaps: 7,
-  zoning: 8,
-  'destination-types': 9,
-  destinations: 10,
-  skills: 11,
+  metrics: 7,
+  heatmaps: 8,
+  zoning: 9,
+  'destination-types': 10,
+  destinations: 11,
+  skills: 12,
   auth: 20,
 };
 
@@ -109,6 +116,7 @@ const GROUP_DESCRIPTIONS: Partial<Record<string, string>> = {
   'user-properties': 'User properties',
   flags: 'Feature flags',
   charts: 'Saved and ad-hoc charts',
+  metrics: 'Saved metric definitions',
   heatmaps: 'Click map and scroll map data for a page URL',
   zoning: 'Zone metrics for a page URL',
   'destination-types': 'Available destination partners and their schemas',
@@ -116,6 +124,7 @@ const GROUP_DESCRIPTIONS: Partial<Record<string, string>> = {
   skills:
     'Skill documents for implementing Amplitude, intended for AI agents. Run amp skills list to discover them.',
   auth: 'Authentication and credential profiles',
+  'mcp-analytics': 'MCP taxonomy, topics, and episodes',
 };
 
 const EXAMPLES: Partial<Record<string, string>> = {
@@ -209,6 +218,84 @@ function apiCommands(): CatalogCommand[] {
 // flags, so the misplaced-flag reject can't false-positive.
 const AUTH_COMMANDS: BespokeCommand[] = [
   {
+    command: ['auth', 'signup'],
+    summary: 'Sign up for an Amplitude account',
+    description: `Requires --non-interactive. Saves and activates credentials on immediate authorization, or records the supplied device challenge for auth login poll. Outstanding inputs are returned as needs_information. Signup does not prompt, open a browser, or poll automatically. Exit 0 can indicate requires_auth; inspect status to distinguish it from authorized. --accept-tos agrees to the Terms of Service (${SIGNUP_DOCUMENT_URLS.terms_of_service}) and acknowledges the Privacy Policy (${SIGNUP_DOCUMENT_URLS.privacy_policy}).`,
+    group: 'auth',
+    order: GROUP_ORDER.auth,
+    globalFlags: [
+      'json',
+      'profile',
+      'region',
+      'force',
+      'env',
+      'base-url',
+      'help',
+      'h',
+      'version',
+      'v',
+    ],
+    flags: [
+      {
+        name: 'non-interactive',
+        aliases: ['non-interactive'],
+        type: 'boolean',
+        required: true,
+        description:
+          'Return outstanding inputs or authorization without prompts or polling.',
+      },
+      {
+        name: 'email',
+        aliases: ['email'],
+        type: 'string',
+        required: true,
+        description: 'Email address for signup.',
+      },
+      {
+        name: 'full-name',
+        aliases: ['full-name'],
+        type: 'string',
+        required: false,
+        description:
+          'Full name; supply it to complete eligible immediate signup.',
+      },
+      {
+        name: 'accept-tos',
+        aliases: ['accept-tos'],
+        type: 'boolean',
+        required: false,
+        description: `Agree to Terms of Service (${SIGNUP_DOCUMENT_URLS.terms_of_service}) and acknowledge Privacy Policy (${SIGNUP_DOCUMENT_URLS.privacy_policy}).`,
+      },
+      {
+        name: 'region',
+        aliases: ['region'],
+        type: 'string',
+        required: true,
+        enum: ['us', 'eu'],
+        description: 'Target region, required for signup.',
+      },
+      {
+        name: 'profile',
+        aliases: ['profile'],
+        type: 'string',
+        required: false,
+        description:
+          'Profile name; omit to use the active profile, or default when none is active.',
+      },
+      {
+        name: 'force',
+        aliases: ['force'],
+        type: 'boolean',
+        required: false,
+        description:
+          'Permit changing an existing profile endpoint on successful authentication. Credentials remain until saved.',
+      },
+    ],
+    example:
+      'amp auth signup --non-interactive --email alex@example.com --full-name "Alex Morgan" --region us --accept-tos --json',
+    requiredScopes: [],
+  },
+  {
     command: ['auth', 'login'],
     summary: 'Authenticate and save a profile (interactive device flow)',
     group: 'auth',
@@ -282,7 +369,7 @@ const AUTH_COMMANDS: BespokeCommand[] = [
       'Complete the device flow started by `login start` (emits a JSON envelope)',
     group: 'auth',
     order: GROUP_ORDER.auth,
-    description: `Completes the device authorization started by \`amp auth login start\`: returns the credential once the code is confirmed, or reports that authorization is still pending or the code has expired. Each call blocks up to ~${DEFAULT_POLL_TIMEOUT_SECONDS}s (\`--timeout <seconds>\`, or \`--timeout 0\` for a single check).`,
+    description: `Completes the device authorization returned by \`amp auth login start\` or \`amp auth signup\`: returns the credential once the code is confirmed, or reports that authorization is still pending or the code has expired. Each call blocks up to ~${DEFAULT_POLL_TIMEOUT_SECONDS}s (\`--timeout <seconds>\`, or \`--timeout 0\` for a single check).`,
     flags: [
       {
         name: 'profile',

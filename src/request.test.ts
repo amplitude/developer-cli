@@ -26,6 +26,12 @@ function request(command: string[], argv: string[]) {
 }
 
 describe('manifest invariants', () => {
+  it('rejects the skills-only --loginId on API commands', () => {
+    expect(() =>
+      request(['projects', 'list'], ['--loginId', 'Account-123']),
+    ).toThrow('Unknown flag --loginId');
+  });
+
   it('builds saved insight list/get requests and preserves project-level filtering', () => {
     const list = ['agent-analytics', 'insights', 'list'];
     expect(operation(list).requiredScopes).toEqual(['analytics:read']);

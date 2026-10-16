@@ -42,8 +42,8 @@ npx @amplitude/developer-cli help
 ## Authentication
 
 Run `amp auth login` to authenticate via the OAuth device flow. Omit
-`--profile` and the CLI targets `default` — the implicit profile used when you
-don't name one. Picking a region stays explicit:
+`--profile` and the CLI targets the active profile, or `default` when none is
+active. Picking a region stays explicit:
 
 ```bash
 amp auth login --region us                       # device flow → "default" profile
@@ -64,6 +64,51 @@ amp logout --all                                   # remove every profile
 
 A bare `amp auth login` re-authenticates the active profile in place. Profiles
 are saved to `~/.amplitude/amp/credentials.json` (0600).
+
+### Signup
+
+Create an account with explicit inputs and consent:
+
+```bash
+amp auth signup --non-interactive \
+  --email alex@example.com \
+  --full-name "Alex Morgan" \
+  --region us \
+  --accept-tos
+```
+
+`--non-interactive` is required. Signup returns outstanding requirements without
+prompting, opening a browser, or polling. `--json` controls presentation; piped
+output is also compact JSON.
+
+`--accept-tos` agrees to the [Terms of Service](https://amplitude.com/terms) and
+acknowledges the [Privacy Policy](https://amplitude.com/privacy). Every accepted
+request sends both document references for server validation. Missing consent
+returns the documents as required information before a signup request. Outdated
+references return the server's error on stderr; update the client and retry.
+
+| Status              | Meaning                                                                                | Exit |
+| ------------------- | -------------------------------------------------------------------------------------- | ---- |
+| `authorized`        | Credentials saved; profile active. Accepted document URLs returned; tokens stay local. | `0`  |
+| `requires_auth`     | Browser authorization required. Challenge saved; use the returned polling command.     | `0`  |
+| `needs_information` | Required fields and their complete schema returned, with supported flag mappings.      | `2`  |
+
+Inspect `status` before issuing authenticated commands: exit `0` can mean
+authorization is still required. The continuation includes a readable command
+and an argument array:
+
+```bash
+amp auth login poll --profile default --json
+```
+
+See `amp auth login poll --help` for polling options.
+
+Profiles follow login's rules: select `--profile`, otherwise the active profile,
+otherwise `default`. Signup requires an explicit `--region`. Successful signup at the same
+endpoint updates its identity. Changing its endpoint requires `--force`.
+Existing credentials and activation
+remain until authentication succeeds and the replacement is saved, including
+when signup returns a pending challenge.
 
 Prefer a Personal Access Token? `amp auth pat --with-token --region <us|eu>` reads a
 PAT from stdin (or a masked prompt at a terminal) and saves it as a profile —

@@ -14,6 +14,23 @@ import {
 import { normalizeWhitespace } from './output';
 
 describe('help', () => {
+  it.each([false, true])(
+    'hides --loginId throughout help (JSON: %s)',
+    (json) => {
+      const log = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+      try {
+        printGlobalHelp();
+        printCommandHelp(['skills'], { json, isTTY: false });
+        printCommandHelp(['skills', 'list'], { json, isTTY: false });
+        printCommandHelp(['skills', 'get'], { json, isTTY: false });
+        expect(log.mock.calls.flat().join('\n')).not.toContain('loginId');
+        expect(JSON.stringify(serializeCatalog())).not.toContain('loginId');
+      } finally {
+        log.mockRestore();
+      }
+    },
+  );
+
   it('discovers both ingestion checks with their canonical usage', () => {
     const log = vi.spyOn(console, 'log').mockImplementation(() => undefined);
     try {
@@ -250,12 +267,14 @@ describe('help', () => {
       'user-properties',
       'flags',
       'charts',
+      'metrics',
       'heatmaps',
       'zoning',
       'destination-types',
       'destinations',
       'skills',
       'agent-analytics',
+      'mcp-analytics',
     ]);
     expect(groups.indexOf('auth')).toBeGreaterThan(groups.indexOf('charts'));
   });

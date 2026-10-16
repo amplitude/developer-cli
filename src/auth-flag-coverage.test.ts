@@ -25,7 +25,11 @@ import { buildCatalog } from './catalog';
  * guard.
  */
 
-const SCANNED_FILES = ['auth-commands.ts', 'credential-resolver.ts'];
+const SCANNED_FILES = [
+  'auth-commands.ts',
+  'auth-signup.ts',
+  'credential-resolver.ts',
+];
 
 const SCANNED_SOURCE = SCANNED_FILES.map((file) =>
   readFileSync(join(__dirname, file), 'utf8'),

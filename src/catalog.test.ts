@@ -143,6 +143,7 @@ describe('buildCatalog — auth/meta commands', () => {
     // so this parity list is deliberately auth/meta-command-scoped.
     const commands = new Set(buildCatalog().map((c) => c.command.join(' ')));
     for (const routed of [
+      'auth signup',
       'auth login',
       'auth login start',
       'auth login poll',
@@ -194,5 +195,26 @@ describe('buildCatalog — auth/meta commands', () => {
 
     expect(get?.description).toContain('data.document');
     expect(get?.description).not.toContain('--save');
+  });
+});
+
+describe('signup catalog', () => {
+  it('declares signup inputs and links both consent documents', () => {
+    const signup = buildCatalog().find(
+      (c) => c.command.join(' ') === 'auth signup',
+    );
+    expect(signup).toBeDefined();
+    expect(signup?.description).toContain('https://amplitude.com/terms');
+    expect(signup?.description).toContain('https://amplitude.com/privacy');
+    expect(signup?.flags).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: 'non-interactive', required: true }),
+        expect.objectContaining({ name: 'email', required: true }),
+        expect.objectContaining({ name: 'accept-tos', required: false }),
+      ]),
+    );
+    expect(signup?.globalFlags).not.toContain('open');
+    expect(signup?.globalFlags).not.toContain('scope');
+    expect(signup?.globalFlags).not.toContain('token');
   });
 });

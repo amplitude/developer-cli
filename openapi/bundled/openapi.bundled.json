@@ -32,6 +32,10 @@
       "description": "Saved findings about agent cost, efficiency, and quality."
     },
     {
+      "name": "MCP Analytics",
+      "description": "Read the active MCP taxonomy, its topics, and its episodes."
+    },
+    {
       "name": "Projects",
       "description": "Project discovery and project-scoped navigation."
     },
@@ -49,7 +53,7 @@
     },
     {
       "name": "Analytics",
-      "description": "Saved chart discovery and query operations."
+      "description": "Saved chart discovery, query, and get-metric read operations."
     },
     {
       "name": "Heatmaps",
@@ -181,6 +185,436 @@
                   "properties": {
                     "data": {
                       "$ref": "#/components/schemas/AgentInsight"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationProblem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimitProblem"
+          },
+          "502": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
+    },
+    "/v1/projects/{project_id}/mcp-analytics/servers": {
+      "get": {
+        "tags": ["MCP Analytics"],
+        "operationId": "listMcpAnalyticsServers",
+        "summary": "List MCP Analytics servers",
+        "description": "Returns the MCP servers configured for the project. A project with no MCP\nservers returns 200 and an empty `data` array.\n",
+        "x-required-scopes": ["analytics:read"],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ProjectId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "MCP servers for the project. The list is complete, so `has_more` is false.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["data", "pagination"],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/McpAnalyticsServer"
+                      }
+                    },
+                    "pagination": {
+                      "$ref": "#/components/schemas/Pagination"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationProblem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimitProblem"
+          },
+          "502": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
+    },
+    "/v1/projects/{project_id}/mcp-analytics/servers/{server_id}/taxonomy": {
+      "get": {
+        "tags": ["MCP Analytics"],
+        "operationId": "getMcpAnalyticsTaxonomy",
+        "summary": "Get the active MCP taxonomy",
+        "description": "Returns the server's active topic tree. The resource id is the server id.\nA visible server with no pinned taxonomy returns 200, null run fields, and\n`nodes: []`. An unknown server returns 404.\n",
+        "x-required-scopes": ["analytics:read"],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ProjectId"
+          },
+          {
+            "name": "server_id",
+            "in": "path",
+            "required": true,
+            "description": "Server id.",
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9]+$"
+            }
+          },
+          {
+            "name": "parent_id",
+            "in": "query",
+            "required": false,
+            "description": "Node selector. Omit it for every node in the active tree. `root`\nreturns root nodes. Any other value is a stable topic id and returns\nthat topic's direct children. An unknown parent returns 404 when a\ntaxonomy is pinned.\n",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Active taxonomy for the server.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["data"],
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/McpAnalyticsTaxonomy"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationProblem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimitProblem"
+          },
+          "502": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
+    },
+    "/v1/projects/{project_id}/mcp-analytics/servers/{server_id}/topics/{topic_id}": {
+      "get": {
+        "tags": ["MCP Analytics"],
+        "operationId": "getMcpAnalyticsTopic",
+        "summary": "Get an MCP taxonomy topic",
+        "description": "Returns one topic and up to eight example episodes. Examples are not a\npage. Use the episode list to page through episodes.\n",
+        "x-required-scopes": ["analytics:read"],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ProjectId"
+          },
+          {
+            "name": "server_id",
+            "in": "path",
+            "required": true,
+            "description": "Server id.",
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9]+$"
+            }
+          },
+          {
+            "name": "topic_id",
+            "in": "path",
+            "required": true,
+            "description": "Stable topic id. `root` is not a topic id.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Topic and its example episodes.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["data"],
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/McpAnalyticsTopicDetail"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationProblem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimitProblem"
+          },
+          "502": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
+    },
+    "/v1/projects/{project_id}/mcp-analytics/servers/{server_id}/topics/{topic_id}/episodes": {
+      "get": {
+        "tags": ["MCP Analytics"],
+        "operationId": "listMcpAnalyticsEpisodes",
+        "summary": "List episodes for an MCP topic",
+        "description": "Returns a page of episode summaries for one topic. The default page size\nis 25 and the maximum is 100. Keep the same filters\nwhen following `next_cursor`.\n",
+        "x-required-scopes": ["analytics:read"],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ProjectId"
+          },
+          {
+            "name": "server_id",
+            "in": "path",
+            "required": true,
+            "description": "Server id.",
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9]+$"
+            }
+          },
+          {
+            "name": "topic_id",
+            "in": "path",
+            "required": true,
+            "description": "Stable topic id.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            }
+          },
+          {
+            "name": "started_after",
+            "in": "query",
+            "required": false,
+            "description": "Include episodes that started at or after this RFC 3339 timestamp.",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "started_before",
+            "in": "query",
+            "required": false,
+            "description": "Include episodes that started before this RFC 3339 timestamp.",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "lane",
+            "in": "query",
+            "required": false,
+            "description": "Exact stored lane.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          },
+          {
+            "name": "client_name",
+            "in": "query",
+            "required": false,
+            "description": "Exact stored client name.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            }
+          },
+          {
+            "name": "auth_type",
+            "in": "query",
+            "required": false,
+            "description": "Exact stored auth type.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          },
+          {
+            "name": "has_error",
+            "in": "query",
+            "required": false,
+            "description": "Whether the episode recorded an error.",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "is_thrash",
+            "in": "query",
+            "required": false,
+            "description": "Whether the episode was classified as thrash.",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Opaque cursor from `pagination.next_cursor` on the previous response.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Number of episodes to return. Defaults to 25, maximum 100.",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 25
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Episode page. Keep the same filters when requesting the next cursor.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["data", "pagination"],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/McpAnalyticsEpisodeSummary"
+                      }
+                    },
+                    "pagination": {
+                      "$ref": "#/components/schemas/Pagination"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationProblem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimitProblem"
+          },
+          "502": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
+    },
+    "/v1/projects/{project_id}/mcp-analytics/episodes/{episode_id}": {
+      "get": {
+        "tags": ["MCP Analytics"],
+        "operationId": "getMcpAnalyticsEpisode",
+        "summary": "Get an MCP episode",
+        "description": "Returns one episode, including its project, server, auth type, and topic\nbreadcrumb. A missing or cross-project episode returns 404.\n",
+        "x-required-scopes": ["analytics:read"],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ProjectId"
+          },
+          {
+            "name": "episode_id",
+            "in": "path",
+            "required": true,
+            "description": "Episode id returned by the topic or episode list.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Episode detail.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["data"],
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/McpAnalyticsEpisode"
                     }
                   }
                 }
@@ -1782,7 +2216,7 @@
         "tags": ["Taxonomy User Properties"],
         "operationId": "createUserProperty",
         "summary": "Create user property",
-        "description": "Creates a user property and adds it to the project's tracking plan.\nSame idempotency semantics as `createEventProperty`.\n",
+        "description": "Creates a user property and adds it to the project's tracking plan.\nSame idempotency semantics as creating an event property.\n",
         "x-required-scopes": ["taxonomy:write"],
         "parameters": [
           {
@@ -1932,7 +2366,7 @@
         "tags": ["Taxonomy User Properties"],
         "operationId": "updateUserProperty",
         "summary": "Update user property metadata",
-        "description": "Updates metadata on a user property. Returns `422 not_in_schema` if the\nproperty is ingested-only. Same patch semantics as `updateEventProperty`\n(field absent = unchanged, `null` = clear, arrays replace).\n\nOnly `display_name`, `description`, `is_hidden`, and `classifications`\nare mutable via PATCH today. Type/shape fields (`data_type`,\n`is_array_type`, `enum_values`, `regex`) are settable only at creation.\n`is_official` is read-only until TMS exposes a write path for it.\n",
+        "description": "Updates metadata on a user property. Returns `422 not_in_schema` if the\nproperty is ingested-only. Same patch semantics as updating an event property\n(field absent = unchanged, `null` = clear, arrays replace).\n\nOnly `display_name`, `description`, `is_hidden`, and `classifications`\nare mutable via PATCH today. Type/shape fields (`data_type`,\n`is_array_type`, `enum_values`, `regex`) are settable only at creation.\n`is_official` is read-only in this API version.\n",
         "x-required-scopes": ["taxonomy:write"],
         "parameters": [
           {
@@ -2260,6 +2694,136 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "/v1/projects/{project_id}/metrics": {
+      "get": {
+        "tags": ["Analytics"],
+        "operationId": "listMetrics",
+        "summary": "List metrics",
+        "description": "Returns saved metrics in the project. Results are paginated with cursor-based\npagination. Full metric definitions are included in list responses.\n\nSortable fields are `updated_at` and `name`; prefix with `-` for descending.\nDefaults to `-updated_at` (most recently updated first).\n",
+        "x-required-scopes": ["analytics:read"],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ProjectId"
+          },
+          {
+            "$ref": "#/components/parameters/Cursor"
+          },
+          {
+            "$ref": "#/components/parameters/Limit"
+          },
+          {
+            "$ref": "#/components/parameters/Query"
+          },
+          {
+            "$ref": "#/components/parameters/MetricTypeFilter"
+          },
+          {
+            "$ref": "#/components/parameters/Sort"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["data", "pagination"],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Metric"
+                      }
+                    },
+                    "pagination": {
+                      "$ref": "#/components/schemas/Pagination"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationProblem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/MetricForbiddenProblem"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimitProblem"
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "503": {
+            "$ref": "#/components/responses/AvailabilityUnavailableProblem"
+          }
+        }
+      }
+    },
+    "/v1/projects/{project_id}/metrics/{metric_id}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ProjectId"
+        },
+        {
+          "$ref": "#/components/parameters/MetricId"
+        }
+      ],
+      "get": {
+        "tags": ["Analytics"],
+        "operationId": "getMetric",
+        "summary": "Get metric",
+        "description": "Returns the full saved metric definition including type-specific params,\nversion, and metadata.\n",
+        "x-required-scopes": ["analytics:read"],
+        "responses": {
+          "200": {
+            "description": "Successful response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["data"],
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/Metric"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationProblem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/MetricForbiddenProblem"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimitProblem"
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "503": {
+            "$ref": "#/components/responses/AvailabilityUnavailableProblem"
           }
         }
       }
@@ -3204,6 +3768,24 @@
         "operationId": "testDestination",
         "summary": "Test an event streaming destination connection",
         "x-required-scopes": ["destinations:write"],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "test_event_payload": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "JSON event to send to the destination. Omit the field to use\nthe partner's example event. An empty string is rejected.\n"
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "Test result.",
@@ -3391,7 +3973,7 @@
         "name": "event_id",
         "in": "path",
         "required": true,
-        "description": "Public event identifier. For the current TMS-backed API, this value is the event type.",
+        "description": "Public event identifier. This value is the event type name (the string used when sending the event to Amplitude).",
         "schema": {
           "type": "string",
           "minLength": 1
@@ -3444,6 +4026,16 @@
         "description": "Filter list results to a specific chart type. Use `unknown` to return charts\nwhose type is not represented by a public API value.\n",
         "schema": {
           "$ref": "#/components/schemas/ChartType"
+        }
+      },
+      "MetricId": {
+        "name": "metric_id",
+        "in": "path",
+        "required": true,
+        "description": "Saved metric identifier.",
+        "schema": {
+          "type": "string",
+          "minLength": 1
         }
       },
       "IncludeDefinition": {
@@ -3515,6 +4107,15 @@
           "minimum": 0
         }
       },
+      "MetricTypeFilter": {
+        "name": "metric_type",
+        "in": "query",
+        "required": false,
+        "description": "Filter list results to a specific metric type.",
+        "schema": {
+          "$ref": "#/components/schemas/MetricType"
+        }
+      },
       "KindFilter": {
         "name": "kind",
         "in": "query",
@@ -3559,6 +4160,58 @@
               "status": 429,
               "detail": "Too many requests.",
               "error_code": "rate_limit_exceeded",
+              "retryable": true
+            }
+          }
+        }
+      },
+      "MetricForbiddenProblem": {
+        "description": "The caller cannot use this operation. `operation_not_enabled` means the\noperation is not enabled for the caller's organization;\n`insufficient_scope` means the token lacks `analytics:read`.\n",
+        "content": {
+          "application/problem+json": {
+            "schema": {
+              "$ref": "#/components/schemas/ProblemDetails"
+            },
+            "examples": {
+              "operationNotEnabled": {
+                "summary": "Endpoint unavailable",
+                "value": {
+                  "type": "https://developer-api.amplitude.com/problems/operation-not-enabled",
+                  "title": "Endpoint unavailable",
+                  "status": 403,
+                  "detail": "This endpoint is unavailable for your organization.",
+                  "error_code": "operation_not_enabled",
+                  "retryable": false
+                }
+              },
+              "insufficientScope": {
+                "summary": "Missing required scope",
+                "value": {
+                  "type": "https://developer-api.amplitude.com/problems/forbidden",
+                  "title": "Insufficient scope",
+                  "status": 403,
+                  "detail": "Token missing required scopes.",
+                  "error_code": "insufficient_scope",
+                  "retryable": false
+                }
+              }
+            }
+          }
+        }
+      },
+      "AvailabilityUnavailableProblem": {
+        "description": "Endpoint availability could not be determined. Retry the request.",
+        "content": {
+          "application/problem+json": {
+            "schema": {
+              "$ref": "#/components/schemas/ProblemDetails"
+            },
+            "example": {
+              "type": "https://developer-api.amplitude.com/problems/operation-availability-unavailable",
+              "title": "Operation availability unavailable",
+              "status": 503,
+              "detail": "Operation availability could not be determined. Retry the request.",
+              "error_code": "operation_availability_unavailable",
               "retryable": true
             }
           }
@@ -3634,24 +4287,6 @@
               "detail": "The project is missing required events: [Amplitude] Element Clicked.",
               "error_code": "session_replay_not_configured",
               "retryable": false
-            }
-          }
-        }
-      },
-      "AvailabilityUnavailableProblem": {
-        "description": "Endpoint availability could not be determined. Retry the request.",
-        "content": {
-          "application/problem+json": {
-            "schema": {
-              "$ref": "#/components/schemas/ProblemDetails"
-            },
-            "example": {
-              "type": "https://developer-api.amplitude.com/problems/operation-availability-unavailable",
-              "title": "Operation availability unavailable",
-              "status": 503,
-              "detail": "Operation availability could not be determined. Retry the request.",
-              "error_code": "operation_availability_unavailable",
-              "retryable": true
             }
           }
         }
@@ -4327,6 +4962,146 @@
           }
         },
         "additionalProperties": false
+      },
+      "MetricType": {
+        "type": "string",
+        "description": "Public metric type discriminator (`snake_case`). See the `enum` for supported\nvalues.\n\nUnsupported or unrecognized metric types are surfaced as `unknown`. Clients\nshould treat `unknown` as \"a metric type this API version does not model yet\".\n",
+        "enum": [
+          "uniques",
+          "totals",
+          "formula",
+          "prop_sum",
+          "prop_avg",
+          "retention",
+          "conversion",
+          "unknown"
+        ]
+      },
+      "Metric": {
+        "type": "object",
+        "required": [
+          "id",
+          "object",
+          "project_id",
+          "name",
+          "metric_type",
+          "definition",
+          "version",
+          "created_at",
+          "updated_at",
+          "url",
+          "archived"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Stable metric identifier."
+          },
+          "object": {
+            "type": "string",
+            "const": "metric",
+            "description": "Resource-type discriminator. Always `metric`."
+          },
+          "project_id": {
+            "type": "string",
+            "pattern": "^[0-9]+$"
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": ["string", "null"]
+          },
+          "metric_type": {
+            "$ref": "#/components/schemas/MetricType"
+          },
+          "definition": {
+            "$ref": "#/components/schemas/MetricDefinition"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Optimistic concurrency version. Required on PATCH; incremented on each\nsuccessful update.\n"
+          },
+          "created_at": {
+            "type": ["string", "null"],
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": ["string", "null"],
+            "format": "date-time"
+          },
+          "created_by": {
+            "type": ["string", "null"],
+            "description": "Creator email or login identifier when available."
+          },
+          "url": {
+            "type": "string",
+            "format": "uri",
+            "description": "Deep link to the metric in the Amplitude UI."
+          },
+          "archived": {
+            "type": "boolean",
+            "description": "Whether the metric is archived (soft-deleted)."
+          },
+          "is_official": {
+            "type": "boolean",
+            "description": "Whether the metric is marked official."
+          },
+          "is_restricted": {
+            "type": "boolean",
+            "description": "Whether the metric is restricted."
+          },
+          "key_properties": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MetricKeyProperty"
+            },
+            "description": "Key properties associated with the metric definition."
+          }
+        }
+      },
+      "MetricDefinition": {
+        "description": "Type-specific metric definition. The `metric_type` discriminator selects\nthe required fields. Aligns with MCP `shared-schema` capabilities.\n",
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/MetricDefinitionUniques"
+          },
+          {
+            "$ref": "#/components/schemas/MetricDefinitionTotals"
+          },
+          {
+            "$ref": "#/components/schemas/MetricDefinitionFormula"
+          },
+          {
+            "$ref": "#/components/schemas/MetricDefinitionPropSum"
+          },
+          {
+            "$ref": "#/components/schemas/MetricDefinitionPropAvg"
+          },
+          {
+            "$ref": "#/components/schemas/MetricDefinitionRetention"
+          },
+          {
+            "$ref": "#/components/schemas/MetricDefinitionConversion"
+          },
+          {
+            "$ref": "#/components/schemas/MetricDefinitionUnknown"
+          }
+        ],
+        "discriminator": {
+          "propertyName": "metric_type",
+          "mapping": {
+            "uniques": "#/components/schemas/MetricDefinitionUniques",
+            "totals": "#/components/schemas/MetricDefinitionTotals",
+            "formula": "#/components/schemas/MetricDefinitionFormula",
+            "prop_sum": "#/components/schemas/MetricDefinitionPropSum",
+            "prop_avg": "#/components/schemas/MetricDefinitionPropAvg",
+            "retention": "#/components/schemas/MetricDefinitionRetention",
+            "conversion": "#/components/schemas/MetricDefinitionConversion",
+            "unknown": "#/components/schemas/MetricDefinitionUnknown"
+          }
+        }
       },
       "ClickMapQueryRequest": {
         "type": "object",
@@ -5294,6 +6069,250 @@
           }
         }
       },
+      "McpAnalyticsServer": {
+        "type": "object",
+        "required": ["id", "object", "project_id", "name"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Server id, returned as a string."
+          },
+          "object": {
+            "type": "string",
+            "const": "mcp_analytics_server"
+          },
+          "project_id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        }
+      },
+      "McpAnalyticsTopic": {
+        "type": "object",
+        "required": [
+          "id",
+          "object",
+          "parent_id",
+          "depth",
+          "name",
+          "description",
+          "episode_count",
+          "share",
+          "hard_error_rate",
+          "thrashing_rate",
+          "mean_calls",
+          "neighbor_ids"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Stable topic id. `root` is reserved and is never a topic id."
+          },
+          "object": {
+            "type": "string",
+            "const": "mcp_analytics_topic"
+          },
+          "parent_id": {
+            "type": ["string", "null"]
+          },
+          "depth": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": ["string", "null"]
+          },
+          "episode_count": {
+            "type": ["number", "null"]
+          },
+          "share": {
+            "type": ["number", "null"]
+          },
+          "hard_error_rate": {
+            "type": ["number", "null"]
+          },
+          "thrashing_rate": {
+            "type": ["number", "null"]
+          },
+          "mean_calls": {
+            "type": ["number", "null"]
+          },
+          "neighbor_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "McpAnalyticsTaxonomy": {
+        "type": "object",
+        "required": [
+          "id",
+          "object",
+          "project_id",
+          "server_id",
+          "run_id",
+          "taxonomy_version",
+          "activated_at",
+          "nodes"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Server id. It stays stable when a new run is pinned and is present when nothing is pinned."
+          },
+          "object": {
+            "type": "string",
+            "const": "mcp_analytics_taxonomy"
+          },
+          "project_id": {
+            "type": "string"
+          },
+          "server_id": {
+            "type": "string"
+          },
+          "run_id": {
+            "type": ["string", "null"]
+          },
+          "taxonomy_version": {
+            "type": ["string", "null"]
+          },
+          "activated_at": {
+            "type": ["string", "null"],
+            "format": "date-time"
+          },
+          "nodes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/McpAnalyticsTopic"
+            }
+          }
+        }
+      },
+      "McpAnalyticsEpisodeSummary": {
+        "type": "object",
+        "required": [
+          "id",
+          "object",
+          "started_at",
+          "ended_at",
+          "call_count",
+          "error_count",
+          "is_thrash",
+          "client_name",
+          "lane",
+          "confidence"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "object": {
+            "type": "string",
+            "const": "mcp_analytics_episode"
+          },
+          "started_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "ended_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "call_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "error_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "is_thrash": {
+            "type": "boolean"
+          },
+          "client_name": {
+            "type": "string"
+          },
+          "lane": {
+            "type": "string"
+          },
+          "confidence": {
+            "type": ["number", "null"]
+          }
+        }
+      },
+      "McpAnalyticsTopicDetail": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/McpAnalyticsTopic"
+          },
+          {
+            "type": "object",
+            "required": ["examples"],
+            "properties": {
+              "examples": {
+                "type": "array",
+                "maxItems": 8,
+                "description": "At most eight episode summaries. This is not a page and has no cursor.",
+                "items": {
+                  "$ref": "#/components/schemas/McpAnalyticsEpisodeSummary"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "McpAnalyticsBreadcrumb": {
+        "type": "object",
+        "required": ["id", "depth", "name"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Stable topic id, ordered from the root."
+          },
+          "depth": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "name": {
+            "type": "string"
+          }
+        }
+      },
+      "McpAnalyticsEpisode": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/McpAnalyticsEpisodeSummary"
+          },
+          {
+            "type": "object",
+            "required": ["project_id", "server_id", "auth_type", "breadcrumb"],
+            "properties": {
+              "project_id": {
+                "type": "string"
+              },
+              "server_id": {
+                "type": "string"
+              },
+              "auth_type": {
+                "type": "string"
+              },
+              "breadcrumb": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/McpAnalyticsBreadcrumb"
+                }
+              }
+            }
+          }
+        ]
+      },
       "SignupDocumentAcceptance": {
         "type": "object",
         "required": ["url", "accepted"],
@@ -5614,6 +6633,324 @@
           "reason": {
             "type": "string",
             "description": "Human-readable explanation of truncation."
+          }
+        }
+      },
+      "PropertyType": {
+        "type": "string",
+        "description": "Property namespace for filters, group-bys, and aggregations.",
+        "enum": ["event", "user", "group"]
+      },
+      "MetricPropertyFilter": {
+        "type": "object",
+        "required": ["property_key", "operator"],
+        "properties": {
+          "property_key": {
+            "type": "string",
+            "description": "Property key to filter on."
+          },
+          "operator": {
+            "type": "string",
+            "description": "Filter operator (matches Amplitude property operators)."
+          },
+          "values": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "default": [],
+            "description": "Values to match against."
+          },
+          "property_type": {
+            "$ref": "#/components/schemas/PropertyType"
+          },
+          "group_type": {
+            "type": "string",
+            "default": "",
+            "description": "Group type for group properties. Empty string for non-group."
+          }
+        },
+        "additionalProperties": false
+      },
+      "MetricGroupBy": {
+        "type": "object",
+        "required": ["property_type", "value"],
+        "properties": {
+          "property_type": {
+            "$ref": "#/components/schemas/PropertyType"
+          },
+          "value": {
+            "type": "string",
+            "description": "Property name to group by."
+          },
+          "group_type": {
+            "type": "string",
+            "default": "",
+            "description": "Group type for group properties. Empty string for non-group."
+          }
+        },
+        "additionalProperties": false
+      },
+      "MetricEvent": {
+        "type": "object",
+        "required": ["event_type"],
+        "properties": {
+          "event_type": {
+            "type": "string",
+            "description": "Event name (e.g. `Page View`, `_active`)."
+          },
+          "filters": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MetricPropertyFilter"
+            },
+            "default": []
+          },
+          "group_by": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MetricGroupBy"
+            },
+            "description": "Properties to group by. Required for formula metrics that use property\naggregation functions like `PROPSUM(A)` or `PROPAVG(A)`.\n"
+          }
+        },
+        "additionalProperties": false
+      },
+      "MetricDefinitionUniques": {
+        "type": "object",
+        "required": ["metric_type", "event"],
+        "properties": {
+          "metric_type": {
+            "type": "string",
+            "const": "uniques"
+          },
+          "event": {
+            "$ref": "#/components/schemas/MetricEvent"
+          },
+          "count_group": {
+            "type": "string",
+            "default": "User",
+            "description": "What to count. `User` for unique users, `Event` for event totals."
+          }
+        },
+        "additionalProperties": false
+      },
+      "MetricDefinitionTotals": {
+        "type": "object",
+        "required": ["metric_type", "event"],
+        "properties": {
+          "metric_type": {
+            "type": "string",
+            "const": "totals"
+          },
+          "event": {
+            "$ref": "#/components/schemas/MetricEvent"
+          },
+          "count_group": {
+            "type": "string",
+            "default": "User"
+          }
+        },
+        "additionalProperties": false
+      },
+      "MetricDefinitionFormula": {
+        "type": "object",
+        "required": ["metric_type", "events", "formula"],
+        "properties": {
+          "metric_type": {
+            "type": "string",
+            "const": "formula"
+          },
+          "events": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 6,
+            "items": {
+              "$ref": "#/components/schemas/MetricEvent"
+            },
+            "description": "Event definitions referenced by letter (A, B, C...) in the formula string.\n"
+          },
+          "formula": {
+            "type": "string",
+            "description": "Formula string. Reference events by letter. Functions include\n`UNIQUES(A)`, `TOTALS(A)`, `PROPSUM(A)`, `PROPAVG(A)`, `PROPMIN(A)`,\n`PROPMAX(A)`, `PROPCOUNT(A)`, `PROPCOUNTAVG(A)`, `REVENUETOTAL(A)`.\n"
+          }
+        },
+        "additionalProperties": false
+      },
+      "MetricAggregationProperty": {
+        "type": "object",
+        "required": ["property_type", "value"],
+        "properties": {
+          "property_type": {
+            "$ref": "#/components/schemas/PropertyType"
+          },
+          "value": {
+            "type": "string",
+            "description": "Numeric property name to aggregate."
+          },
+          "group_type": {
+            "type": "string",
+            "default": ""
+          }
+        },
+        "additionalProperties": false
+      },
+      "MetricDefinitionPropSum": {
+        "type": "object",
+        "required": ["metric_type", "event", "aggregation_property"],
+        "properties": {
+          "metric_type": {
+            "type": "string",
+            "const": "prop_sum"
+          },
+          "event": {
+            "$ref": "#/components/schemas/MetricEvent"
+          },
+          "aggregation_property": {
+            "$ref": "#/components/schemas/MetricAggregationProperty"
+          }
+        },
+        "additionalProperties": false
+      },
+      "MetricDefinitionPropAvg": {
+        "type": "object",
+        "required": ["metric_type", "event", "aggregation_property"],
+        "properties": {
+          "metric_type": {
+            "type": "string",
+            "const": "prop_avg"
+          },
+          "event": {
+            "$ref": "#/components/schemas/MetricEvent"
+          },
+          "aggregation_property": {
+            "$ref": "#/components/schemas/MetricAggregationProperty"
+          }
+        },
+        "additionalProperties": false
+      },
+      "MetricDefinitionRetention": {
+        "type": "object",
+        "required": [
+          "metric_type",
+          "start_event",
+          "return_event",
+          "return_on",
+          "return_on_interval"
+        ],
+        "properties": {
+          "metric_type": {
+            "type": "string",
+            "const": "retention"
+          },
+          "start_event": {
+            "$ref": "#/components/schemas/MetricEvent"
+          },
+          "return_event": {
+            "$ref": "#/components/schemas/MetricEvent"
+          },
+          "return_on": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 30,
+            "description": "Number of intervals to return on."
+          },
+          "return_on_interval": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 30,
+            "description": "Interval length in days. `1` for daily, `7` for weekly, `30` for monthly.\n"
+          }
+        },
+        "additionalProperties": false
+      },
+      "FunnelMode": {
+        "type": "string",
+        "enum": ["ordered", "unordered", "sequential"]
+      },
+      "FunnelPathsToCollect": {
+        "type": "string",
+        "enum": ["uniques", "totals"],
+        "description": "Whether the funnel measures unique users completing the path or total\nconversion path counts.\n"
+      },
+      "FunnelComputePropertyFunction": {
+        "type": "string",
+        "enum": ["sum", "avg"]
+      },
+      "MetricDefinitionConversion": {
+        "type": "object",
+        "required": [
+          "metric_type",
+          "funnel_events",
+          "funnel_mode",
+          "conversion_seconds",
+          "funnel_paths_to_collect"
+        ],
+        "properties": {
+          "metric_type": {
+            "type": "string",
+            "const": "conversion"
+          },
+          "funnel_events": {
+            "type": "array",
+            "minItems": 2,
+            "maxItems": 12,
+            "items": {
+              "$ref": "#/components/schemas/MetricEvent"
+            },
+            "description": "Ordered funnel steps (minimum 2 events)."
+          },
+          "funnel_mode": {
+            "$ref": "#/components/schemas/FunnelMode"
+          },
+          "conversion_seconds": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Maximum time window to complete the funnel, in seconds\n(e.g. `86400` = 1 day, `604800` = 7 days).\n"
+          },
+          "funnel_paths_to_collect": {
+            "$ref": "#/components/schemas/FunnelPathsToCollect"
+          },
+          "funnel_constant_properties": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MetricAggregationProperty"
+            },
+            "description": "Properties held constant across funnel steps."
+          },
+          "funnel_compute_property": {
+            "$ref": "#/components/schemas/MetricAggregationProperty"
+          },
+          "funnel_compute_property_function": {
+            "$ref": "#/components/schemas/FunnelComputePropertyFunction"
+          }
+        },
+        "additionalProperties": false
+      },
+      "MetricDefinitionUnknown": {
+        "type": "object",
+        "required": ["metric_type"],
+        "properties": {
+          "metric_type": {
+            "type": "string",
+            "const": "unknown"
+          }
+        },
+        "additionalProperties": false,
+        "description": "Placeholder definition for metric types this API version does not model.\nNo type-specific fields are returned.\n"
+      },
+      "MetricKeyProperty": {
+        "type": "object",
+        "required": ["property_type", "value"],
+        "properties": {
+          "property_type": {
+            "type": "string"
+          },
+          "value": {
+            "type": "string"
+          },
+          "group_type": {
+            "type": "string"
           }
         }
       },
