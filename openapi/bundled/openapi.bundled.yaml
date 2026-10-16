@@ -199,7 +199,7 @@ paths:
         - name: server_id
           in: path
           required: true
-          description: Integer Langley server id.
+          description: Server id.
           schema:
             type: string
             pattern: ^[0-9]+$
@@ -255,7 +255,7 @@ paths:
         - name: server_id
           in: path
           required: true
-          description: Integer Langley server id.
+          description: Server id.
           schema:
             type: string
             pattern: ^[0-9]+$
@@ -298,8 +298,8 @@ paths:
       operationId: listMcpAnalyticsEpisodes
       summary: List episodes for an MCP topic
       description: |
-        Returns a page of episode summaries for one topic. The page size follows
-        Langley: the default is 25 and the maximum is 100. Keep the same filters
+        Returns a page of episode summaries for one topic. The default page size
+        is 25 and the maximum is 100. Keep the same filters
         when following `next_cursor`.
       x-required-scopes:
         - analytics:read
@@ -308,7 +308,7 @@ paths:
         - name: server_id
           in: path
           required: true
-          description: Integer Langley server id.
+          description: Server id.
           schema:
             type: string
             pattern: ^[0-9]+$
@@ -4774,7 +4774,7 @@ components:
       properties:
         id:
           type: string
-          description: Integer Langley server id, returned as a string.
+          description: Server id, returned as a string.
         object:
           type: string
           const: mcp_analytics_server
@@ -4931,7 +4931,7 @@ components:
             examples:
               type: array
               maxItems: 8
-              description: At most eight episode summaries selected by Langley. This is not a page and has no cursor.
+              description: At most eight episode summaries. This is not a page and has no cursor.
               items:
                 $ref: '#/components/schemas/McpAnalyticsEpisodeSummary'
     McpAnalyticsBreadcrumb:

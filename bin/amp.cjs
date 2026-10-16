@@ -1,14 +1,12 @@
 #!/usr/bin/env node
 
-// Keep the executable available before the workspace package is built.
+// Keep the executable available before the package is built.
 let entrypoint;
 try {
   entrypoint = require.resolve('../dist/cli.js');
 } catch (error) {
   if (error.code !== 'MODULE_NOT_FOUND') throw error;
-  console.error(
-    'amp has not been built. Run pnpm build in the developer-cli package.',
-  );
+  console.error('amp has not been built. Run pnpm build.');
   process.exit(1);
 }
 
