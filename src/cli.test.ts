@@ -2,9 +2,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { parseArgs } from './args';
 import * as authCommands from './auth-commands';
+import * as signupCommands from './auth-signup';
 import { isHelpRequested, isVersionRequested, main } from './cli';
+import { CliError, usageError } from './cli-error';
 import * as credentialStore from './credential-store';
 import { formatVersion } from './help';
+
+vi.mock('./auth-signup', () => ({ runAuthSignup: vi.fn() }));
 
 vi.mock('./auth-commands', async () => {
   const actual =
@@ -71,6 +75,11 @@ describe('main routing', () => {
   }
 
   beforeEach(() => {
+    vi.mocked(signupCommands.runAuthSignup).mockReset();
+    vi.mocked(signupCommands.runAuthSignup).mockResolvedValue({
+      ok: false,
+      error: usageError('Signup requires --non-interactive.'),
+    });
     logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
     errSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     stdoutIsTTY = Object.getOwnPropertyDescriptor(process.stdout, 'isTTY');
@@ -102,6 +111,175 @@ describe('main routing', () => {
     }
     process.exitCode = undefined;
     vi.unstubAllGlobals();
+  });
+
+  it('requires explicit signup mode through the handler', async () => {
+    await runWith(['auth', 'signup']);
+    expect(process.exitCode).toBe(2);
+    expect(errSpy).toHaveBeenCalledWith(
+      expect.stringContaining('--non-interactive'),
+    );
+    expect(logSpy).not.toHaveBeenCalled();
+    expect(signupCommands.runAuthSignup).toHaveBeenCalledWith({});
+  });
+
+  it.each([
+    ['email', 'new@example.com'],
+    ['full-name', 'Alex'],
+    ['accept-tos', 'true'],
+    ['non-interactive', 'true'],
+  ])('rejects signup-only --%s on login', async (name, value) => {
+    await runWith(['auth', 'login', `--${name}`, value]);
+    expect(process.exitCode).toBe(2);
+    expect(authCommands.runAuthLoginStart).not.toHaveBeenCalled();
+    expect(errSpy).toHaveBeenCalledWith(expect.stringContaining(`--${name}`));
+  });
+
+  it.each([
+    'scope',
+    'open',
+    'token',
+    'timeout',
+    'flow',
+    'with-token',
+    'dry-run',
+    'body-json',
+  ])(
+    'rejects unsupported --%s on signup instead of ignoring it',
+    async (name) => {
+      await runWith(['auth', 'signup', `--${name}=unused`]);
+      expect(process.exitCode).toBe(2);
+      expect(signupCommands.runAuthSignup).not.toHaveBeenCalled();
+      expect(errSpy).toHaveBeenCalledWith(expect.stringContaining(`--${name}`));
+    },
+  );
+
+  it('rejects signup-only flags on a generated API command', async () => {
+    await runWith(['projects', 'list', '--accept-tos']);
+    expect(process.exitCode).toBe(2);
+    expect(errSpy).toHaveBeenCalledWith(
+      expect.stringContaining('--accept-tos'),
+    );
+  });
+
+  it('routes signup and renders missing information on stdout with exit 2', async () => {
+    vi.mocked(signupCommands.runAuthSignup).mockResolvedValue({
+      ok: true,
+      exitCode: 2,
+      output: {
+        status: 'needs_information',
+        message: 'More information required.',
+        data: {
+          schema: { required: ['future_field'], 'x-extra': { nested: true } },
+          supported_flags: {},
+        },
+      },
+    });
+    await runWith(['auth', 'signup', '--non-interactive', '--region', 'us']);
+    expect(process.exitCode).toBe(2);
+    expect(errSpy).not.toHaveBeenCalled();
+    expect(logSpy).toHaveBeenCalledTimes(1);
+    const output = JSON.parse(String(logSpy.mock.calls[0][0]));
+    expect(output.status).toBe('needs_information');
+    expect(output.data.schema['x-extra']).toEqual({ nested: true });
+    expect(String(logSpy.mock.calls[0][0])).not.toContain('\n');
+  });
+
+  it('returns requires_auth on stdout with exit zero', async () => {
+    vi.mocked(signupCommands.runAuthSignup).mockResolvedValue({
+      ok: true,
+      exitCode: 0,
+      output: {
+        status: 'requires_auth',
+        message: 'Authorization required.',
+        data: {
+          profile: 'default',
+          base_url: 'https://developer-api.amplitude.com',
+          user_code: 'ABCD',
+          verification_uri: 'https://auth.example.com/device',
+          expires_at: '2026-09-30T12:10:00.000Z',
+          expires_in_seconds: 600,
+          replaced_pending: false,
+          continuation: {
+            command: "amp auth login poll --profile 'default' --json",
+            argv: [
+              'amp',
+              'auth',
+              'login',
+              'poll',
+              '--profile',
+              'default',
+              '--json',
+            ],
+          },
+        },
+      },
+    });
+    await runWith(['auth', 'signup', '--non-interactive']);
+    expect(process.exitCode).toBe(0);
+    expect(errSpy).not.toHaveBeenCalled();
+    expect(JSON.parse(String(logSpy.mock.calls[0][0])).status).toBe(
+      'requires_auth',
+    );
+  });
+
+  it('prints human signup data at a terminal and honors --json', async () => {
+    Object.defineProperty(process.stdout, 'isTTY', {
+      value: true,
+      configurable: true,
+    });
+    vi.mocked(signupCommands.runAuthSignup).mockResolvedValue({
+      ok: true,
+      exitCode: 0,
+      output: {
+        status: 'authorized',
+        message: 'Authenticated.',
+        data: {
+          profile: 'default',
+          base_url: 'https://developer-api.amplitude.com',
+          terms_acceptance: {
+            terms_of_service: 'https://amplitude.com/terms',
+            privacy_policy: 'https://amplitude.com/privacy',
+          },
+        },
+      },
+    });
+    await runWith(['auth', 'signup', '--non-interactive']);
+    expect(logSpy.mock.calls[0][0]).toMatch(/^Authenticated\./);
+    await runWith(['auth', 'signup', '--non-interactive', '--json']);
+    expect(JSON.parse(String(logSpy.mock.calls[1][0])).status).toBe(
+      'authorized',
+    );
+    expect(process.exitCode).toBe(0);
+  });
+
+  it('renders public signup errors only on stderr through the shared formatter', async () => {
+    vi.mocked(signupCommands.runAuthSignup).mockResolvedValue({
+      ok: false,
+      error: new CliError({
+        message: 'Update this client.',
+        errorCode: 'terms_documents_outdated',
+        httpStatus: 400,
+        exitCode: 2,
+      }),
+    });
+    await runWith(['auth', 'signup', '--non-interactive', '--json']);
+    expect(process.exitCode).toBe(2);
+    expect(logSpy).not.toHaveBeenCalled();
+    const output = JSON.parse(String(errSpy.mock.calls[0][0]));
+    expect(output.message).toBe('Update this client.');
+    expect(output.error.error_code).toBe('terms_documents_outdated');
+    expect(output.error.hint).toBeUndefined();
+  });
+
+  it('renders signup help without mode selection or invoking signup', async () => {
+    await runWith(['auth', 'signup', '--help']);
+    const output = JSON.parse(String(logSpy.mock.calls[0][0]));
+    expect(output.command).toBe('auth signup');
+    expect(JSON.stringify(output)).toContain('https://amplitude.com/terms');
+    expect(JSON.stringify(output)).toContain('https://amplitude.com/privacy');
+    expect(signupCommands.runAuthSignup).not.toHaveBeenCalled();
+    expect(errSpy).not.toHaveBeenCalled();
   });
 
   it('prints the version for both `version` and --version', async () => {

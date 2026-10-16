@@ -1,8 +1,45 @@
 import { describe, expect, it } from 'vitest';
 
-import { authGlobalOptionAliases, isFlagEnabled, parseArgs } from './args';
+import {
+  apiGlobalOptionAliases,
+  authGlobalOptionAliases,
+  isFlagEnabled,
+  parseArgs,
+} from './args';
 
 describe('parseArgs', () => {
+  it.each([
+    ['skills', 'list', '--loginId', 'Person+cli@example.com'],
+    ['skills', 'get', '--loginId=Account-123', 'integrating-amplitude'],
+  ])('preserves the loginId value and command positionals: %s', (...argv) => {
+    const parsed = parseArgs(argv);
+    expect(parsed.flags.loginId).toBe(
+      argv[1] === 'list' ? 'Person+cli@example.com' : 'Account-123',
+    );
+    expect(parsed.command).toEqual(
+      argv[1] === 'list'
+        ? ['skills', 'list']
+        : ['skills', 'get', 'integrating-amplitude'],
+    );
+  });
+
+  it('requires a value for --loginId', () => {
+    expect(() => parseArgs(['skills', 'list', '--loginId'])).toThrow(
+      'argument missing',
+    );
+  });
+
+  it('keeps --loginId out of API and auth command globals', () => {
+    expect(apiGlobalOptionAliases()).not.toContain('loginId');
+    expect(authGlobalOptionAliases()).not.toContain('loginId');
+  });
+
+  it('does not suggest --loginId for a typo', () => {
+    expect(() => parseArgs(['skills', 'list', '--loginID', 'x'])).toThrow(
+      /^unknown option '--loginID'$/,
+    );
+  });
+
   it('separates command tokens from flags', () => {
     const { command, flags } = parseArgs(['flags', 'list', '--project', '123']);
     expect(command).toEqual(['flags', 'list']);
@@ -171,5 +208,51 @@ describe('isFlagEnabled', () => {
     expect(isFlagEnabled('false')).toBe(false);
     expect(isFlagEnabled('')).toBe(false);
     expect(isFlagEnabled(undefined)).toBe(false);
+  });
+});
+
+describe('signup argument parsing', () => {
+  it('parses signup value options and explicit consent/mode switches', () => {
+    expect(
+      parseArgs([
+        'auth',
+        'signup',
+        '--non-interactive',
+        '--email',
+        'new@example.com',
+        '--full-name',
+        'Alex Morgan',
+        '--accept-tos',
+        '--region',
+        'us',
+        '--json',
+      ]),
+    ).toMatchObject({
+      command: ['auth', 'signup'],
+      flags: {
+        'non-interactive': true,
+        email: 'new@example.com',
+        'full-name': 'Alex Morgan',
+        'accept-tos': true,
+        region: 'us',
+        json: true,
+      },
+    });
+  });
+  it.each(['email', 'full-name'])('requires a value for --%s', (name) => {
+    expect(() => parseArgs(['auth', 'signup', `--${name}`])).toThrow(
+      'argument missing',
+    );
+  });
+  it('preserves explicit false mode and consent values', () => {
+    expect(
+      parseArgs([
+        'auth',
+        'signup',
+        '--non-interactive=false',
+        '--accept-tos',
+        'false',
+      ]).flags,
+    ).toMatchObject({ 'non-interactive': 'false', 'accept-tos': 'false' });
   });
 });

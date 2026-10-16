@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { buildCatalog } from './catalog';
-import { listProductSurfaces, printCommandHelp } from './help';
+import { authHelpText, listProductSurfaces, printCommandHelp } from './help';
 
 function capture(fn: () => void): string {
   const log = vi.spyOn(console, 'log').mockImplementation(() => undefined);
@@ -65,5 +65,17 @@ describe('help drift guard', () => {
       const out = capture(() => printCommandHelp(entry.command));
       expect(out).toContain(entry.command.join(' '));
     }
+  });
+});
+
+describe('signup help discovery', () => {
+  it('renders boolean signup arguments as switches in usage', () => {
+    const text = capture(() => printCommandHelp(['auth', 'signup']));
+    expect(text).toContain('--non-interactive');
+    expect(text).not.toContain('--non-interactive <non-interactive>');
+    expect(text).not.toContain('--accept-tos <accept-tos>');
+  });
+  it('appears in the human auth overview', () => {
+    expect(authHelpText()).toContain('amp auth signup');
   });
 });

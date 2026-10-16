@@ -5,6 +5,7 @@ import {
   apiGlobalOptionAliases,
   flagValue,
   hasFlag,
+  hiddenGlobalOptionAliases,
   isMissingRequiredValue,
   nearestAlias,
   stringFlag,
@@ -211,7 +212,11 @@ export function assertFlagsAllowed(
       continue;
     }
 
-    const suggestion = nearestAlias(key, allowed);
+    const hiddenAliases = hiddenGlobalOptionAliases();
+    const suggestion = nearestAlias(
+      key,
+      [...allowed].filter((alias) => !hiddenAliases.has(alias)),
+    );
     const hint = suggestion ? ` Did you mean --${suggestion}?` : '';
     throw usageError(`Unknown flag --${key} for \`${commandLabel}\`.${hint}`);
   }

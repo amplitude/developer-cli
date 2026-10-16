@@ -186,6 +186,7 @@ export function printGlobalHelp(): void {
   console.log(`amp ${CLI_VERSION} — Amplitude Developer API CLI
 
 Usage:
+  amp auth signup --non-interactive   Sign up for an Amplitude account
   amp auth login --region <us|eu>      Authenticate and save a profile
   amp auth <status|list|use|token>     Inspect, switch, or print credentials
   amp logout [--profile <name>|--all]  Remove a profile (or all)
@@ -227,6 +228,7 @@ export function authHelpText(): string {
     'Authenticate and manage saved credential profiles.',
     '',
     'Usage:',
+    '  amp auth signup --non-interactive          Sign up for an Amplitude account',
     '  amp auth login --region <us|eu>             Device flow → save + activate a profile',
     '  amp auth login                              Re-authenticate the active profile',
     '  amp auth pat --with-token --region <us|eu>  Save a supplied PAT (stdin/prompt)',
@@ -243,8 +245,8 @@ export function authHelpText(): string {
     '  TOKEN=$(amp auth token)',
     '',
     'Creating a profile is force-explicit: --region <us|eu> is required;',
-    '--profile <name> is optional — omit it and the CLI targets the',
-    'implicit `default` profile, created on first use.',
+    '--profile <name> is optional — omit it and the CLI targets the active',
+    'profile, or the implicit `default` profile when none is active.',
     'Re-authenticating an existing profile reuses the target recorded on it, so a',
     'bare `amp auth login` refreshes the active profile in place. Login activates',
     'the profile it mints and prints the switch; the active identity never changes',
@@ -326,11 +328,13 @@ function printCatalogCommandHelp(entry: CatalogCommand): void {
     lines.push('', normalizeWhitespace(entry.description));
   }
   lines.push('', 'Usage:');
-  const usageFlags = entry.flags.map((f) =>
-    f.required
-      ? `--${f.aliases[0]} <${f.name}>`
-      : `[--${f.aliases[0]} <${f.name}>]`,
-  );
+  const usageFlags = entry.flags.map((flag) => {
+    const argument =
+      flag.type === 'boolean'
+        ? `--${flag.aliases[0]}`
+        : `--${flag.aliases[0]} <${flag.name}>`;
+    return flag.required ? argument : `[${argument}]`;
+  });
   const requiredUsageFlags = (entry.requiredUsageGlobalFlags ?? []).map(
     (flag) => `--${flag.alias} <${flag.valueName}>`,
   );

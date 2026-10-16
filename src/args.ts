@@ -3,6 +3,7 @@ import { distance } from 'fastest-levenshtein';
 
 import { usageError } from './cli-error';
 import { CLI_OPERATIONS, type CliOperation } from './generated/cli-manifest';
+import { LOGIN_ID_FLAG } from './login-id';
 
 export type FlagValue = boolean | string;
 
@@ -68,6 +69,13 @@ const GLOBAL_OPTIONS = defineGlobalOptions([
   {
     aliases: ['save'],
     valueRequirement: 'optional',
+    onApiCommands: false,
+    onAuthCommands: false,
+    visible: false,
+  },
+  {
+    aliases: [LOGIN_ID_FLAG],
+    valueRequirement: 'required',
     onApiCommands: false,
     onAuthCommands: false,
     visible: false,
@@ -159,6 +167,14 @@ const GLOBAL_OPTIONS = defineGlobalOptions([
   },
 ]);
 
+// Parse bespoke signup inputs without making them global command options.
+const AUTH_SIGNUP_OPTIONS: ParseableOption[] = [
+  { aliases: ['email'], valueRequirement: 'required' },
+  { aliases: ['full-name'], valueRequirement: 'required' },
+  { aliases: ['accept-tos'], valueRequirement: 'optional' },
+  { aliases: ['non-interactive'], valueRequirement: 'optional' },
+];
+
 /** Every alias any global flag answers to. */
 export type GlobalOptionAlias =
   (typeof GLOBAL_OPTIONS)[number]['aliases'][number];
@@ -172,6 +188,14 @@ export type GlobalOptionAlias =
 /** Every flag alias accepted on any command, regardless of the resolved operation. */
 export function globalOptionAliases(): GlobalOptionAlias[] {
   return [...new Set(GLOBAL_OPTIONS.flatMap((option) => option.aliases))];
+}
+
+export function hiddenGlobalOptionAliases(): Set<string> {
+  return new Set(
+    GLOBAL_OPTIONS.filter((option) => !option.visible).flatMap(
+      (option) => option.aliases,
+    ),
+  );
 }
 
 /**
@@ -229,7 +253,7 @@ function defineOption(
 function optionDefinitions(): ParseableOption[] {
   const byAlias = new Map<string, ValueRequirement>();
 
-  for (const option of GLOBAL_OPTIONS) {
+  for (const option of [...GLOBAL_OPTIONS, ...AUTH_SIGNUP_OPTIONS]) {
     for (const alias of option.aliases) {
       byAlias.set(alias, option.valueRequirement);
     }
@@ -385,11 +409,7 @@ function withUnknownOptionSuggestion(
     return message;
   }
 
-  const hiddenAliases = new Set<string>(
-    GLOBAL_OPTIONS.filter((option) => !option.visible).flatMap(
-      (option) => option.aliases,
-    ),
-  );
+  const hiddenAliases = hiddenGlobalOptionAliases();
   const knownAliases = suggestionAliases(commandArgs).filter(
     (alias) => !hiddenAliases.has(alias),
   );

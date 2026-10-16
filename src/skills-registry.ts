@@ -12,6 +12,7 @@ import { DEFAULT_API_BASE_URL, resolveNamedBaseUrl } from './config';
 import { loadStore } from './credential-store';
 import { asProblem } from './errors';
 import { CLI_VERSION } from './help';
+import { loginIdHeader } from './login-id';
 
 export interface SkillIndexEntry {
   name: string;
@@ -26,6 +27,7 @@ const skillIndexResponseSchema = z.object({
     }),
   ),
 });
+
 const SKILLS_LIST_TRANSPORT_HINT =
   'Check network connectivity and retry. Inspect the active profile endpoint with `amp auth status` or switch profiles with `amp auth use <profile>`.';
 const SKILLS_GET_TRANSPORT_HINT =
@@ -80,16 +82,18 @@ export function resolveSkillsGetBaseUrl(
   return stripTrailingSlash(resolved);
 }
 
-async function get(url: string, hint: string): Promise<Response> {
+async function get(
+  url: string,
+  hint: string,
+  loginId: string | undefined,
+): Promise<Response> {
   try {
-    // `parseApiClient` on the server reads the leading `product/version` token
-    // into analytics dimensions, so this is what makes retrievals attributable
-    // to a CLI version. Matches the header authToken.ts already sends.
     return await fetch(url, {
       headers: {
         Accept: '*/*',
         'User-Agent': `amp-cli/${CLI_VERSION}`,
         ...deviceIdHeader(),
+        ...loginIdHeader(loginId),
       },
     });
   } catch {
@@ -155,9 +159,10 @@ function tryParseJson(body: string): unknown {
 
 export async function fetchSkillIndex(
   baseUrl: string,
+  loginId?: string,
 ): Promise<SkillIndexEntry[]> {
   const url = `${baseUrl}/v1/skills`;
-  const response = await get(url, SKILLS_LIST_TRANSPORT_HINT);
+  const response = await get(url, SKILLS_LIST_TRANSPORT_HINT, loginId);
   const body = await response.text();
 
   if (!response.ok) {
@@ -183,9 +188,10 @@ function isMarkdown(contentType: string | null): boolean {
 export async function fetchSkillDocument(
   baseUrl: string,
   name: string,
+  loginId?: string,
 ): Promise<string> {
   const url = `${baseUrl}/v1/skills/${encodeURIComponent(name)}`;
-  const response = await get(url, SKILLS_GET_TRANSPORT_HINT);
+  const response = await get(url, SKILLS_GET_TRANSPORT_HINT, loginId);
   const body = await response.text();
 
   if (!response.ok) {

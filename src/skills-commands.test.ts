@@ -1,5 +1,6 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { parseArgs } from './args';
 import { CliError, transportError } from './cli-error';
 import { DEFAULT_API_BASE_URL } from './config';
 import {
@@ -15,6 +16,19 @@ const INDEX = [
 ];
 
 describe('assertSkillsFlags', () => {
+  it.each(['list', 'get'])('accepts --loginId on %s', (verb) => {
+    const parsed = parseArgs(['skills', verb, '--loginId', 'Account-123']);
+    expect(() =>
+      assertSkillsFlags(verb === 'list' ? 'list' : 'get', parsed.flags),
+    ).not.toThrow();
+  });
+
+  it('does not suggest --loginId for a misplaced parsed flag', () => {
+    expect(() => assertSkillsFlags('list', { limit: '1' })).toThrow(
+      /^Unknown flag --limit for `amp skills list`\.$/,
+    );
+  });
+
   it('accepts only output and standard flags on list', () => {
     expect(() =>
       assertSkillsFlags('list', {
@@ -82,6 +96,58 @@ describe('assertSkillsFlags', () => {
   });
 });
 
+describe('skills loginId header', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it.each(['list', 'get'])(
+    'sends --loginId on %s without changing its output',
+    async (verb) => {
+      const document = '# Skill\n';
+      const fetchMock = vi.fn<typeof fetch>(async () =>
+        verb === 'list'
+          ? new Response(JSON.stringify({ data: INDEX }))
+          : new Response(document, {
+              headers: { 'Content-Type': 'text/markdown' },
+            }),
+      );
+      vi.stubGlobal('fetch', fetchMock);
+      const chunks: string[] = [];
+      const flags = parseArgs([
+        'skills',
+        verb,
+        '--region',
+        'us',
+        '--loginId',
+        '  Person+CLI@example.com  ',
+      ]).flags;
+      assertSkillsFlags(verb === 'list' ? 'list' : 'get', flags);
+      const deps = {
+        path: EMPTY_STORE_PATH,
+        isTTY: false,
+        write: (chunk: string) => chunks.push(chunk),
+      };
+
+      if (verb === 'list') await runSkillsList(flags, deps);
+      else await runSkillsGet('integrating-amplitude', flags, deps);
+
+      const [url, init] = fetchMock.mock.calls[0];
+      expect(url).toBe(
+        verb === 'list'
+          ? 'https://developer-api.amplitude.com/v1/skills'
+          : 'https://developer-api.amplitude.com/v1/skills/integrating-amplitude',
+      );
+      const headers = new Headers(init?.headers);
+      expect(headers.get('amp-login-id')).toBe('Person+CLI@example.com');
+      expect(headers.has('authorization')).toBe(false);
+      expect(chunks.join('')).toBe(
+        verb === 'list' ? `${JSON.stringify({ data: INDEX })}\n` : document,
+      );
+    },
+  );
+});
+
 describe('runSkillsList', () => {
   it('fetches the US catalog when there is no default profile', async () => {
     const fetchIndex = vi.fn(async () => INDEX);
@@ -96,7 +162,7 @@ describe('runSkillsList', () => {
       },
     );
 
-    expect(fetchIndex).toHaveBeenCalledWith(DEFAULT_API_BASE_URL);
+    expect(fetchIndex).toHaveBeenCalledWith(DEFAULT_API_BASE_URL, undefined);
   });
 
   it('routes --region to its catalog endpoint', async () => {
@@ -114,6 +180,7 @@ describe('runSkillsList', () => {
 
     expect(fetchIndex).toHaveBeenCalledWith(
       'https://developer-api.eu.amplitude.com',
+      undefined,
     );
   });
 
@@ -556,6 +623,7 @@ describe('runSkillsGet', () => {
     expect(fetchDocument).toHaveBeenCalledWith(
       'https://developer-api.eu.amplitude.com',
       'integrating-amplitude',
+      undefined,
     );
   });
 

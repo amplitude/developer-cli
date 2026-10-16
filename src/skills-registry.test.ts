@@ -285,6 +285,24 @@ describe('fetchSkillIndex', () => {
     vi.unstubAllGlobals();
   });
 
+  it.each(['', ' ', 'x\r\ny', 'x\u0000y', '用户', 'x'.repeat(1025)])(
+    'omits an invalid loginId without failing the index request: %j',
+    async (loginId) => {
+      const fetchMock = vi.fn<typeof fetch>(
+        async () => new Response(JSON.stringify({ data: [] })),
+      );
+      vi.stubGlobal('fetch', fetchMock);
+
+      await expect(
+        fetchSkillIndex('https://example.test', loginId),
+      ).resolves.toEqual([]);
+
+      const headers = new Headers(fetchMock.mock.calls[0][1]?.headers);
+      expect(headers.has('amp-login-id')).toBe(false);
+      expect(headers.get('amp-device-id')).toBe('device-123');
+    },
+  );
+
   it('classifies a malformed 200 body as upstream_error rather than throwing a raw parse error', async () => {
     vi.stubGlobal(
       'fetch',

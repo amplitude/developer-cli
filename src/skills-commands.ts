@@ -1,6 +1,7 @@
-import { type FlagValue, isFlagEnabled } from './args';
+import { type FlagValue, isFlagEnabled, stringFlag } from './args';
 import { SKILLS_GLOBAL_FLAGS, type SkillsVerb } from './catalog';
 import { CliError, transportError, usageError } from './cli-error';
+import { LOGIN_ID_FLAG } from './login-id';
 import {
   formatJsonOutput,
   normalizeWhitespace,
@@ -34,6 +35,7 @@ export function assertSkillsFlags(
   const label = `amp skills ${verb}`;
   const allowed = new Set(SKILLS_GLOBAL_FLAGS[verb]);
   if (verb === 'list') allowed.add('region');
+  allowed.add(LOGIN_ID_FLAG);
   assertFlagsAllowed(allowed, label, flags);
 }
 
@@ -42,8 +44,8 @@ export interface SkillsCommandDeps {
   write?: (chunk: string) => void;
   isTTY?: boolean;
   path?: string;
-  fetchIndex?: (baseUrl: string) => Promise<SkillIndexEntry[]>;
-  fetchDocument?: (baseUrl: string, name: string) => Promise<string>;
+  fetchIndex?: typeof fetchSkillIndex;
+  fetchDocument?: typeof fetchSkillDocument;
   materialize?: (name: string, document: string) => MaterializedSkill;
 }
 
@@ -88,6 +90,7 @@ export async function runSkillsList(
   const fetchIndex = deps.fetchIndex ?? fetchSkillIndex;
   const index = await fetchIndex(
     resolveSkillsListBaseUrl(flags, { path: deps.path }),
+    stringFlag(flags, [LOGIN_ID_FLAG]),
   );
 
   if (shouldUseJsonOutput({ jsonFlag: isFlagEnabled(flags.json), isTTY })) {
@@ -114,6 +117,7 @@ export async function runSkillsGet(
   const document = await fetchDocument(
     resolveSkillsGetBaseUrl(flags, { path: deps.path }),
     name,
+    stringFlag(flags, [LOGIN_ID_FLAG]),
   );
   const isTTY = deps.isTTY ?? Boolean(process.stdout.isTTY);
 

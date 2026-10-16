@@ -17,6 +17,7 @@ import {
   runAuthUse,
   runLogout,
 } from './auth-commands';
+import { runAuthSignup } from './auth-signup';
 import { buildCatalog, isSkillsGetCommand } from './catalog';
 import {
   CliError,
@@ -30,9 +31,10 @@ import {
   printCommandHelp,
   printGlobalHelp,
 } from './help';
-import { shouldUseJsonOutput } from './output';
+import { formatJsonOutput, shouldUseJsonOutput } from './output';
 import { assertFlagsAllowed } from './request';
 import { runOperation } from './run';
+import { formatSignupText } from './signup-response';
 import {
   assertSkillsFlags,
   runSkillsGet,
@@ -62,7 +64,10 @@ function assertKnownAuthFlags(
       candidate.command.every((part, index) => part === command[index]),
   );
   const catalogAliases = entry?.flags.flatMap((flag) => flag.aliases) ?? [];
-  const allowed = new Set([...authGlobalOptionAliases(), ...catalogAliases]);
+  const allowed = new Set([
+    ...(entry?.globalFlags ?? authGlobalOptionAliases()),
+    ...catalogAliases,
+  ]);
   assertFlagsAllowed(allowed, `amp ${command.join(' ')}`, flags);
 }
 
@@ -150,6 +155,26 @@ export async function main(): Promise<void> {
     }
 
     if (command[0] === 'auth') {
+      if (command.length === 2 && command[1] === 'signup') {
+        assertKnownAuthFlags(['auth', 'signup'], flags);
+        const result = await runAuthSignup(flags);
+        if (!result.ok) {
+          console.error(
+            wantsJson
+              ? formatErrorEnvelope(result.error, isTTY)
+              : formatErrorText(result.error),
+          );
+          process.exitCode = result.error.exitCode;
+          return;
+        }
+        console.log(
+          wantsJson
+            ? formatJsonOutput(result.output, isTTY)
+            : formatSignupText(result.output),
+        );
+        process.exitCode = result.exitCode;
+        return;
+      }
       if (
         command.length === 3 &&
         command[1] === 'login' &&
