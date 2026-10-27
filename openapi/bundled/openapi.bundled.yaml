@@ -3307,8 +3307,10 @@ paths:
                 hide_if_page_targeting_not_met:
                   type: boolean
                 trigger_config:
+                  type: object
                   description: Trigger configuration object.
                 lifecycle:
+                  type: object
                   description: Lifecycle rules object.
                 dismissible:
                   type: boolean
@@ -3637,8 +3639,10 @@ paths:
                 hide_if_page_targeting_not_met:
                   type: boolean
                 trigger_config:
+                  type: object
                   description: Trigger configuration object.
                 lifecycle:
+                  type: object
                   description: Lifecycle rules object.
                 dismissible:
                   type: boolean

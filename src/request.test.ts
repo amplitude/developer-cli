@@ -227,6 +227,36 @@ describe('buildRequest', () => {
     });
   });
 
+  it('parses guide and survey update configuration flags as JSON objects', () => {
+    const triggerConfig = { type: 'immediate' };
+    const lifecycle = { frequency: 'once' };
+    const shared = [
+      '--project',
+      '187520',
+      '--latest-version',
+      '3',
+      '--trigger-config',
+      JSON.stringify(triggerConfig),
+      '--lifecycle',
+      JSON.stringify(lifecycle),
+    ];
+
+    expect(
+      request(['guides', 'update'], ['--guide', 'g1', ...shared]).body,
+    ).toMatchObject({
+      latest_version: 3,
+      trigger_config: triggerConfig,
+      lifecycle,
+    });
+    expect(
+      request(['surveys', 'update'], ['--survey', 's1', ...shared]).body,
+    ).toMatchObject({
+      latest_version: 3,
+      trigger_config: triggerConfig,
+      lifecycle,
+    });
+  });
+
   it('parses referenced object and array body schemas as JSON', () => {
     const built = request(
       ['flags', 'create'],

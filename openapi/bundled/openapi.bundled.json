@@ -4396,9 +4396,11 @@
                     "type": "boolean"
                   },
                   "trigger_config": {
+                    "type": "object",
                     "description": "Trigger configuration object."
                   },
                   "lifecycle": {
+                    "type": "object",
                     "description": "Lifecycle rules object."
                   },
                   "dismissible": {
@@ -4824,9 +4826,11 @@
                     "type": "boolean"
                   },
                   "trigger_config": {
+                    "type": "object",
                     "description": "Trigger configuration object."
                   },
                   "lifecycle": {
+                    "type": "object",
                     "description": "Lifecycle rules object."
                   },
                   "dismissible": {
