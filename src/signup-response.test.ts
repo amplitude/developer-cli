@@ -7,6 +7,7 @@ import {
   formatSignupText,
   SIGNUP_DOCUMENT_URLS,
   signupErrorFromResponse,
+  signupMissingInformationError,
   signupPollContinuation,
   signupRequestSchema,
   signupResponseSchema,
@@ -76,6 +77,45 @@ describe('signup response contract', () => {
     expect(signupResponseSchema.safeParse(input).success).toBe(false);
   });
 
+  it.each([
+    [
+      { kind: 'terms_of_service', url: 'https://amplitude.com/terms/v2' },
+      { kind: 'privacy_policy', url: 'https://amplitude.com/privacy' },
+    ],
+    [
+      { kind: 'terms_of_service', url: 'https://amplitude.com/terms' },
+      { kind: 'privacy_policy', url: 'https://amplitude.com/privacy' },
+      { kind: 'new_document', url: 'https://amplitude.com/new-document' },
+    ],
+  ])(
+    'preserves unfamiliar backend legal document requirements: %j',
+    (...documents) => {
+      expect(
+        signupMissingInformationError({
+          required: ['terms_acceptance'],
+          properties: { terms_acceptance: { type: 'object', documents } },
+        }),
+      ).toBeUndefined();
+    },
+  );
+
+  it('formats canonical backend document requirements as a usage error', () => {
+    const error = signupMissingInformationError({
+      required: ['terms_acceptance'],
+      properties: {
+        terms_acceptance: {
+          type: 'object',
+          documents: [
+            { kind: 'terms_of_service', url: 'https://amplitude.com/terms' },
+            { kind: 'privacy_policy', url: 'https://amplitude.com/privacy' },
+          ],
+        },
+      },
+    });
+    expect(error?.errorCode).toBe('usage_error');
+    expect(error?.message).toContain('--accept-tos');
+  });
+
   it('preserves server error code/message without a locally generated hint', () => {
     const error = signupErrorFromResponse(400, 'Bad Request', {
       type: 'error',
@@ -130,7 +170,7 @@ describe('signup response contract', () => {
     );
   });
 
-  it('requires both explicit canonical acceptance documents in the request', () => {
+  it('validates explicit acceptance but allows it to be omitted', () => {
     const request = signupRequestSchema.safeParse({
       email: ' Alex@Example.com ',
       terms_acceptance: {
@@ -148,7 +188,7 @@ describe('signup response contract', () => {
     if (request.success) expect(request.data.email).toBe('alex@example.com');
     expect(
       signupRequestSchema.safeParse({ email: 'alex@example.com' }).success,
-    ).toBe(false);
+    ).toBe(true);
     expect(
       signupRequestSchema.safeParse({ email: 'alex@example.com', answers: {} })
         .success,

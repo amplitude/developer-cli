@@ -67,7 +67,9 @@ are saved to `~/.amplitude/amp/credentials.json` (0600).
 
 ### Signup
 
-Create an account with explicit inputs and consent:
+Create an account with explicit inputs. By utilizing this command you agree to
+the [Terms of Service](https://amplitude.com/terms) and acknowledge the
+[Privacy Policy](https://amplitude.com/privacy) applies.
 
 ```bash
 amp auth signup --non-interactive \
@@ -81,17 +83,14 @@ amp auth signup --non-interactive \
 prompting, opening a browser, or polling. `--json` controls presentation; piped
 output is also compact JSON.
 
-`--accept-tos` agrees to the [Terms of Service](https://amplitude.com/terms) and
-acknowledges the [Privacy Policy](https://amplitude.com/privacy). Every accepted
-request sends both document references for server validation. Missing consent
-returns the documents as required information before a signup request. Outdated
-references return the server's error on stderr; update the client and retry.
+`--accept-tos` passes the Terms of Service and Privacy Policy URLs alongside
+the signup request.
 
-| Status              | Meaning                                                                                | Exit |
-| ------------------- | -------------------------------------------------------------------------------------- | ---- |
-| `authorized`        | Credentials saved; profile active. Accepted document URLs returned; tokens stay local. | `0`  |
-| `requires_auth`     | Browser authorization required. Challenge saved; use the returned polling command.     | `0`  |
-| `needs_information` | Required fields and their complete schema returned, with supported flag mappings.      | `2`  |
+| Status              | Meaning                                                                                  | Exit |
+| ------------------- | ---------------------------------------------------------------------------------------- | ---- |
+| `authorized`        | Credentials saved; profile active. Tokens stay local.                                    | `0`  |
+| `requires_auth`     | Browser authorization required. Challenge saved; use the returned polling command.       | `0`  |
+| `needs_information` | Unfamiliar requirements returned with their complete schema and supported flag mappings. | `2`  |
 
 Inspect `status` before issuing authenticated commands: exit `0` can mean
 authorization is still required. The continuation includes a readable command
@@ -139,6 +138,8 @@ amp flags list --project <project_id> --limit 5
 amp flags create --project <project_id> --key my-flag --name "My Flag"
 amp flags get --project <project_id> --flag <flag_id>
 amp flags archive --project <project_id> --flag <flag_id> --dry-run
+amp guides list --project <project_id> --limit 10
+amp surveys get --project <project_id> --survey <survey_id> --include-unpublished-changes
 amp heatmaps click-map --project <project_id> --page-url https://example.com/pricing
 amp zoning zone-metrics --project <project_id> --page-url https://example.com/pricing --metric click_rate_pageview
 ```

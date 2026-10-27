@@ -4,6 +4,7 @@ import {
   CliError,
   cliErrorFromResponse,
   exitCodeForErrorCode,
+  usageError,
 } from './cli-error';
 import {
   type DeviceAuthorizationResponse,
@@ -21,16 +22,18 @@ export const SIGNUP_DOCUMENT_URLS = {
 export const signupRequestSchema = z.strictObject({
   email: z.string().trim().toLowerCase().email(),
   full_name: z.string().trim().min(1).optional(),
-  terms_acceptance: z.object({
-    terms_of_service: z.object({
-      url: z.literal(SIGNUP_DOCUMENT_URLS.terms_of_service),
-      accepted: z.literal(true),
-    }),
-    privacy_policy: z.object({
-      url: z.literal(SIGNUP_DOCUMENT_URLS.privacy_policy),
-      accepted: z.literal(true),
-    }),
-  }),
+  terms_acceptance: z
+    .object({
+      terms_of_service: z.object({
+        url: z.literal(SIGNUP_DOCUMENT_URLS.terms_of_service),
+        accepted: z.literal(true),
+      }),
+      privacy_policy: z.object({
+        url: z.literal(SIGNUP_DOCUMENT_URLS.privacy_policy),
+        accepted: z.literal(true),
+      }),
+    })
+    .optional(),
 });
 export type SignupRequest = z.infer<typeof signupRequestSchema>;
 
@@ -112,7 +115,7 @@ export type SignupOutput =
   | {
       status: 'authorized';
       message: string;
-      data: SignupTarget & { terms_acceptance: typeof SIGNUP_DOCUMENT_URLS };
+      data: SignupTarget & { terms_acceptance?: typeof SIGNUP_DOCUMENT_URLS };
     }
   | {
       status: 'requires_auth';
@@ -138,6 +141,36 @@ export type SignupOutput =
     };
 
 const requiredFieldsSchema = z.array(z.string());
+const knownTermsRequirementSchema = z.object({
+  properties: z
+    .object({
+      terms_acceptance: z
+        .object({
+          documents: z
+            .array(
+              z.discriminatedUnion('kind', [
+                z.object({
+                  kind: z.literal('terms_of_service'),
+                  url: z.literal(SIGNUP_DOCUMENT_URLS.terms_of_service),
+                }),
+                z.object({
+                  kind: z.literal('privacy_policy'),
+                  url: z.literal(SIGNUP_DOCUMENT_URLS.privacy_policy),
+                }),
+              ]),
+            )
+            .length(2)
+            .refine(
+              (documents) =>
+                new Set(documents.map((doc) => doc.kind)).size === 2,
+            )
+            .optional(),
+        })
+        .optional(),
+    })
+    .optional(),
+});
+
 const supportedFlags: Record<string, string> = {
   email: '--email',
   full_name: '--full-name',
@@ -157,6 +190,31 @@ export function signupSupportedFlags(
       return flag ? [[field, flag]] : [];
     }),
   );
+}
+
+/** Known requirements use standard CLI errors; unfamiliar schemas remain lossless. */
+export function signupMissingInformationError(
+  schema: Record<string, unknown>,
+): CliError | undefined {
+  const required = requiredFieldsSchema.safeParse(schema.required);
+  if (!required.success || required.data.length === 0) return undefined;
+  const flags = signupSupportedFlags(schema);
+  if (required.data.some((field) => !Object.hasOwn(flags, field)))
+    return undefined;
+
+  if (
+    Object.hasOwn(flags, 'terms_acceptance') &&
+    !knownTermsRequirementSchema.safeParse(schema).success
+  )
+    return undefined;
+
+  const missing = new Intl.ListFormat('en', { type: 'conjunction' }).format(
+    Object.values(flags),
+  );
+  const termsNotice = Object.hasOwn(flags, 'terms_acceptance')
+    ? ` --accept-tos indicates you agree to the Terms of Service (${SIGNUP_DOCUMENT_URLS.terms_of_service}) and acknowledge that the Amplitude Privacy Policy (${SIGNUP_DOCUMENT_URLS.privacy_policy}) applies.`
+    : '';
+  return usageError(`Signup requires ${missing}.${termsNotice}`);
 }
 
 export function signupPollContinuation(profile: string): {

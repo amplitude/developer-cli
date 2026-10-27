@@ -168,59 +168,82 @@ describe('auth signup', () => {
     },
   );
 
-  it('collects missing email and consent locally with both document notices', async () => {
+  it('requires email locally without inventing a terms requirement', async () => {
     const result = await runAuthSignup(
       { 'non-interactive': true, region: 'us', yes: true },
       deps(),
     );
-    expect(result.ok).toBe(true);
-    if (!result.ok) return;
-    expect(result.exitCode).toBe(2);
-    expect(result.output).toMatchObject({
-      status: 'needs_information',
-      data: {
-        schema: { required: ['email', 'terms_acceptance'] },
-        supported_flags: { email: '--email', terms_acceptance: '--accept-tos' },
-      },
-    });
-    expect(JSON.stringify(result)).toContain(
-      SIGNUP_DOCUMENT_URLS.terms_of_service,
-    );
-    expect(JSON.stringify(result)).toContain(
-      SIGNUP_DOCUMENT_URLS.privacy_policy,
-    );
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.errorCode).toBe('usage_error');
+      expect(result.error.message).toBe('Signup requires --email <email>.');
+    }
     expect(request).not.toHaveBeenCalled();
   });
 
-  it('includes a complete signup example when consent is missing', async () => {
-    const result = await runAuthSignup(
-      { ...flags, 'accept-tos': false },
-      deps(),
-    );
-    expect(result.ok).toBe(true);
-    if (!result.ok || result.output.status !== 'needs_information') return;
-    expect(result.output.data.schema).toMatchObject({
-      properties: {
-        terms_acceptance: {
-          description: expect.stringContaining(
-            'amp auth signup --non-interactive --email alex@example.com --full-name "Alex Morgan" --region us --accept-tos',
-          ),
-        },
-      },
-    });
-    expect(request).not.toHaveBeenCalled();
-  });
-
-  it.each([false, 'false'])(
-    'does not infer acceptance with --accept-tos=%s',
+  it.each([undefined, false, 'false'])(
+    'lets the backend authorize without consent when --accept-tos is %s',
     async (consent) => {
-      const result = await runAuthSignup(
-        { ...flags, 'accept-tos': consent, yes: true },
-        deps(),
-      );
+      const input: Record<string, FlagValue> = { ...flags, yes: true };
+      if (consent === undefined) delete input['accept-tos'];
+      else input['accept-tos'] = consent;
+      const result = await runAuthSignup(input, deps());
       expect(result.ok).toBe(true);
-      if (result.ok) expect(result.output.status).toBe('needs_information');
-      expect(request).not.toHaveBeenCalled();
+      if (result.ok) {
+        expect(result.output.status).toBe('authorized');
+        expect(result.output.data).not.toHaveProperty('terms_acceptance');
+      }
+      expect(request).toHaveBeenCalledWith('POST', '/v1/auth/signup', {
+        email: 'new@example.com',
+        full_name: 'Alex Morgan',
+      });
+      expect(loadStore(path).profiles.default.credential).toMatchObject({
+        access_token: token.access_token,
+      });
+    },
+  );
+
+  it.each([
+    { required: ['terms_acceptance'], missingFlags: ['--accept-tos'] },
+    { required: ['full_name'], missingFlags: ['--full-name'] },
+    {
+      required: ['full_name', 'terms_acceptance'],
+      missingFlags: ['--full-name', '--accept-tos'],
+    },
+  ])(
+    'reports backend-required fields together: $required',
+    async ({ required, missingFlags }) => {
+      const before = seedProfile();
+      const pending = seedPending();
+      request.mockResolvedValue({
+        status: 200,
+        body: {
+          type: 'needs_information',
+          needs_information: { schema: { type: 'object', required } },
+        },
+      });
+      const input = { ...flags };
+      delete input['accept-tos'];
+      delete input['full-name'];
+      const result = await runAuthSignup(input, deps());
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.errorCode).toBe('usage_error');
+        expect(result.error.exitCode).toBe(2);
+        for (const flag of missingFlags)
+          expect(result.error.message).toContain(flag);
+        if (required.includes('terms_acceptance')) {
+          expect(result.error.message).toContain(
+            'agree to the Terms of Service (https://amplitude.com/terms)',
+          );
+          expect(result.error.message).toContain(
+            'acknowledge that the Amplitude Privacy Policy (https://amplitude.com/privacy) applies',
+          );
+        }
+      }
+      expect(request).toHaveBeenCalledTimes(1);
+      expect(loadStore(path)).toEqual(before);
+      expect(loadPending(pendingPath)).toEqual(pending);
     },
   );
 

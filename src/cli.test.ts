@@ -7,6 +7,7 @@ import { isHelpRequested, isVersionRequested, main } from './cli';
 import { CliError, usageError } from './cli-error';
 import * as credentialStore from './credential-store';
 import { formatVersion } from './help';
+import { signupMissingInformationError } from './signup-response';
 
 vi.mock('./auth-signup', () => ({ runAuthSignup: vi.fn() }));
 
@@ -270,6 +271,48 @@ describe('main routing', () => {
     expect(output.message).toBe('Update this client.');
     expect(output.error.error_code).toBe('terms_documents_outdated');
     expect(output.error.hint).toBeUndefined();
+  });
+
+  it.each([
+    { isTTY: false, json: false },
+    { isTTY: true, json: true },
+    { isTTY: true, json: false },
+  ])('renders missing signup fields on stderr: %j', async ({ isTTY, json }) => {
+    const error = signupMissingInformationError({
+      required: ['full_name', 'terms_acceptance'],
+    });
+    expect(error).toBeDefined();
+    if (!error) return;
+    vi.mocked(signupCommands.runAuthSignup).mockResolvedValue({
+      ok: false,
+      error,
+    });
+    Object.defineProperty(process.stdout, 'isTTY', {
+      value: isTTY,
+      configurable: true,
+    });
+    await runWith([
+      'auth',
+      'signup',
+      '--non-interactive',
+      ...(json ? ['--json'] : []),
+    ]);
+    expect(process.exitCode).toBe(2);
+    expect(logSpy).not.toHaveBeenCalled();
+    const rendered = String(errSpy.mock.calls[0][0]);
+    if (json || !isTTY) {
+      expect(JSON.parse(rendered)).toEqual({
+        status: 'error',
+        message: error.message,
+        error: { error_code: 'usage_error' },
+      });
+      if (!isTTY) expect(rendered).not.toContain('\n');
+    } else {
+      expect(rendered).toBe(error.message);
+    }
+    expect(rendered).toContain('--full-name and --accept-tos');
+    expect(rendered).toContain('https://amplitude.com/terms');
+    expect(rendered).toContain('https://amplitude.com/privacy');
   });
 
   it('renders signup help without mode selection or invoking signup', async () => {

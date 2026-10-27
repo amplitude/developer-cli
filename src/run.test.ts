@@ -1178,19 +1178,24 @@ describe('runOperation', () => {
     expect(logSpy).toHaveBeenCalledWith('Archived.');
   });
 
-  it('passes --dry-run through to the server when supported', async () => {
-    fetchMock.mockResolvedValue(jsonResponse(200, { data: { dry_run: true } }));
+  it.each(['dry-run', 'dry_run'])(
+    'passes --%s through to the server when supported',
+    async (flag) => {
+      fetchMock.mockResolvedValue(
+        jsonResponse(200, { data: { dry_run: true } }),
+      );
 
-    await runOperation(operation(['events', 'delete']), {
-      token: 'amp_test',
-      project: '187520',
-      event: 'signup',
-      'dry-run': true,
-    });
+      await runOperation(operation(['events', 'delete']), {
+        token: 'amp_test',
+        project: '187520',
+        event: 'signup',
+        [flag]: true,
+      });
 
-    expect(fetchMock).toHaveBeenCalledOnce();
-    expect(String(fetchMock.mock.calls[0][0])).toContain('dry_run=true');
-  });
+      expect(fetchMock).toHaveBeenCalledOnce();
+      expect(String(fetchMock.mock.calls[0][0])).toContain('dry_run=true');
+    },
+  );
 
   it('refuses an unsupported --dry-run instead of silently deleting', async () => {
     await expect(

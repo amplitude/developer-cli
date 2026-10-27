@@ -14,30 +14,30 @@ describe('buildCatalog — API operations', () => {
         'amp events check-ingestion --project <project_id> --event-type <event_type>',
       requiredScopes: ['analytics:read'],
     });
-    expect(check?.flags).toEqual([
+    expect(check?.flags).toMatchObject([
       {
         name: 'project_id',
-        aliases: ['project', 'project-id'],
+        aliases: ['project', 'project-id', 'project_id'],
         type: 'string',
         required: true,
       },
       {
         name: 'event_type',
-        aliases: ['event-type', 'type'],
+        aliases: ['event-type', 'type', 'event_type'],
         type: 'string',
         required: false,
         enum: undefined,
       },
       {
         name: 'lookback_minutes',
-        aliases: ['lookback-minutes'],
+        aliases: ['lookback-minutes', 'lookback_minutes'],
         type: 'integer',
         required: false,
         enum: undefined,
       },
       {
         name: 'polling_timeout_seconds',
-        aliases: ['timeout-seconds'],
+        aliases: ['timeout-seconds', 'polling_timeout_seconds'],
         type: 'integer',
         required: false,
         enum: undefined,
@@ -64,17 +64,17 @@ describe('buildCatalog — API operations', () => {
       requiredScopes: [],
       summary: 'Check recent event ingestion with an ingestion API key',
     });
-    expect(check?.flags).toEqual([
+    expect(check?.flags).toMatchObject([
       {
         name: 'api_key',
-        aliases: ['api-key'],
+        aliases: ['api-key', 'api_key'],
         type: 'string',
         required: true,
         enum: undefined,
       },
       {
         name: 'polling_timeout_seconds',
-        aliases: ['timeout-seconds'],
+        aliases: ['timeout-seconds', 'polling_timeout_seconds'],
         type: 'integer',
         required: false,
         enum: undefined,
@@ -89,14 +89,14 @@ describe('buildCatalog — API operations', () => {
     expect(groups.has('charts')).toBe(true);
   });
 
-  it('maps flags with type and required but no description (API commands are undescribed in this PR)', () => {
+  it('carries OpenAPI descriptions into help', () => {
     const list = buildCatalog().find(
       (c) => c.command.join(' ') === 'projects list',
     );
     const limit = list?.flags.find((f) => f.name === 'limit');
     expect(limit?.type).toBe('integer');
     expect(limit?.required).toBe(false);
-    expect(limit?.description).toBeUndefined();
+    expect(limit?.description).toContain('max 200');
   });
 
   it('carries an enum through from a body property to the catalog flag', () => {

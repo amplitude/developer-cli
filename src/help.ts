@@ -355,6 +355,8 @@ function printCatalogCommandHelp(entry: CatalogCommand): void {
         ? normalizeWhitespace(f.description)
         : '';
       lines.push(`  --${f.aliases[0]}  ${description}`.trimEnd());
+      if (f.items)
+        lines.push(`    Array item schema: ${JSON.stringify(f.items)}`);
     }
   }
   if (entry.example) {

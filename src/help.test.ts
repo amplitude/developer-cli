@@ -272,6 +272,8 @@ describe('help', () => {
       'zoning',
       'destination-types',
       'destinations',
+      'guides',
+      'surveys',
       'skills',
       'agent-analytics',
       'mcp-analytics',
@@ -387,9 +389,12 @@ describe('help JSON', () => {
     const out = capture(() =>
       printCommandHelp([], { json: true, isTTY: false }),
     );
-    // Old behavior dumped every flag/enum/description for all ~34 commands (~19KB).
-    // The compact index should stay well under half that.
-    expect(out.length).toBeLessThan(8000);
+    // Old behavior dumped every flag/enum/description for every command
+    // (~19KB). The compact index is one short line per command, so it should
+    // stay well under half that however many commands exist. Tied to the
+    // principle rather than a snapshot: a bump here is only warranted when
+    // commands are added, never to accommodate a per-command size regression.
+    expect(out.length).toBeLessThan(11000);
   });
 
   it('exact command + json → full detail, with flags, and no order', () => {

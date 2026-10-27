@@ -107,12 +107,12 @@ describe('manifest invariants', () => {
         authentication: 'none',
         body: [
           expect.objectContaining({
-            aliases: ['api-key'],
+            aliases: ['api-key', 'api_key'],
             name: 'api_key',
             required: true,
           }),
           expect.objectContaining({
-            aliases: ['timeout-seconds'],
+            aliases: ['timeout-seconds', 'polling_timeout_seconds'],
             name: 'polling_timeout_seconds',
             required: false,
           }),

@@ -16,6 +16,7 @@ export interface CatalogFlag {
   required: boolean;
   enum?: string[];
   description?: string;
+  items?: Record<string, unknown>;
 }
 
 export interface CatalogPositional {
@@ -104,7 +105,9 @@ const GROUP_ORDER: Partial<Record<string, number>> = {
   zoning: 9,
   'destination-types': 10,
   destinations: 11,
-  skills: 12,
+  guides: 12,
+  surveys: 13,
+  skills: 14,
   auth: 20,
 };
 
@@ -121,6 +124,8 @@ const GROUP_DESCRIPTIONS: Partial<Record<string, string>> = {
   zoning: 'Zone metrics for a page URL',
   'destination-types': 'Available destination partners and their schemas',
   destinations: 'Configured destinations in a project',
+  guides: 'Guides (in-app tours, modals, banners, and tooltips)',
+  surveys: 'In-app surveys',
   skills:
     'Skill documents for implementing Amplitude, intended for AI agents. Run amp skills list to discover them.',
   auth: 'Authentication and credential profiles',
@@ -150,6 +155,24 @@ const EXAMPLES: Partial<Record<string, string>> = {
     'amp heatmaps scroll-map --project <project_id> --page-url https://example.com/pricing --device mobile',
   'zoning zone-metrics':
     'amp zoning zone-metrics --project <project_id> --page-url https://example.com/pricing --metric rage_click_rate_session',
+  'guides list': 'amp guides list --project <project_id> --limit 10',
+  'guides get':
+    'amp guides get --project <project_id> --guide <guide_id> --include-unpublished-changes',
+  'guides create':
+    'amp guides create --project <project_id> --title "Welcome tour"',
+  'guides update':
+    'amp guides update --project <project_id> --guide <guide_id> --latest-version <version> --title "Welcome tour v2"',
+  'guides archive':
+    'amp guides archive --project <project_id> --guide <guide_id> --dry-run',
+  'surveys list': 'amp surveys list --project <project_id> --limit 10',
+  'surveys get':
+    'amp surveys get --project <project_id> --survey <survey_id> --include-unpublished-changes',
+  'surveys create':
+    'amp surveys create --project <project_id> --title "NPS survey"',
+  'surveys update':
+    'amp surveys update --project <project_id> --survey <survey_id> --latest-version <version> --title "NPS survey v2"',
+  'surveys archive':
+    'amp surveys archive --project <project_id> --survey <survey_id> --dry-run',
 };
 
 const API_COMMAND_DESCRIPTIONS: Partial<Record<string, string>> = {
@@ -170,20 +193,32 @@ const REQUIRED_USAGE_GLOBAL_FLAGS: Partial<
 const UNCURATED_ORDER_BASE = 100;
 
 function flagsForOperation(operation: CliOperation): CatalogFlag[] {
-  const fromParams = operation.parameters
-    .filter((parameter) => parameter.in !== 'header')
-    .map((parameter) => ({
-      name: parameter.name,
-      aliases: parameter.aliases,
-      type: parameter.type,
-      required: parameter.required,
-    }));
+  const fromParams = operation.parameters.map((parameter) => ({
+    name: parameter.in === 'header' ? parameter.aliases[0] : parameter.name,
+    aliases: parameter.aliases,
+    type: parameter.type,
+    required: parameter.name === 'Idempotency-Key' ? false : parameter.required,
+    description:
+      parameter.name === 'Idempotency-Key'
+        ? 'Generated automatically when omitted. Header acceptance alone does not guarantee retry deduplication.'
+        : parameter.description,
+  }));
   const fromBody = operation.body.map((property) => ({
     name: property.name,
     aliases: property.aliases,
     type: property.type,
     required: property.required,
     enum: property.enum,
+    items: property.items,
+    description:
+      [
+        property.description,
+        property.type === 'array'
+          ? 'Pass a JSON array; string arrays also accept comma-separated values. Example strings: ["id1","id2"] or id1,id2. Object arrays require a JSON array matching items.'
+          : undefined,
+      ]
+        .filter(Boolean)
+        .join(' ') || undefined,
   }));
   return [...fromParams, ...fromBody];
 }
@@ -201,7 +236,15 @@ function apiCommands(): CatalogCommand[] {
       globalFlags: apiGlobalOptionAliases(operation.authentication),
       requiredUsageGlobalFlags: REQUIRED_USAGE_GLOBAL_FLAGS[key],
       example: EXAMPLES[key],
-      description: API_COMMAND_DESCRIPTIONS[key],
+      description:
+        [
+          API_COMMAND_DESCRIPTIONS[key],
+          operation.method === 'DELETE'
+            ? 'Requires --yes to apply changes, or --dry-run when supported to validate without applying changes.'
+            : undefined,
+        ]
+          .filter(Boolean)
+          .join(' ') || undefined,
       requiredScopes: operation.requiredScopes,
     };
   });
@@ -220,7 +263,7 @@ const AUTH_COMMANDS: BespokeCommand[] = [
   {
     command: ['auth', 'signup'],
     summary: 'Sign up for an Amplitude account',
-    description: `Requires --non-interactive. Saves and activates credentials on immediate authorization, or records the supplied device challenge for auth login poll. Outstanding inputs are returned as needs_information. Signup does not prompt, open a browser, or poll automatically. Exit 0 can indicate requires_auth; inspect status to distinguish it from authorized. --accept-tos agrees to the Terms of Service (${SIGNUP_DOCUMENT_URLS.terms_of_service}) and acknowledges the Privacy Policy (${SIGNUP_DOCUMENT_URLS.privacy_policy}).`,
+    description: `Requires --non-interactive. Saves and activates credentials on immediate authorization, or records the supplied device challenge for auth login poll. Outstanding inputs are reported. Signup does not prompt, open a browser, or poll automatically. Exit 0 can indicate requires_auth; inspect status to distinguish it from authorized. By utilizing this command you agree to the Terms of Service (${SIGNUP_DOCUMENT_URLS.terms_of_service}) and acknowledge the Privacy Policy (${SIGNUP_DOCUMENT_URLS.privacy_policy}) applies.`,
     group: 'auth',
     order: GROUP_ORDER.auth,
     globalFlags: [
