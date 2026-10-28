@@ -13,9 +13,9 @@ info:
 jsonSchemaDialect: https://json-schema.org/draft/2020-12/schema
 servers:
   - url: https://developer-api.amplitude.com
-    description: Production
-  - url: https://developer-api.stag2.amplitude.com
-    description: Staging
+    description: Production (US)
+  - url: https://developer-api.eu.amplitude.com
+    description: Production (EU)
 security:
   - bearerAuth: []
 tags:
@@ -39,6 +39,10 @@ tags:
     description: Zone metric queries for a page URL.
   - name: Feature Flags
     description: Feature flag configuration and rollout operations.
+  - name: Guides
+    description: Guide (tour nudge) configuration operations.
+  - name: Surveys
+    description: Survey nudge configuration operations.
   - name: Destinations
     description: Destination (connection) catalog and CRUD operations.
   - name: Skills
@@ -128,6 +132,553 @@ paths:
                 properties:
                   data:
                     $ref: '#/components/schemas/AgentInsight'
+        '400':
+          $ref: '#/components/responses/ValidationProblem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '429':
+          $ref: '#/components/responses/RateLimitProblem'
+        '502':
+          $ref: '#/components/responses/Problem'
+  /v1/projects/{project_id}/agent-analytics/datasets:
+    post:
+      tags:
+        - Agent Analytics
+      operationId: createAgentAnalyticsDataset
+      summary: Create an Agent Analytics dataset
+      description: |
+        Creates an empty dataset. Add sessions with the dataset sessions endpoint.
+        `name` is not an identity key, so repeating a create makes another dataset —
+        retry safely with the same `Idempotency-Key` instead.
+
+        Listing and reading datasets is served by the Agent Analytics MCP read
+        surface, not by this API.
+      x-required-scopes:
+        - analytics:write
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - name
+              properties:
+                name:
+                  type: string
+                  minLength: 1
+                  maxLength: 255
+                description:
+                  type:
+                    - string
+                    - 'null'
+                agent_name:
+                  type:
+                    - string
+                    - 'null'
+                  description: Scope the dataset to one agent. Omit for a project-level dataset.
+      responses:
+        '201':
+          description: Dataset created.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/AgentAnalyticsDataset'
+        '400':
+          $ref: '#/components/responses/ValidationProblem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '429':
+          $ref: '#/components/responses/RateLimitProblem'
+        '502':
+          $ref: '#/components/responses/Problem'
+  /v1/projects/{project_id}/agent-analytics/datasets/{dataset_id}:
+    patch:
+      tags:
+        - Agent Analytics
+      operationId: updateAgentAnalyticsDataset
+      summary: Update an Agent Analytics dataset
+      description: |
+        Updates dataset metadata. Absent fields are unchanged; an explicit `null`
+        clears `description`. `id`, `agent_name`, and `source_type` are immutable —
+        create a new dataset to change the agent scope.
+      x-required-scopes:
+        - analytics:write
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - $ref: '#/components/parameters/DatasetId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              minProperties: 1
+              properties:
+                name:
+                  type: string
+                  minLength: 1
+                  maxLength: 255
+                description:
+                  type:
+                    - string
+                    - 'null'
+      responses:
+        '200':
+          description: Updated dataset.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/AgentAnalyticsDataset'
+        '400':
+          $ref: '#/components/responses/ValidationProblem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '429':
+          $ref: '#/components/responses/RateLimitProblem'
+        '502':
+          $ref: '#/components/responses/Problem'
+  /v1/projects/{project_id}/agent-analytics/datasets/{dataset_id}/sessions:
+    post:
+      tags:
+        - Agent Analytics
+      operationId: addAgentAnalyticsDatasetSessions
+      summary: Add sessions to an Agent Analytics dataset
+      description: |
+        Adds sessions to a dataset. Sessions already in the dataset are ignored, so
+        the call is safe to repeat. Every session must belong to the path project;
+        a session from another project fails the whole request with `422`.
+      x-required-scopes:
+        - analytics:write
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - $ref: '#/components/parameters/DatasetId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AgentAnalyticsSessionIds'
+      responses:
+        '200':
+          description: Dataset after the sessions were added, with refreshed counts.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/AgentAnalyticsDataset'
+        '400':
+          $ref: '#/components/responses/ValidationProblem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '422':
+          $ref: '#/components/responses/ValidationProblem'
+        '429':
+          $ref: '#/components/responses/RateLimitProblem'
+        '502':
+          $ref: '#/components/responses/Problem'
+    delete:
+      tags:
+        - Agent Analytics
+      operationId: removeAgentAnalyticsDatasetSessions
+      summary: Remove sessions from an Agent Analytics dataset
+      description: |
+        Removes sessions from a dataset. The sessions themselves are untouched;
+        only their dataset membership is removed. Sessions that are not in the
+        dataset are ignored, so the call is safe to repeat.
+
+        Takes the same body as the add operation, so an add is undone in one call
+        rather than one call per session. `dry_run=true` validates the dataset and
+        the session ids without mutating, returning `204` on a hit and `404` if the
+        dataset does not exist.
+      x-required-scopes:
+        - analytics:write
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - $ref: '#/components/parameters/DatasetId'
+        - $ref: '#/components/parameters/DryRun'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AgentAnalyticsSessionIds'
+      responses:
+        '204':
+          description: Sessions removed from the dataset, or dry-run hit.
+        '400':
+          $ref: '#/components/responses/ValidationProblem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '422':
+          $ref: '#/components/responses/ValidationProblem'
+        '429':
+          $ref: '#/components/responses/RateLimitProblem'
+        '502':
+          $ref: '#/components/responses/Problem'
+  /v1/projects/{project_id}/agent-analytics/evaluators:
+    post:
+      tags:
+        - Agent Analytics
+      operationId: createAgentAnalyticsEvaluator
+      summary: Create an Agent Analytics evaluator
+      description: |
+        Creates an evaluator in the inactive state. Activation is a separate
+        permission and is not exposed by this API — activate in the Agent Analytics
+        UI once the evaluator has been reviewed.
+
+        `tags` constrains what a result may record. Supplying them for a `binary` or
+        `categorical` evaluator is what keeps results to a known set of values
+        rather than free-form model output.
+
+        Listing and reading evaluators is served by the Agent Analytics MCP read
+        surface, not by this API.
+      x-required-scopes:
+        - analytics:write
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - topic
+                - output_type
+                - description
+              properties:
+                topic:
+                  type: string
+                  minLength: 1
+                  maxLength: 255
+                  description: Human-readable evaluator name.
+                output_type:
+                  type: string
+                  enum:
+                    - binary
+                    - categorical
+                    - score
+                description:
+                  type: string
+                  minLength: 1
+                  description: Evaluator prompt or rubric.
+                tags:
+                  type: array
+                  description: Required for `binary` and `categorical` evaluators.
+                  items:
+                    $ref: '#/components/schemas/AgentAnalyticsEvaluatorTag'
+                suite_id:
+                  type:
+                    - string
+                    - 'null'
+      responses:
+        '201':
+          description: Evaluator created, inactive.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/AgentAnalyticsEvaluator'
+        '400':
+          $ref: '#/components/responses/ValidationProblem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '422':
+          $ref: '#/components/responses/ValidationProblem'
+        '429':
+          $ref: '#/components/responses/RateLimitProblem'
+        '502':
+          $ref: '#/components/responses/Problem'
+  /v1/projects/{project_id}/agent-analytics/evaluators/{evaluator_stable_id}:
+    patch:
+      tags:
+        - Agent Analytics
+      operationId: updateAgentAnalyticsEvaluator
+      summary: Update an Agent Analytics evaluator
+      description: |
+        Updates an evaluator addressed by its stable identifier. Absent fields are
+        unchanged. Each update creates a new inactive version; the response `id` is
+        that new version, and `stable_id` is unchanged.
+
+        Updating does not activate. An evaluator already active in the UI keeps
+        serving its current active version until the new one is promoted there.
+      x-required-scopes:
+        - analytics:write
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - $ref: '#/components/parameters/EvaluatorStableId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              minProperties: 1
+              properties:
+                topic:
+                  type: string
+                  minLength: 1
+                  maxLength: 255
+                description:
+                  type: string
+                  minLength: 1
+                tags:
+                  type: array
+                  description: Replaces the full tag set when present.
+                  items:
+                    $ref: '#/components/schemas/AgentAnalyticsEvaluatorTag'
+                suite_id:
+                  type:
+                    - string
+                    - 'null'
+      responses:
+        '200':
+          description: New inactive evaluator version.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/AgentAnalyticsEvaluator'
+        '400':
+          $ref: '#/components/responses/ValidationProblem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '422':
+          $ref: '#/components/responses/ValidationProblem'
+        '429':
+          $ref: '#/components/responses/RateLimitProblem'
+        '502':
+          $ref: '#/components/responses/Problem'
+  /v1/projects/{project_id}/agent-analytics/eval-runs:
+    get:
+      tags:
+        - Agent Analytics
+      operationId: listAgentAnalyticsEvalRuns
+      summary: List Agent Analytics eval runs
+      description: |
+        Returns eval runs for the project, most recent first. A run is a batch
+        evaluation of sessions by one or more evaluators; it is asynchronous, so a
+        freshly triggered run is returned with a pending status and no results.
+      x-required-scopes:
+        - analytics:read
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+        - name: status
+          in: query
+          required: false
+          description: Filter to runs in one lifecycle state.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Eval runs and an opaque next-page cursor.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                  - pagination
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AgentAnalyticsEvalRun'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+        '400':
+          $ref: '#/components/responses/ValidationProblem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '429':
+          $ref: '#/components/responses/RateLimitProblem'
+        '502':
+          $ref: '#/components/responses/Problem'
+    post:
+      tags:
+        - Agent Analytics
+      operationId: triggerAgentAnalyticsEvalRun
+      summary: Trigger an Agent Analytics eval run
+      description: |
+        Starts an asynchronous eval run and returns it immediately with a pending
+        status. Poll the run by id, or read results through the Agent Analytics read
+        surface once it completes.
+
+        Target the run either at a dataset or at a session list, not both. Caps are
+        enforced server-side: 10 evaluators and 100 targeted sessions per run.
+        For larger datasets, only the first 100 members are targeted and the
+        acceptance response includes a truncation warning. This selection warning
+        is not persisted on the run returned by later get/list calls.
+      x-required-scopes:
+        - analytics:write
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - evaluator_ids
+              oneOf:
+                - required:
+                    - dataset_id
+                  not:
+                    required:
+                      - session_ids
+                - required:
+                    - session_ids
+                  not:
+                    required:
+                      - dataset_id
+              properties:
+                evaluator_ids:
+                  type: array
+                  minItems: 1
+                  maxItems: 10
+                  items:
+                    type: string
+                  description: Evaluator version identifiers returned by create or update. Evaluator updates use stable identifiers instead.
+                dataset_id:
+                  type: string
+                  description: Evaluate the sessions in this dataset. Mutually exclusive with `session_ids`; exactly one of the two is required.
+                session_ids:
+                  type: array
+                  minItems: 1
+                  maxItems: 100
+                  items:
+                    type: string
+                  description: Evaluate these sessions. Mutually exclusive with `dataset_id`; exactly one of the two is required.
+                sample_size:
+                  type: integer
+                  minimum: 1
+                  maximum: 100
+                  default: 100
+                  description: |
+                    Retained for compatibility. This endpoint targets explicit session
+                    IDs, including when expanding a dataset, so sample_size does not
+                    reduce the selected sessions. All supplied IDs are targeted,
+                    with dataset expansion capped at the first 100 members.
+      responses:
+        '201':
+          description: Eval run accepted and queued.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/AgentAnalyticsEvalRun'
+        '400':
+          $ref: '#/components/responses/ValidationProblem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '422':
+          $ref: '#/components/responses/ValidationProblem'
+        '429':
+          $ref: '#/components/responses/RateLimitProblem'
+        '502':
+          $ref: '#/components/responses/Problem'
+  /v1/projects/{project_id}/agent-analytics/eval-runs/{eval_run_id}:
+    get:
+      tags:
+        - Agent Analytics
+      operationId: getAgentAnalyticsEvalRun
+      summary: Get an Agent Analytics eval run
+      description: |
+        Returns one eval run by id, including progress counters and, once the run
+        finishes, cost and latency. Per-session results are read through the Agent
+        Analytics read surface, not here.
+      x-required-scopes:
+        - analytics:read
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - $ref: '#/components/parameters/EvalRunId'
+      responses:
+        '200':
+          description: Eval run.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/AgentAnalyticsEvalRun'
         '400':
           $ref: '#/components/responses/ValidationProblem'
         '401':
@@ -2526,6 +3077,670 @@ paths:
           $ref: '#/components/responses/RateLimitProblem'
         '500':
           $ref: '#/components/responses/Problem'
+  /v1/projects/{project_id}/guides:
+    get:
+      tags:
+        - Guides
+      operationId: listGuides
+      summary: List guides
+      description: |
+        Returns guides in the project. Results use the standard
+        Developer API list envelope with cursor pagination (`cursor`, `limit`).
+
+        Full-text search (`q`) and custom sort orders are not supported yet.
+      x-required-scopes:
+        - guides:read
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+        - name: platform
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/NudgePlatform'
+        - name: created_after
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+        - name: created_before
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+        - name: created_by
+          in: query
+          required: false
+          description: Filter by creator email or login id (exact match).
+          schema:
+            type: string
+        - name: include_archived
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: false
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                  - pagination
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/GuideSummary'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+        '400':
+          $ref: '#/components/responses/ValidationProblem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '429':
+          $ref: '#/components/responses/RateLimitProblem'
+        '500':
+          $ref: '#/components/responses/Problem'
+    post:
+      tags:
+        - Guides
+      operationId: createGuide
+      summary: Create guide
+      description: |
+        Creates an unpublished draft guide. Publish, schedule, and test
+        instrumentation are not available via API in v1. At most one content
+        variant is accepted on create; the `control` key is reserved.
+      x-required-scopes:
+        - guides:write
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - title
+              properties:
+                title:
+                  type: string
+                  minLength: 1
+                description:
+                  type:
+                    - string
+                    - 'null'
+                platform:
+                  $ref: '#/components/schemas/NudgePlatform'
+                priority:
+                  type: integer
+                  minimum: 1
+                  maximum: 4
+                variants:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/GuideSurveyVariantInput'
+              additionalProperties: false
+      responses:
+        '201':
+          description: Guide created.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Guide'
+        '400':
+          $ref: '#/components/responses/ValidationProblem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/ValidationProblem'
+        '429':
+          $ref: '#/components/responses/RateLimitProblem'
+        '500':
+          $ref: '#/components/responses/Problem'
+  /v1/projects/{project_id}/guides/{guide_id}:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+      - $ref: '#/components/parameters/GuideId'
+    get:
+      tags:
+        - Guides
+      operationId: getGuide
+      summary: Get guide
+      x-required-scopes:
+        - guides:read
+      parameters:
+        - name: include_unpublished_changes
+          in: query
+          required: false
+          description: |
+            When true, return the latest draft (unpublished edits) when one exists.
+            Default false returns the live published guide.
+          schema:
+            type: boolean
+            default: false
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Guide'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '429':
+          $ref: '#/components/responses/RateLimitProblem'
+        '500':
+          $ref: '#/components/responses/Problem'
+    patch:
+      tags:
+        - Guides
+      operationId: updateGuide
+      summary: Update guide
+      description: |
+        Updates metadata, targeting, and content variants. For published guides,
+        changes apply to a draft until publish in the UI. `latest_version` is
+        required and must match the current draft, otherwise the update returns
+        `409`. The check runs before the write rather than atomically with it, so it
+        reduces but does not fully prevent lost updates from concurrent writers.
+        Publish, schedule, and test instrumentation are not
+        available via API in v1. Status fields on the response are derived read-only.
+        When `variants` is sent, it must list every existing variant by `id` with
+        its unchanged `variant` key; steps within a variant can be added, edited,
+        reordered, or removed. `tags` is not writable in v1 and returns `400`.
+      x-required-scopes:
+        - guides:write
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                title:
+                  type: string
+                  minLength: 1
+                description:
+                  type:
+                    - string
+                    - 'null'
+                platform:
+                  $ref: '#/components/schemas/NudgePlatform'
+                priority:
+                  type: integer
+                  minimum: 1
+                  maximum: 4
+                page_target_segments:
+                  type: array
+                  items: {}
+                temporarily_hide_page_target_segments:
+                  type: array
+                  items: {}
+                hide_if_page_targeting_not_met:
+                  type: boolean
+                trigger_config:
+                  type: object
+                  description: Trigger configuration object.
+                lifecycle:
+                  type: object
+                  description: Lifecycle rules object.
+                dismissible:
+                  type: boolean
+                snoozable:
+                  type: boolean
+                snoozable_on_all_steps:
+                  type: boolean
+                snooze_duration:
+                  description: Snooze duration configuration.
+                snooze_label:
+                  type:
+                    - string
+                    - 'null'
+                template_source:
+                  type:
+                    - string
+                    - 'null'
+                show_step_counter:
+                  type: boolean
+                step_counter_format:
+                  type:
+                    - string
+                    - 'null'
+                tags:
+                  type: array
+                  items:
+                    type: string
+                variants:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/GuideSurveyVariantInput'
+                latest_version:
+                  type: integer
+                  description: |
+                    Expected `latest_version` from the last GET with
+                    `include_unpublished_changes=true`.
+              required:
+                - latest_version
+              additionalProperties: false
+      responses:
+        '200':
+          description: Guide updated.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Guide'
+        '400':
+          $ref: '#/components/responses/ValidationProblem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '429':
+          $ref: '#/components/responses/RateLimitProblem'
+        '500':
+          $ref: '#/components/responses/Problem'
+    delete:
+      tags:
+        - Guides
+      operationId: archiveGuide
+      summary: Archive guide
+      description: |
+        Archives an unpublished guide. A guide counts as published while its flag is
+        enabled, unless it's only in test mode without a schedule; archiving a
+        published guide returns `409` with `error_code: cannot_archive_published`.
+        Unpublish it in Amplitude first. Use `dry_run=true` to check whether a guide
+        can be archived. An already archived guide returns `404`, like `GET`.
+      x-required-scopes:
+        - guides:write
+      parameters:
+        - $ref: '#/components/parameters/DryRun'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '204':
+          description: Guide archived, or with `dry_run=true`, the guide can be archived.
+        '400':
+          $ref: '#/components/responses/ValidationProblem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '429':
+          $ref: '#/components/responses/RateLimitProblem'
+        '500':
+          $ref: '#/components/responses/Problem'
+  /v1/projects/{project_id}/surveys:
+    get:
+      tags:
+        - Surveys
+      operationId: listSurveys
+      summary: List surveys
+      description: |
+        Returns surveys in the project. Results use the standard Developer API list
+        envelope with cursor pagination (`cursor`, `limit`).
+
+        Full-text search (`q`) and custom sort orders are not supported yet.
+      x-required-scopes:
+        - surveys:read
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+        - name: platform
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/NudgePlatform'
+        - name: created_after
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+        - name: created_before
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+        - name: created_by
+          in: query
+          required: false
+          description: Filter by creator email or login id (exact match).
+          schema:
+            type: string
+        - name: include_archived
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: false
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                  - pagination
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/SurveySummary'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+        '400':
+          $ref: '#/components/responses/ValidationProblem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '429':
+          $ref: '#/components/responses/RateLimitProblem'
+        '500':
+          $ref: '#/components/responses/Problem'
+    post:
+      tags:
+        - Surveys
+      operationId: createSurvey
+      summary: Create survey
+      description: |
+        Creates an unpublished draft survey. Publish, schedule, and test
+        instrumentation are not available via API in v1. At most one content
+        variant is accepted on create; the `control` key is reserved.
+      x-required-scopes:
+        - surveys:write
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - title
+              properties:
+                title:
+                  type: string
+                  minLength: 1
+                description:
+                  type:
+                    - string
+                    - 'null'
+                platform:
+                  $ref: '#/components/schemas/NudgePlatform'
+                priority:
+                  type: integer
+                  minimum: 1
+                  maximum: 4
+                variants:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/GuideSurveyVariantInput'
+              additionalProperties: false
+      responses:
+        '201':
+          description: Survey created.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Survey'
+        '400':
+          $ref: '#/components/responses/ValidationProblem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/ValidationProblem'
+        '429':
+          $ref: '#/components/responses/RateLimitProblem'
+        '500':
+          $ref: '#/components/responses/Problem'
+  /v1/projects/{project_id}/surveys/{survey_id}:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+      - $ref: '#/components/parameters/SurveyId'
+    get:
+      tags:
+        - Surveys
+      operationId: getSurvey
+      summary: Get survey
+      x-required-scopes:
+        - surveys:read
+      parameters:
+        - name: include_unpublished_changes
+          in: query
+          required: false
+          description: |
+            When true, return the latest draft (unpublished edits) when one exists.
+            Default false returns the live published survey.
+          schema:
+            type: boolean
+            default: false
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Survey'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '429':
+          $ref: '#/components/responses/RateLimitProblem'
+        '500':
+          $ref: '#/components/responses/Problem'
+    patch:
+      tags:
+        - Surveys
+      operationId: updateSurvey
+      summary: Update survey
+      description: |
+        Updates metadata, targeting, and content variants. For published surveys,
+        changes apply to a draft until publish in the UI. `latest_version` is
+        required and must match the current draft, otherwise the update returns
+        `409`. The check runs before the write rather than atomically with it, so it
+        reduces but does not fully prevent lost updates from concurrent writers.
+        Publish, schedule, and test instrumentation are not
+        available via API in v1. Status fields on the response are derived read-only.
+        When `variants` is sent, it must list every existing variant by `id` with
+        its unchanged `variant` key; steps within a variant can be added, edited,
+        reordered, or removed. `tags` is not writable in v1 and returns `400`.
+      x-required-scopes:
+        - surveys:write
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                title:
+                  type: string
+                  minLength: 1
+                description:
+                  type:
+                    - string
+                    - 'null'
+                platform:
+                  $ref: '#/components/schemas/NudgePlatform'
+                priority:
+                  type: integer
+                  minimum: 1
+                  maximum: 4
+                page_target_segments:
+                  type: array
+                  items: {}
+                temporarily_hide_page_target_segments:
+                  type: array
+                  items: {}
+                hide_if_page_targeting_not_met:
+                  type: boolean
+                trigger_config:
+                  type: object
+                  description: Trigger configuration object.
+                lifecycle:
+                  type: object
+                  description: Lifecycle rules object.
+                dismissible:
+                  type: boolean
+                snoozable:
+                  type: boolean
+                snoozable_on_all_steps:
+                  type: boolean
+                snooze_duration:
+                  description: Snooze duration configuration.
+                snooze_label:
+                  type:
+                    - string
+                    - 'null'
+                template_source:
+                  type:
+                    - string
+                    - 'null'
+                show_step_counter:
+                  type: boolean
+                step_counter_format:
+                  type:
+                    - string
+                    - 'null'
+                tags:
+                  type: array
+                  items:
+                    type: string
+                variants:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/GuideSurveyVariantInput'
+                latest_version:
+                  type: integer
+                  description: |
+                    Expected `latest_version` from the last GET with
+                    `include_unpublished_changes=true`.
+              required:
+                - latest_version
+              additionalProperties: false
+      responses:
+        '200':
+          description: Survey updated.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Survey'
+        '400':
+          $ref: '#/components/responses/ValidationProblem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '429':
+          $ref: '#/components/responses/RateLimitProblem'
+        '500':
+          $ref: '#/components/responses/Problem'
+    delete:
+      tags:
+        - Surveys
+      operationId: archiveSurvey
+      summary: Archive survey
+      description: |
+        Archives an unpublished survey. A survey counts as published while its flag
+        is enabled, unless it's only in test mode without a schedule; archiving a
+        published survey returns `409` with `error_code: cannot_archive_published`.
+        Unpublish it in Amplitude first. Use `dry_run=true` to check whether a
+        survey can be archived. An already archived survey returns `404`, like `GET`.
+      x-required-scopes:
+        - surveys:write
+      parameters:
+        - $ref: '#/components/parameters/DryRun'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '204':
+          description: Survey archived, or with `dry_run=true`, the survey can be archived.
+        '400':
+          $ref: '#/components/responses/ValidationProblem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '429':
+          $ref: '#/components/responses/RateLimitProblem'
+        '500':
+          $ref: '#/components/responses/Problem'
   /v1/projects/{project_id}/destinations:
     get:
       tags:
@@ -3070,6 +4285,29 @@ components:
       schema:
         type: integer
         minimum: 0
+    DatasetId:
+      name: dataset_id
+      in: path
+      required: true
+      description: Stable dataset identifier, returned by create or by the Agent Analytics read surface.
+      schema:
+        type: string
+    EvaluatorStableId:
+      name: evaluator_stable_id
+      in: path
+      required: true
+      description: |
+        Evaluator identifier that survives updates. Prefer this over a version
+        identifier, which changes each time the evaluator is updated.
+      schema:
+        type: string
+    EvalRunId:
+      name: eval_run_id
+      in: path
+      required: true
+      description: Stable eval run identifier returned by trigger or list.
+      schema:
+        type: string
     MetricTypeFilter:
       name: metric_type
       in: query
@@ -3077,6 +4315,22 @@ components:
       description: Filter list results to a specific metric type.
       schema:
         $ref: '#/components/schemas/MetricType'
+    GuideId:
+      name: guide_id
+      in: path
+      required: true
+      description: Guide (tour nudge) identifier.
+      schema:
+        type: string
+        pattern: ^[0-9]+$
+    SurveyId:
+      name: survey_id
+      in: path
+      required: true
+      description: Survey nudge identifier.
+      schema:
+        type: string
+        pattern: ^[0-9]+$
     KindFilter:
       name: kind
       in: query
@@ -4294,6 +5548,50 @@ components:
               type: string
               const: feature_flag
               description: Resource-type discriminator. Always `feature_flag`.
+    Guide:
+      allOf:
+        - $ref: '#/components/schemas/GuideSurvey'
+        - type: object
+          properties:
+            object:
+              type: string
+              const: guide
+            type:
+              type: string
+              const: GUIDE
+    GuideSummary:
+      allOf:
+        - $ref: '#/components/schemas/GuideSurveySummary'
+        - type: object
+          properties:
+            object:
+              type: string
+              const: guide
+            type:
+              type: string
+              const: GUIDE
+    Survey:
+      allOf:
+        - $ref: '#/components/schemas/GuideSurvey'
+        - type: object
+          properties:
+            object:
+              type: string
+              const: survey
+            type:
+              type: string
+              const: SURVEY
+    SurveySummary:
+      allOf:
+        - $ref: '#/components/schemas/GuideSurveySummary'
+        - type: object
+          properties:
+            object:
+              type: string
+              const: survey
+            type:
+              type: string
+              const: SURVEY
     Variant:
       type: object
       required:
@@ -4763,6 +6061,212 @@ components:
           format: date-time
         evaluated_at:
           type: string
+          format: date-time
+    AgentAnalyticsDataset:
+      type: object
+      required:
+        - id
+        - object
+        - project_id
+        - name
+        - description
+        - agent_name
+        - source_type
+        - session_count
+        - reviewed_count
+        - created_at
+      properties:
+        id:
+          type: string
+          description: Stable dataset identifier (ULID).
+        object:
+          type: string
+          const: agent_analytics_dataset
+        project_id:
+          type: string
+        name:
+          type: string
+          minLength: 1
+        description:
+          type:
+            - string
+            - 'null'
+        agent_name:
+          type:
+            - string
+            - 'null'
+          description: Agent the dataset is scoped to. Null for project-level datasets.
+        source_type:
+          type: string
+          description: How the dataset was assembled, such as `manual`.
+        session_count:
+          type: integer
+          description: Sessions currently in the dataset.
+        reviewed_count:
+          type: integer
+          description: Sessions in the dataset that carry a human review.
+        created_at:
+          type: string
+          format: date-time
+        created_by:
+          type:
+            - string
+            - 'null'
+    AgentAnalyticsSessionIds:
+      type: object
+      required:
+        - session_ids
+      properties:
+        session_ids:
+          type: array
+          description: Session identifiers. All must belong to the path project.
+          minItems: 1
+          maxItems: 100
+          items:
+            type: string
+    AgentAnalyticsEvaluatorTag:
+      type: object
+      required:
+        - id
+        - label
+        - description
+      properties:
+        id:
+          type: string
+        label:
+          type: string
+          description: Value stored on a result for this tag, such as `RESP_DATA_RESPONSE_MISMATCH`.
+        description:
+          type: string
+    AgentAnalyticsEvaluator:
+      type: object
+      required:
+        - id
+        - object
+        - project_id
+        - stable_id
+        - topic
+        - output_type
+        - description
+        - tags
+        - is_active
+      properties:
+        id:
+          type: string
+          description: Identifier for this evaluator version. Changes when the evaluator is updated.
+        object:
+          type: string
+          const: agent_analytics_evaluator
+        project_id:
+          type: string
+        stable_id:
+          type: string
+          description: Identifier that survives updates. Use this to address an evaluator across versions.
+        topic:
+          type: string
+          description: |
+            Human-readable evaluator name. Called `topic` to match the field already
+            returned by the Agent Analytics read surface.
+          minLength: 1
+        output_type:
+          type: string
+          enum:
+            - binary
+            - categorical
+            - score
+        description:
+          type: string
+          description: Evaluator prompt or rubric.
+        suite_id:
+          type:
+            - string
+            - 'null'
+        suite_name:
+          type:
+            - string
+            - 'null'
+        tags:
+          type: array
+          description: |
+            Permitted output values. Required for `binary` and `categorical`
+            evaluators; constrains what a result may record.
+          items:
+            $ref: '#/components/schemas/AgentAnalyticsEvaluatorTag'
+        is_active:
+          type: boolean
+          description: |
+            Read-only. Evaluators created or updated through this API are inactive.
+            Activation is a separate permission and is not exposed here.
+    AgentAnalyticsEvalRun:
+      type: object
+      required:
+        - id
+        - object
+        - project_id
+        - evaluator_ids
+        - run_type
+        - status
+        - target_mode
+        - total_sessions
+        - completed_sessions
+        - failed_sessions
+        - warnings
+      properties:
+        id:
+          type: string
+          description: Stable eval run identifier.
+        object:
+          type: string
+          const: agent_analytics_eval_run
+        project_id:
+          type: string
+        evaluator_ids:
+          type: array
+          items:
+            type: string
+        run_type:
+          type: string
+        status:
+          type: string
+          description: Lifecycle state of the run.
+        target_mode:
+          type: string
+          description: How the run selected its sessions, such as by dataset or by filter.
+        total_sessions:
+          type: integer
+        completed_sessions:
+          type: integer
+        failed_sessions:
+          type: integer
+        total_cost_usd:
+          type:
+            - number
+            - 'null'
+        avg_latency_ms:
+          type:
+            - integer
+            - 'null'
+        warnings:
+          type: array
+          items:
+            type: string
+        error:
+          type:
+            - string
+            - 'null'
+        created_by:
+          type:
+            - string
+            - 'null'
+        started_at:
+          type:
+            - string
+            - 'null'
+          format: date-time
+        completed_at:
+          type:
+            - string
+            - 'null'
           format: date-time
     McpAnalyticsServer:
       type: object
@@ -5925,6 +7429,321 @@ components:
             - 'null'
           format: uri
           readOnly: true
+    NudgePlatform:
+      type: string
+      enum:
+        - web
+        - ios
+        - android
+        - react-native
+        - desktop
+        - flutter
+      description: |
+        Target platform. Guides and surveys without an explicit platform are
+        returned as `web`.
+    NudgeType:
+      type: string
+      enum:
+        - GUIDE
+        - SURVEY
+      description: |
+        Whether the resource is a guide or a survey.
+    NudgeStatus:
+      type: string
+      enum:
+        - draft
+        - published
+        - testing
+        - scheduled
+        - scheduled-active
+        - scheduled-inactive
+        - experiment-running
+        - experiment-inactive
+        - archived
+      description: Derived rollout state. Read-only on API responses.
+    GuideSurveySummary:
+      type: object
+      required:
+        - id
+        - object
+        - project_id
+        - type
+        - platform
+        - title
+        - is_archived
+        - priority
+        - status
+        - status_description
+        - key
+        - start_at
+        - end_at
+        - url
+        - created_at
+        - updated_at
+        - latest_version
+      properties:
+        id:
+          type: string
+          pattern: ^[0-9]+$
+          description: Numeric nudge identifier.
+        object:
+          type: string
+          description: Resource discriminator. `guide` or `survey` on the public API.
+        project_id:
+          type: string
+          pattern: ^[0-9]+$
+        type:
+          $ref: '#/components/schemas/NudgeType'
+        platform:
+          $ref: '#/components/schemas/NudgePlatform'
+        title:
+          type:
+            - string
+            - 'null'
+        description:
+          type:
+            - string
+            - 'null'
+        is_archived:
+          type: boolean
+        priority:
+          type: integer
+          minimum: 1
+          maximum: 4
+          description: Trigger precedence (4 = urgent, 1 = low).
+        status:
+          $ref: '#/components/schemas/NudgeStatus'
+        status_description:
+          type: string
+        key:
+          type:
+            - string
+            - 'null'
+          description: |
+            Feature flag key that controls delivery. Matches the
+            `[Guides-Surveys] Key` property on SDK-tracked guide and survey events,
+            so use it to join events to this guide or survey.
+        start_at:
+          type:
+            - string
+            - 'null'
+          format: date-time
+          description: |
+            Scheduled start of the live flag. `null` when no start is scheduled.
+        end_at:
+          type:
+            - string
+            - 'null'
+          format: date-time
+          description: |
+            Scheduled end of the live flag. `null` when no end is scheduled.
+        url:
+          type: string
+          format: uri
+          description: Admin URL for the guide or survey.
+        page_target_segments:
+          type: array
+          items: {}
+          description: Page URL targeting rules. Empty means globally eligible.
+        tags:
+          type: array
+          items:
+            type: string
+        created_by:
+          type:
+            - string
+            - 'null'
+        last_modified_by:
+          type:
+            - string
+            - 'null'
+        created_at:
+          type:
+            - string
+            - 'null'
+          format: date-time
+        updated_at:
+          type:
+            - string
+            - 'null'
+          format: date-time
+        latest_version:
+          type: integer
+          description: |
+            Monotonic version for optimistic concurrency. Send the value from the
+            latest GET on PATCH; a stale value returns 409.
+    NudgeFormFactorType:
+      type: string
+      enum:
+        - banner
+        - card
+        - checklist
+        - modal
+        - pin
+        - popover
+        - tooltip
+      description: |
+        Step presentation layout. Required layout keys and allowed values differ
+        by form factor.
+    GuideSurveyStepFormFactor:
+      type: object
+      required:
+        - type
+      properties:
+        type:
+          $ref: '#/components/schemas/NudgeFormFactorType'
+      additionalProperties: true
+      description: |
+        Layout object for a step. `type` selects the form factor; additional keys
+        are layout-specific.
+    GuideSurveyStepInput:
+      type: object
+      description: |
+        Step payload on create/update. `id` is optional — omit for new steps; include
+        when updating an existing step row. A negative `id` is a step added to a
+        published guide or survey's draft that has not been published yet.
+      properties:
+        id:
+          type: string
+        title:
+          type:
+            - string
+            - 'null'
+        form_factor:
+          $ref: '#/components/schemas/GuideSurveyStepFormFactor'
+        content:
+          description: Step body content (structure varies by form factor).
+        sort_key:
+          type:
+            - integer
+            - 'null'
+      additionalProperties: false
+    GuideSurveyVariantInput:
+      type: object
+      description: |
+        Variant payload on create/update. `id` is optional — omit for new variants;
+        include when updating an existing variant row. A negative `id` is a variant
+        added to a published guide or survey's draft that has not been published yet.
+        `variant` key is required.
+      required:
+        - variant
+      properties:
+        id:
+          type: string
+        variant:
+          type: string
+          description: Variant key within the nudge.
+        display_title:
+          type:
+            - string
+            - 'null'
+        display_description:
+          type:
+            - string
+            - 'null'
+        snooze_label:
+          type:
+            - string
+            - 'null'
+        done_label:
+          type:
+            - string
+            - 'null'
+        steps:
+          type: array
+          items:
+            $ref: '#/components/schemas/GuideSurveyStepInput'
+      additionalProperties: false
+    GuideSurveyStep:
+      allOf:
+        - $ref: '#/components/schemas/GuideSurveyStepInput'
+        - type: object
+          required:
+            - id
+    GuideSurveyVariant:
+      allOf:
+        - $ref: '#/components/schemas/GuideSurveyVariantInput'
+        - type: object
+          required:
+            - id
+          properties:
+            steps:
+              type: array
+              items:
+                $ref: '#/components/schemas/GuideSurveyStep'
+    ExperimentVariantSummary:
+      type: object
+      required:
+        - key
+      properties:
+        key:
+          type: string
+        name:
+          type:
+            - string
+            - 'null'
+        description:
+          type:
+            - string
+            - 'null'
+        payload:
+          description: Optional JSON payload associated with the experiment variant.
+    GuideSurvey:
+      allOf:
+        - $ref: '#/components/schemas/GuideSurveySummary'
+        - type: object
+          properties:
+            temporarily_hide_page_target_segments:
+              type: array
+              items: {}
+            hide_if_page_targeting_not_met:
+              type: boolean
+            trigger_config:
+              description: When and how the nudge triggers.
+            lifecycle:
+              description: Frequency and display lifecycle rules.
+            dismissible:
+              type: boolean
+            snoozable:
+              type: boolean
+            snoozable_on_all_steps:
+              type: boolean
+            snooze_duration:
+              description: Snooze duration configuration.
+            snooze_label:
+              type:
+                - string
+                - 'null'
+            template_source:
+              type:
+                - string
+                - 'null'
+            show_step_counter:
+              type: boolean
+            step_counter_format:
+              type:
+                - string
+                - 'null'
+            variants:
+              type: array
+              items:
+                $ref: '#/components/schemas/GuideSurveyVariant'
+            experiment_variants:
+              type: array
+              items:
+                $ref: '#/components/schemas/ExperimentVariantSummary'
+              description: Read-only experiment variant keys when the nudge is experiment-backed.
+            flag_config:
+              oneOf:
+                - $ref: '#/components/schemas/FeatureFlag'
+                - type: 'null'
+              readOnly: true
+              description: |
+                The Experiment feature flag that delivers this nudge, in the same
+                shape as the Feature Flags API. Includes audience targeting
+                (`target_segments`) and rollout. With
+                `include_unpublished_changes=true`, draft rollout and targeting
+                settings are applied over the live flag.
     DestinationConnectorKind:
       type: string
       enum:

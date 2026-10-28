@@ -5,7 +5,7 @@ import { DEFAULT_SCOPES } from './scopes';
 describe('DEFAULT_SCOPES', () => {
   it('is the canonical manifest scope union plus the legacy mcp scopes, sorted', () => {
     expect(DEFAULT_SCOPES).toBe(
-      'analytics:read destinations:read destinations:write flags:read flags:write mcp:read mcp:write offline_access openid projects:read taxonomy:read taxonomy:write',
+      'analytics:read analytics:write destinations:read destinations:write flags:read flags:write guides:read guides:write mcp:read mcp:write offline_access openid projects:read surveys:read surveys:write taxonomy:read taxonomy:write',
     );
   });
 
@@ -15,11 +15,16 @@ describe('DEFAULT_SCOPES', () => {
     expect(scopes).toContain('mcp:write');
   });
 
-  it('requests only the scopes commands declare — no unused write scope', () => {
+  it('requests only the scopes commands declare', () => {
     const scopes = DEFAULT_SCOPES.split(' ');
     expect(scopes).toContain('analytics:read'); // chart read operations
-    // No command writes analytics, so login must not ask consent for it.
-    expect(scopes).not.toContain('analytics:write');
+    // analytics:write arrived with the Agent Analytics write commands
+    // (AA-152500). Until those existed no command declared it, and login must
+    // not ask consent for a scope nothing uses — so this asserts presence
+    // rather than absence only because the commands are now real.
+    expect(scopes).toContain('analytics:write');
+    // Nothing declares experiments:write, so it must stay out.
+    expect(scopes).not.toContain('experiments:write');
   });
 
   it('requests the offline_access and openid meta-scopes', () => {

@@ -390,7 +390,7 @@ describe('runAuthLogin', () => {
 
     await runAuthLogin({ profile: 'amplitude', env: 'prod' }, capturing);
     expect(scopes[0]).toBe(
-      'analytics:read destinations:read destinations:write flags:read flags:write mcp:read mcp:write offline_access openid projects:read taxonomy:read taxonomy:write',
+      'analytics:read analytics:write destinations:read destinations:write flags:read flags:write guides:read guides:write mcp:read mcp:write offline_access openid projects:read surveys:read surveys:write taxonomy:read taxonomy:write',
     );
   });
 

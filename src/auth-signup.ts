@@ -30,6 +30,7 @@ import {
   SIGNUP_DOCUMENT_URLS,
   type SignupOutput,
   signupErrorFromResponse,
+  signupMissingInformationError,
   signupPollContinuation,
   signupRequestSchema,
   signupResponseSchema,
@@ -53,6 +54,8 @@ const suppliedInputsSchema = signupRequestSchema
   .partial();
 
 function needsInformation(schema: Record<string, unknown>): AuthSignupResult {
+  const error = signupMissingInformationError(schema);
+  if (error) return { ok: false, error };
   return {
     ok: true,
     exitCode: 2,
@@ -150,38 +153,8 @@ export async function runAuthSignup(
     };
   }
   const accepted = isFlagEnabled(flags['accept-tos']);
-  if (!inputs.data.email || !accepted) {
-    const required: string[] = [];
-    const properties: Record<string, unknown> = {};
-    if (!inputs.data.email) {
-      required.push('email');
-      properties.email = {
-        type: 'string',
-        format: 'email',
-        description: 'Email address',
-      };
-    }
-    if (!accepted) {
-      required.push('terms_acceptance');
-      properties.terms_acceptance = {
-        type: 'object',
-        description:
-          'Agree to the Terms of Service and acknowledge the Privacy Policy with --accept-tos. Example: `amp auth signup --non-interactive --email alex@example.com --full-name "Alex Morgan" --region us --accept-tos`.',
-        documents: [
-          {
-            kind: 'terms_of_service',
-            title: 'Terms of Service',
-            url: SIGNUP_DOCUMENT_URLS.terms_of_service,
-          },
-          {
-            kind: 'privacy_policy',
-            title: 'Privacy Policy',
-            url: SIGNUP_DOCUMENT_URLS.privacy_policy,
-          },
-        ],
-      };
-    }
-    return needsInformation({ type: 'object', properties, required });
+  if (!inputs.data.email) {
+    return { ok: false, error: usageError('Signup requires --email <email>.') };
   }
 
   const body = signupRequestSchema.safeParse({
@@ -189,16 +162,20 @@ export async function runAuthSignup(
     ...(inputs.data.full_name === undefined
       ? {}
       : { full_name: inputs.data.full_name }),
-    terms_acceptance: {
-      terms_of_service: {
-        url: SIGNUP_DOCUMENT_URLS.terms_of_service,
-        accepted: true,
-      },
-      privacy_policy: {
-        url: SIGNUP_DOCUMENT_URLS.privacy_policy,
-        accepted: true,
-      },
-    },
+    ...(accepted
+      ? {
+          terms_acceptance: {
+            terms_of_service: {
+              url: SIGNUP_DOCUMENT_URLS.terms_of_service,
+              accepted: true,
+            },
+            privacy_policy: {
+              url: SIGNUP_DOCUMENT_URLS.privacy_policy,
+              accepted: true,
+            },
+          },
+        }
+      : {}),
   });
   if (!body.success)
     return {
@@ -282,10 +259,16 @@ export async function runAuthSignup(
           data: {
             profile: profileName,
             base_url: baseUrl,
-            terms_acceptance: {
-              terms_of_service: body.data.terms_acceptance.terms_of_service.url,
-              privacy_policy: body.data.terms_acceptance.privacy_policy.url,
-            },
+            ...(body.data.terms_acceptance
+              ? {
+                  terms_acceptance: {
+                    terms_of_service:
+                      body.data.terms_acceptance.terms_of_service.url,
+                    privacy_policy:
+                      body.data.terms_acceptance.privacy_policy.url,
+                  },
+                }
+              : {}),
           },
         },
       };

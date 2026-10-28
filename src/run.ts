@@ -195,7 +195,7 @@ async function ensureDeleteAllowed(
   operation: CliOperation,
   flags: Record<string, FlagValue>,
 ): Promise<void> {
-  const dryRunRequested = isFlagEnabled(flags['dry-run']);
+  const dryRunRequested = isFlagEnabled(flags['dry-run'] ?? flags.dry_run);
   const dryRunSupported = operationSupportsDryRun(operation);
   const decision = deleteGateDecision({
     dryRunRequested,

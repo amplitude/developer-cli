@@ -15,4 +15,4 @@ export const LOGIN_META_SCOPES = ['offline_access', 'openid'] as const;
 // Exact default requested by `amp auth login`. Generated alongside the CLI
 // manifest so hosted OAuth client verification consumes the same contract.
 export const DEFAULT_CLI_LOGIN_SCOPES =
-  'analytics:read destinations:read destinations:write flags:read flags:write mcp:read mcp:write offline_access openid projects:read taxonomy:read taxonomy:write';
+  'analytics:read analytics:write destinations:read destinations:write flags:read flags:write guides:read guides:write mcp:read mcp:write offline_access openid projects:read surveys:read surveys:write taxonomy:read taxonomy:write';

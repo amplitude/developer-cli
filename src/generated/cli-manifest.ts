@@ -13,6 +13,7 @@ export interface CliParameter {
   aliases: string[];
   type: string;
   allowEmptyValue?: boolean;
+  description?: string;
 }
 
 export interface CliBodyProperty {
@@ -22,6 +23,8 @@ export interface CliBodyProperty {
   type: string;
   nullable: boolean;
   enum?: string[];
+  description?: string;
+  items?: Record<string, unknown>;
 }
 
 export interface CliOperation {
@@ -51,8 +54,10 @@ export const CLI_OPERATIONS = [
         name: 'project_id',
         in: 'path',
         required: true,
-        aliases: ['project', 'project-id'],
+        aliases: ['project', 'project-id', 'project_id'],
         type: 'string',
+        description:
+          'Amplitude project identifier, backed by the canonical app ID.',
       },
       {
         name: 'limit',
@@ -60,6 +65,7 @@ export const CLI_OPERATIONS = [
         required: false,
         aliases: ['limit'],
         type: 'integer',
+        description: 'Number of items to return. Defaults to 50, max 200.',
       },
       {
         name: 'cursor',
@@ -67,14 +73,18 @@ export const CLI_OPERATIONS = [
         required: false,
         aliases: ['cursor'],
         type: 'string',
+        description:
+          'Opaque cursor from `pagination.next_cursor` on the previous response.\nNumeric offsets are capped by the underlying search index (10,000 results\nper query). Well-formed pagination stops before that window; requests whose\ncursor would exceed it return 400 `pagination_not_supported`.\n',
       },
       {
         name: 'agent_name',
         in: 'query',
         required: false,
         allowEmptyValue: true,
-        aliases: ['agent-name'],
+        aliases: ['agent-name', 'agent_name'],
         type: 'string',
+        description:
+          'Exact agent name. Omit for all scopes; an empty string selects project-level findings only.',
       },
     ],
     body: [],
@@ -92,15 +102,560 @@ export const CLI_OPERATIONS = [
         name: 'project_id',
         in: 'path',
         required: true,
-        aliases: ['project', 'project-id'],
+        aliases: ['project', 'project-id', 'project_id'],
         type: 'string',
+        description:
+          'Amplitude project identifier, backed by the canonical app ID.',
       },
       {
         name: 'insight_id',
         in: 'path',
         required: true,
-        aliases: ['insight-id'],
+        aliases: ['insight-id', 'insight_id'],
         type: 'string',
+        description:
+          'Stable insight UUID returned by the list operation, not a finding key such as tool-failures.',
+      },
+    ],
+    body: [],
+  },
+  {
+    command: ['agent-analytics', 'datasets', 'create'],
+    method: 'POST',
+    operationId: 'createAgentAnalyticsDataset',
+    path: '/v1/projects/{project_id}/agent-analytics/datasets',
+    requiredScopes: ['analytics:write'],
+    summary: 'Create an Agent Analytics dataset',
+    successStatus: 201,
+    parameters: [
+      {
+        name: 'project_id',
+        in: 'path',
+        required: true,
+        aliases: ['project', 'project-id', 'project_id'],
+        type: 'string',
+        description:
+          'Amplitude project identifier, backed by the canonical app ID.',
+      },
+      {
+        name: 'Idempotency-Key',
+        in: 'header',
+        required: true,
+        aliases: ['idempotency-key'],
+        type: 'string',
+        description:
+          'Unique idempotency key used to safely retry write operations.',
+      },
+    ],
+    body: [
+      {
+        name: 'name',
+        required: true,
+        aliases: ['name'],
+        type: 'string',
+        nullable: false,
+      },
+      {
+        name: 'description',
+        required: false,
+        aliases: ['description'],
+        type: 'string',
+        nullable: true,
+      },
+      {
+        name: 'agent_name',
+        required: false,
+        aliases: ['agent-name', 'agent_name'],
+        type: 'string',
+        nullable: true,
+        description:
+          'Scope the dataset to one agent. Omit for a project-level dataset.',
+      },
+    ],
+  },
+  {
+    command: ['agent-analytics', 'datasets', 'update'],
+    method: 'PATCH',
+    operationId: 'updateAgentAnalyticsDataset',
+    path: '/v1/projects/{project_id}/agent-analytics/datasets/{dataset_id}',
+    requiredScopes: ['analytics:write'],
+    summary: 'Update an Agent Analytics dataset',
+    successStatus: 200,
+    parameters: [
+      {
+        name: 'project_id',
+        in: 'path',
+        required: true,
+        aliases: ['project', 'project-id', 'project_id'],
+        type: 'string',
+        description:
+          'Amplitude project identifier, backed by the canonical app ID.',
+      },
+      {
+        name: 'dataset_id',
+        in: 'path',
+        required: true,
+        aliases: ['dataset-id', 'dataset_id'],
+        type: 'string',
+        description:
+          'Stable dataset identifier, returned by create or by the Agent Analytics read surface.',
+      },
+      {
+        name: 'Idempotency-Key',
+        in: 'header',
+        required: true,
+        aliases: ['idempotency-key'],
+        type: 'string',
+        description:
+          'Unique idempotency key used to safely retry write operations.',
+      },
+    ],
+    body: [
+      {
+        name: 'name',
+        required: false,
+        aliases: ['name'],
+        type: 'string',
+        nullable: false,
+      },
+      {
+        name: 'description',
+        required: false,
+        aliases: ['description'],
+        type: 'string',
+        nullable: true,
+      },
+    ],
+  },
+  {
+    command: ['agent-analytics', 'datasets', 'remove-sessions'],
+    method: 'DELETE',
+    operationId: 'removeAgentAnalyticsDatasetSessions',
+    path: '/v1/projects/{project_id}/agent-analytics/datasets/{dataset_id}/sessions',
+    requiredScopes: ['analytics:write'],
+    summary: 'Remove sessions from an Agent Analytics dataset',
+    successStatus: 204,
+    parameters: [
+      {
+        name: 'project_id',
+        in: 'path',
+        required: true,
+        aliases: ['project', 'project-id', 'project_id'],
+        type: 'string',
+        description:
+          'Amplitude project identifier, backed by the canonical app ID.',
+      },
+      {
+        name: 'dataset_id',
+        in: 'path',
+        required: true,
+        aliases: ['dataset-id', 'dataset_id'],
+        type: 'string',
+        description:
+          'Stable dataset identifier, returned by create or by the Agent Analytics read surface.',
+      },
+      {
+        name: 'dry_run',
+        in: 'query',
+        required: false,
+        aliases: ['dry-run', 'dry_run'],
+        type: 'boolean',
+        description: 'Validate request without performing mutation.',
+      },
+      {
+        name: 'Idempotency-Key',
+        in: 'header',
+        required: true,
+        aliases: ['idempotency-key'],
+        type: 'string',
+        description:
+          'Unique idempotency key used to safely retry write operations.',
+      },
+    ],
+    body: [
+      {
+        name: 'session_ids',
+        required: true,
+        aliases: ['session-ids', 'session_ids'],
+        type: 'array',
+        nullable: false,
+        description:
+          'Session identifiers. All must belong to the path project.',
+        items: {
+          type: 'string',
+        },
+      },
+    ],
+  },
+  {
+    command: ['agent-analytics', 'datasets', 'add-sessions'],
+    method: 'POST',
+    operationId: 'addAgentAnalyticsDatasetSessions',
+    path: '/v1/projects/{project_id}/agent-analytics/datasets/{dataset_id}/sessions',
+    requiredScopes: ['analytics:write'],
+    summary: 'Add sessions to an Agent Analytics dataset',
+    successStatus: 200,
+    parameters: [
+      {
+        name: 'project_id',
+        in: 'path',
+        required: true,
+        aliases: ['project', 'project-id', 'project_id'],
+        type: 'string',
+        description:
+          'Amplitude project identifier, backed by the canonical app ID.',
+      },
+      {
+        name: 'dataset_id',
+        in: 'path',
+        required: true,
+        aliases: ['dataset-id', 'dataset_id'],
+        type: 'string',
+        description:
+          'Stable dataset identifier, returned by create or by the Agent Analytics read surface.',
+      },
+      {
+        name: 'Idempotency-Key',
+        in: 'header',
+        required: true,
+        aliases: ['idempotency-key'],
+        type: 'string',
+        description:
+          'Unique idempotency key used to safely retry write operations.',
+      },
+    ],
+    body: [
+      {
+        name: 'session_ids',
+        required: true,
+        aliases: ['session-ids', 'session_ids'],
+        type: 'array',
+        nullable: false,
+        description:
+          'Session identifiers. All must belong to the path project.',
+        items: {
+          type: 'string',
+        },
+      },
+    ],
+  },
+  {
+    command: ['agent-analytics', 'evaluators', 'create'],
+    method: 'POST',
+    operationId: 'createAgentAnalyticsEvaluator',
+    path: '/v1/projects/{project_id}/agent-analytics/evaluators',
+    requiredScopes: ['analytics:write'],
+    summary: 'Create an Agent Analytics evaluator',
+    successStatus: 201,
+    parameters: [
+      {
+        name: 'project_id',
+        in: 'path',
+        required: true,
+        aliases: ['project', 'project-id', 'project_id'],
+        type: 'string',
+        description:
+          'Amplitude project identifier, backed by the canonical app ID.',
+      },
+      {
+        name: 'Idempotency-Key',
+        in: 'header',
+        required: true,
+        aliases: ['idempotency-key'],
+        type: 'string',
+        description:
+          'Unique idempotency key used to safely retry write operations.',
+      },
+    ],
+    body: [
+      {
+        name: 'topic',
+        required: true,
+        aliases: ['topic'],
+        type: 'string',
+        nullable: false,
+        description: 'Human-readable evaluator name.',
+      },
+      {
+        name: 'output_type',
+        required: true,
+        aliases: ['output-type', 'output_type'],
+        type: 'string',
+        nullable: false,
+        enum: ['binary', 'categorical', 'score'],
+      },
+      {
+        name: 'description',
+        required: true,
+        aliases: ['description'],
+        type: 'string',
+        nullable: false,
+        description: 'Evaluator prompt or rubric.',
+      },
+      {
+        name: 'tags',
+        required: false,
+        aliases: ['tags'],
+        type: 'array',
+        nullable: false,
+        description: 'Required for `binary` and `categorical` evaluators.',
+        items: {
+          type: 'object',
+          required: ['id', 'label', 'description'],
+          properties: {
+            id: {
+              type: 'string',
+            },
+            label: {
+              type: 'string',
+              description:
+                'Value stored on a result for this tag, such as `RESP_DATA_RESPONSE_MISMATCH`.',
+            },
+            description: {
+              type: 'string',
+            },
+          },
+        },
+      },
+      {
+        name: 'suite_id',
+        required: false,
+        aliases: ['suite-id', 'suite_id'],
+        type: 'string',
+        nullable: true,
+      },
+    ],
+  },
+  {
+    command: ['agent-analytics', 'evaluators', 'update'],
+    method: 'PATCH',
+    operationId: 'updateAgentAnalyticsEvaluator',
+    path: '/v1/projects/{project_id}/agent-analytics/evaluators/{evaluator_stable_id}',
+    requiredScopes: ['analytics:write'],
+    summary: 'Update an Agent Analytics evaluator',
+    successStatus: 200,
+    parameters: [
+      {
+        name: 'project_id',
+        in: 'path',
+        required: true,
+        aliases: ['project', 'project-id', 'project_id'],
+        type: 'string',
+        description:
+          'Amplitude project identifier, backed by the canonical app ID.',
+      },
+      {
+        name: 'evaluator_stable_id',
+        in: 'path',
+        required: true,
+        aliases: ['evaluator-stable-id', 'evaluator_stable_id'],
+        type: 'string',
+        description:
+          'Evaluator identifier that survives updates. Prefer this over a version\nidentifier, which changes each time the evaluator is updated.\n',
+      },
+      {
+        name: 'Idempotency-Key',
+        in: 'header',
+        required: true,
+        aliases: ['idempotency-key'],
+        type: 'string',
+        description:
+          'Unique idempotency key used to safely retry write operations.',
+      },
+    ],
+    body: [
+      {
+        name: 'topic',
+        required: false,
+        aliases: ['topic'],
+        type: 'string',
+        nullable: false,
+      },
+      {
+        name: 'description',
+        required: false,
+        aliases: ['description'],
+        type: 'string',
+        nullable: false,
+      },
+      {
+        name: 'tags',
+        required: false,
+        aliases: ['tags'],
+        type: 'array',
+        nullable: false,
+        description: 'Replaces the full tag set when present.',
+        items: {
+          type: 'object',
+          required: ['id', 'label', 'description'],
+          properties: {
+            id: {
+              type: 'string',
+            },
+            label: {
+              type: 'string',
+              description:
+                'Value stored on a result for this tag, such as `RESP_DATA_RESPONSE_MISMATCH`.',
+            },
+            description: {
+              type: 'string',
+            },
+          },
+        },
+      },
+      {
+        name: 'suite_id',
+        required: false,
+        aliases: ['suite-id', 'suite_id'],
+        type: 'string',
+        nullable: true,
+      },
+    ],
+  },
+  {
+    command: ['agent-analytics', 'eval-runs', 'list'],
+    method: 'GET',
+    operationId: 'listAgentAnalyticsEvalRuns',
+    path: '/v1/projects/{project_id}/agent-analytics/eval-runs',
+    requiredScopes: ['analytics:read'],
+    summary: 'List Agent Analytics eval runs',
+    successStatus: 200,
+    parameters: [
+      {
+        name: 'project_id',
+        in: 'path',
+        required: true,
+        aliases: ['project', 'project-id', 'project_id'],
+        type: 'string',
+        description:
+          'Amplitude project identifier, backed by the canonical app ID.',
+      },
+      {
+        name: 'limit',
+        in: 'query',
+        required: false,
+        aliases: ['limit'],
+        type: 'integer',
+        description: 'Number of items to return. Defaults to 50, max 200.',
+      },
+      {
+        name: 'cursor',
+        in: 'query',
+        required: false,
+        aliases: ['cursor'],
+        type: 'string',
+        description:
+          'Opaque cursor from `pagination.next_cursor` on the previous response.\nNumeric offsets are capped by the underlying search index (10,000 results\nper query). Well-formed pagination stops before that window; requests whose\ncursor would exceed it return 400 `pagination_not_supported`.\n',
+      },
+      {
+        name: 'status',
+        in: 'query',
+        required: false,
+        aliases: ['status'],
+        type: 'string',
+        description: 'Filter to runs in one lifecycle state.',
+      },
+    ],
+    body: [],
+  },
+  {
+    command: ['agent-analytics', 'eval-runs', 'trigger'],
+    method: 'POST',
+    operationId: 'triggerAgentAnalyticsEvalRun',
+    path: '/v1/projects/{project_id}/agent-analytics/eval-runs',
+    requiredScopes: ['analytics:write'],
+    summary: 'Trigger an Agent Analytics eval run',
+    successStatus: 201,
+    parameters: [
+      {
+        name: 'project_id',
+        in: 'path',
+        required: true,
+        aliases: ['project', 'project-id', 'project_id'],
+        type: 'string',
+        description:
+          'Amplitude project identifier, backed by the canonical app ID.',
+      },
+      {
+        name: 'Idempotency-Key',
+        in: 'header',
+        required: true,
+        aliases: ['idempotency-key'],
+        type: 'string',
+        description:
+          'Unique idempotency key used to safely retry write operations.',
+      },
+    ],
+    body: [
+      {
+        name: 'evaluator_ids',
+        required: true,
+        aliases: ['evaluator-ids', 'evaluator_ids'],
+        type: 'array',
+        nullable: false,
+        description:
+          'Evaluator version identifiers returned by create or update. Evaluator updates use stable identifiers instead.',
+        items: {
+          type: 'string',
+        },
+      },
+      {
+        name: 'dataset_id',
+        required: false,
+        aliases: ['dataset-id', 'dataset_id'],
+        type: 'string',
+        nullable: false,
+        description:
+          'Evaluate the sessions in this dataset. Mutually exclusive with `session_ids`; exactly one of the two is required.',
+      },
+      {
+        name: 'session_ids',
+        required: false,
+        aliases: ['session-ids', 'session_ids'],
+        type: 'array',
+        nullable: false,
+        description:
+          'Evaluate these sessions. Mutually exclusive with `dataset_id`; exactly one of the two is required.',
+        items: {
+          type: 'string',
+        },
+      },
+      {
+        name: 'sample_size',
+        required: false,
+        aliases: ['sample-size', 'sample_size'],
+        type: 'integer',
+        nullable: false,
+        description:
+          'Retained for compatibility. This endpoint targets explicit session\nIDs, including when expanding a dataset, so sample_size does not\nreduce the selected sessions. All supplied IDs are targeted,\nwith dataset expansion capped at the first 100 members.\n',
+      },
+    ],
+  },
+  {
+    command: ['agent-analytics', 'eval-runs', 'get'],
+    method: 'GET',
+    operationId: 'getAgentAnalyticsEvalRun',
+    path: '/v1/projects/{project_id}/agent-analytics/eval-runs/{eval_run_id}',
+    requiredScopes: ['analytics:read'],
+    summary: 'Get an Agent Analytics eval run',
+    successStatus: 200,
+    parameters: [
+      {
+        name: 'project_id',
+        in: 'path',
+        required: true,
+        aliases: ['project', 'project-id', 'project_id'],
+        type: 'string',
+        description:
+          'Amplitude project identifier, backed by the canonical app ID.',
+      },
+      {
+        name: 'eval_run_id',
+        in: 'path',
+        required: true,
+        aliases: ['eval-run-id', 'eval_run_id'],
+        type: 'string',
+        description: 'Stable eval run identifier returned by trigger or list.',
       },
     ],
     body: [],
@@ -118,8 +673,10 @@ export const CLI_OPERATIONS = [
         name: 'project_id',
         in: 'path',
         required: true,
-        aliases: ['project', 'project-id'],
+        aliases: ['project', 'project-id', 'project_id'],
         type: 'string',
+        description:
+          'Amplitude project identifier, backed by the canonical app ID.',
       },
     ],
     body: [],
@@ -137,22 +694,27 @@ export const CLI_OPERATIONS = [
         name: 'project_id',
         in: 'path',
         required: true,
-        aliases: ['project', 'project-id'],
+        aliases: ['project', 'project-id', 'project_id'],
         type: 'string',
+        description:
+          'Amplitude project identifier, backed by the canonical app ID.',
       },
       {
         name: 'server_id',
         in: 'path',
         required: true,
-        aliases: ['server', 'server-id'],
+        aliases: ['server', 'server-id', 'server_id'],
         type: 'string',
+        description: 'Server id.',
       },
       {
         name: 'parent_id',
         in: 'query',
         required: false,
-        aliases: ['parent', 'parent-id'],
+        aliases: ['parent', 'parent-id', 'parent_id'],
         type: 'string',
+        description:
+          "Node selector. Omit it for every node in the active tree. `root`\nreturns root nodes. Any other value is a stable topic id and returns\nthat topic's direct children. An unknown parent returns 404 when a\ntaxonomy is pinned.\n",
       },
     ],
     body: [],
@@ -170,22 +732,26 @@ export const CLI_OPERATIONS = [
         name: 'project_id',
         in: 'path',
         required: true,
-        aliases: ['project', 'project-id'],
+        aliases: ['project', 'project-id', 'project_id'],
         type: 'string',
+        description:
+          'Amplitude project identifier, backed by the canonical app ID.',
       },
       {
         name: 'server_id',
         in: 'path',
         required: true,
-        aliases: ['server', 'server-id'],
+        aliases: ['server', 'server-id', 'server_id'],
         type: 'string',
+        description: 'Server id.',
       },
       {
         name: 'topic_id',
         in: 'path',
         required: true,
-        aliases: ['topic', 'topic-id'],
+        aliases: ['topic', 'topic-id', 'topic_id'],
         type: 'string',
+        description: 'Stable topic id. `root` is not a topic id.',
       },
     ],
     body: [],
@@ -203,36 +769,44 @@ export const CLI_OPERATIONS = [
         name: 'project_id',
         in: 'path',
         required: true,
-        aliases: ['project', 'project-id'],
+        aliases: ['project', 'project-id', 'project_id'],
         type: 'string',
+        description:
+          'Amplitude project identifier, backed by the canonical app ID.',
       },
       {
         name: 'server_id',
         in: 'path',
         required: true,
-        aliases: ['server', 'server-id'],
+        aliases: ['server', 'server-id', 'server_id'],
         type: 'string',
+        description: 'Server id.',
       },
       {
         name: 'topic_id',
         in: 'path',
         required: true,
-        aliases: ['topic', 'topic-id'],
+        aliases: ['topic', 'topic-id', 'topic_id'],
         type: 'string',
+        description: 'Stable topic id.',
       },
       {
         name: 'started_after',
         in: 'query',
         required: false,
-        aliases: ['started-after'],
+        aliases: ['started-after', 'started_after'],
         type: 'string',
+        description:
+          'Include episodes that started at or after this RFC 3339 timestamp.',
       },
       {
         name: 'started_before',
         in: 'query',
         required: false,
-        aliases: ['started-before'],
+        aliases: ['started-before', 'started_before'],
         type: 'string',
+        description:
+          'Include episodes that started before this RFC 3339 timestamp.',
       },
       {
         name: 'lane',
@@ -240,34 +814,39 @@ export const CLI_OPERATIONS = [
         required: false,
         aliases: ['lane'],
         type: 'string',
+        description: 'Exact stored lane.',
       },
       {
         name: 'client_name',
         in: 'query',
         required: false,
-        aliases: ['client-name'],
+        aliases: ['client-name', 'client_name'],
         type: 'string',
+        description: 'Exact stored client name.',
       },
       {
         name: 'auth_type',
         in: 'query',
         required: false,
-        aliases: ['auth-type'],
+        aliases: ['auth-type', 'auth_type'],
         type: 'string',
+        description: 'Exact stored auth type.',
       },
       {
         name: 'has_error',
         in: 'query',
         required: false,
-        aliases: ['has-error'],
+        aliases: ['has-error', 'has_error'],
         type: 'boolean',
+        description: 'Whether the episode recorded an error.',
       },
       {
         name: 'is_thrash',
         in: 'query',
         required: false,
-        aliases: ['is-thrash'],
+        aliases: ['is-thrash', 'is_thrash'],
         type: 'boolean',
+        description: 'Whether the episode was classified as thrash.',
       },
       {
         name: 'cursor',
@@ -275,6 +854,8 @@ export const CLI_OPERATIONS = [
         required: false,
         aliases: ['cursor'],
         type: 'string',
+        description:
+          'Opaque cursor from `pagination.next_cursor` on the previous response.',
       },
       {
         name: 'limit',
@@ -282,6 +863,8 @@ export const CLI_OPERATIONS = [
         required: false,
         aliases: ['limit'],
         type: 'integer',
+        description:
+          'Number of episodes to return. Defaults to 25, maximum 100.',
       },
     ],
     body: [],
@@ -299,15 +882,18 @@ export const CLI_OPERATIONS = [
         name: 'project_id',
         in: 'path',
         required: true,
-        aliases: ['project', 'project-id'],
+        aliases: ['project', 'project-id', 'project_id'],
         type: 'string',
+        description:
+          'Amplitude project identifier, backed by the canonical app ID.',
       },
       {
         name: 'episode_id',
         in: 'path',
         required: true,
-        aliases: ['episode', 'episode-id'],
+        aliases: ['episode', 'episode-id', 'episode_id'],
         type: 'string',
+        description: 'Episode id returned by the topic or episode list.',
       },
     ],
     body: [],
@@ -338,6 +924,8 @@ export const CLI_OPERATIONS = [
         required: false,
         aliases: ['cursor'],
         type: 'string',
+        description:
+          'Opaque cursor from `pagination.next_cursor` on the previous response.\nNumeric offsets are capped by the underlying search index (10,000 results\nper query). Well-formed pagination stops before that window; requests whose\ncursor would exceed it return 400 `pagination_not_supported`.\n',
       },
       {
         name: 'limit',
@@ -345,6 +933,7 @@ export const CLI_OPERATIONS = [
         required: false,
         aliases: ['limit'],
         type: 'integer',
+        description: 'Number of items to return. Defaults to 50, max 200.',
       },
       {
         name: 'sort',
@@ -352,6 +941,8 @@ export const CLI_OPERATIONS = [
         required: false,
         aliases: ['sort'],
         type: 'string',
+        description:
+          'Sort field. Prefix with `-` for descending. Supported values are `updated_at` and `name`.',
       },
       {
         name: 'q',
@@ -359,6 +950,7 @@ export const CLI_OPERATIONS = [
         required: false,
         aliases: ['q', 'query'],
         type: 'string',
+        description: 'Full-text search query.',
       },
     ],
     body: [],
@@ -377,16 +969,19 @@ export const CLI_OPERATIONS = [
       {
         name: 'api_key',
         required: true,
-        aliases: ['api-key'],
+        aliases: ['api-key', 'api_key'],
         type: 'string',
         nullable: false,
+        description: 'Ingestion API key for the Amplitude project to check.',
       },
       {
         name: 'polling_timeout_seconds',
         required: false,
-        aliases: ['timeout-seconds'],
+        aliases: ['timeout-seconds', 'polling_timeout_seconds'],
         type: 'integer',
         nullable: false,
+        description:
+          'Maximum polling window requested by the caller. Clients should complete\nthe initial check even if it exceeds this window and use the window only\nto limit subsequent polls. Its presence requests polling guidance; it is\nnot an HTTP request timeout, and each HTTP request performs one check.\n',
       },
     ],
   },
@@ -405,6 +1000,8 @@ export const CLI_OPERATIONS = [
         required: false,
         aliases: ['cursor'],
         type: 'string',
+        description:
+          'Opaque cursor from `pagination.next_cursor` on the previous response.\nNumeric offsets are capped by the underlying search index (10,000 results\nper query). Well-formed pagination stops before that window; requests whose\ncursor would exceed it return 400 `pagination_not_supported`.\n',
       },
       {
         name: 'limit',
@@ -412,6 +1009,7 @@ export const CLI_OPERATIONS = [
         required: false,
         aliases: ['limit'],
         type: 'integer',
+        description: 'Number of items to return. Defaults to 50, max 200.',
       },
     ],
     body: [],
@@ -431,6 +1029,8 @@ export const CLI_OPERATIONS = [
         required: true,
         aliases: ['partner'],
         type: 'string',
+        description:
+          'Destination partner key (e.g. braze, kinesis_datastream).',
       },
     ],
     body: [],
@@ -448,8 +1048,10 @@ export const CLI_OPERATIONS = [
         name: 'project_id',
         in: 'path',
         required: true,
-        aliases: ['project', 'project-id'],
+        aliases: ['project', 'project-id', 'project_id'],
         type: 'string',
+        description:
+          'Amplitude project identifier, backed by the canonical app ID.',
       },
       {
         name: 'cursor',
@@ -457,6 +1059,8 @@ export const CLI_OPERATIONS = [
         required: false,
         aliases: ['cursor'],
         type: 'string',
+        description:
+          'Opaque cursor from `pagination.next_cursor` on the previous response.\nNumeric offsets are capped by the underlying search index (10,000 results\nper query). Well-formed pagination stops before that window; requests whose\ncursor would exceed it return 400 `pagination_not_supported`.\n',
       },
       {
         name: 'limit',
@@ -464,6 +1068,7 @@ export const CLI_OPERATIONS = [
         required: false,
         aliases: ['limit'],
         type: 'integer',
+        description: 'Number of items to return. Defaults to 50, max 200.',
       },
       {
         name: 'q',
@@ -471,6 +1076,7 @@ export const CLI_OPERATIONS = [
         required: false,
         aliases: ['q', 'query'],
         type: 'string',
+        description: 'Full-text search query.',
       },
     ],
     body: [],
@@ -488,8 +1094,10 @@ export const CLI_OPERATIONS = [
         name: 'project_id',
         in: 'path',
         required: true,
-        aliases: ['project', 'project-id'],
+        aliases: ['project', 'project-id', 'project_id'],
         type: 'string',
+        description:
+          'Amplitude project identifier, backed by the canonical app ID.',
       },
       {
         name: 'Idempotency-Key',
@@ -497,13 +1105,15 @@ export const CLI_OPERATIONS = [
         required: true,
         aliases: ['idempotency-key'],
         type: 'string',
+        description:
+          'Unique idempotency key used to safely retry write operations.',
       },
     ],
     body: [
       {
         name: 'event_type',
         required: true,
-        aliases: ['event-type', 'type'],
+        aliases: ['event-type', 'type', 'event_type'],
         type: 'string',
         nullable: false,
       },
@@ -529,31 +1139,38 @@ export const CLI_OPERATIONS = [
         name: 'project_id',
         in: 'path',
         required: true,
-        aliases: ['project', 'project-id'],
+        aliases: ['project', 'project-id', 'project_id'],
         type: 'string',
+        description:
+          'Amplitude project identifier, backed by the canonical app ID.',
       },
     ],
     body: [
       {
         name: 'event_type',
         required: false,
-        aliases: ['event-type', 'type'],
+        aliases: ['event-type', 'type', 'event_type'],
         type: 'string',
         nullable: false,
+        description: 'Exact event type to check. Omit to check for any event.',
       },
       {
         name: 'lookback_minutes',
         required: false,
-        aliases: ['lookback-minutes'],
+        aliases: ['lookback-minutes', 'lookback_minutes'],
         type: 'integer',
         nullable: false,
+        description:
+          'Number of recent minutes to evaluate. The returned window can begin up\nto five minutes earlier to cover the complete starting interval.\n',
       },
       {
         name: 'polling_timeout_seconds',
         required: false,
-        aliases: ['timeout-seconds'],
+        aliases: ['timeout-seconds', 'polling_timeout_seconds'],
         type: 'integer',
         nullable: false,
+        description:
+          'Maximum polling window requested by the caller. Clients should complete\nthe initial check even if it exceeds this window and use the window only\nto limit subsequent polls. Its presence requests polling guidance; it is\nnot an HTTP request timeout, and each HTTP request performs one check.\n',
       },
     ],
   },
@@ -570,22 +1187,27 @@ export const CLI_OPERATIONS = [
         name: 'project_id',
         in: 'path',
         required: true,
-        aliases: ['project', 'project-id'],
+        aliases: ['project', 'project-id', 'project_id'],
         type: 'string',
+        description:
+          'Amplitude project identifier, backed by the canonical app ID.',
       },
       {
         name: 'event_id',
         in: 'path',
         required: true,
-        aliases: ['event', 'event-id', 'event-type'],
+        aliases: ['event', 'event-id', 'event-type', 'event_id'],
         type: 'string',
+        description:
+          'Public event identifier. This value is the event type name (the string used when sending the event to Amplitude).',
       },
       {
         name: 'dry_run',
         in: 'query',
         required: false,
-        aliases: ['dry-run'],
+        aliases: ['dry-run', 'dry_run'],
         type: 'boolean',
+        description: 'Validate request without performing mutation.',
       },
       {
         name: 'Idempotency-Key',
@@ -593,6 +1215,8 @@ export const CLI_OPERATIONS = [
         required: true,
         aliases: ['idempotency-key'],
         type: 'string',
+        description:
+          'Unique idempotency key used to safely retry write operations.',
       },
     ],
     body: [],
@@ -610,15 +1234,19 @@ export const CLI_OPERATIONS = [
         name: 'project_id',
         in: 'path',
         required: true,
-        aliases: ['project', 'project-id'],
+        aliases: ['project', 'project-id', 'project_id'],
         type: 'string',
+        description:
+          'Amplitude project identifier, backed by the canonical app ID.',
       },
       {
         name: 'event_id',
         in: 'path',
         required: true,
-        aliases: ['event', 'event-id', 'event-type'],
+        aliases: ['event', 'event-id', 'event-type', 'event_id'],
         type: 'string',
+        description:
+          'Public event identifier. This value is the event type name (the string used when sending the event to Amplitude).',
       },
     ],
     body: [],
@@ -636,15 +1264,19 @@ export const CLI_OPERATIONS = [
         name: 'project_id',
         in: 'path',
         required: true,
-        aliases: ['project', 'project-id'],
+        aliases: ['project', 'project-id', 'project_id'],
         type: 'string',
+        description:
+          'Amplitude project identifier, backed by the canonical app ID.',
       },
       {
         name: 'event_id',
         in: 'path',
         required: true,
-        aliases: ['event', 'event-id', 'event-type'],
+        aliases: ['event', 'event-id', 'event-type', 'event_id'],
         type: 'string',
+        description:
+          'Public event identifier. This value is the event type name (the string used when sending the event to Amplitude).',
       },
       {
         name: 'Idempotency-Key',
@@ -652,6 +1284,8 @@ export const CLI_OPERATIONS = [
         required: true,
         aliases: ['idempotency-key'],
         type: 'string',
+        description:
+          'Unique idempotency key used to safely retry write operations.',
       },
     ],
     body: [
@@ -665,7 +1299,7 @@ export const CLI_OPERATIONS = [
       {
         name: 'is_active',
         required: false,
-        aliases: ['is-active'],
+        aliases: ['is-active', 'is_active'],
         type: 'boolean',
         nullable: false,
       },
@@ -684,15 +1318,19 @@ export const CLI_OPERATIONS = [
         name: 'project_id',
         in: 'path',
         required: true,
-        aliases: ['project', 'project-id'],
+        aliases: ['project', 'project-id', 'project_id'],
         type: 'string',
+        description:
+          'Amplitude project identifier, backed by the canonical app ID.',
       },
       {
         name: 'event_id',
         in: 'path',
         required: true,
-        aliases: ['event', 'event-id', 'event-type'],
+        aliases: ['event', 'event-id', 'event-type', 'event_id'],
         type: 'string',
+        description:
+          'Public event identifier. This value is the event type name (the string used when sending the event to Amplitude).',
       },
       {
         name: 'cursor',
@@ -700,6 +1338,8 @@ export const CLI_OPERATIONS = [
         required: false,
         aliases: ['cursor'],
         type: 'string',
+        description:
+          'Opaque cursor from `pagination.next_cursor` on the previous response.\nNumeric offsets are capped by the underlying search index (10,000 results\nper query). Well-formed pagination stops before that window; requests whose\ncursor would exceed it return 400 `pagination_not_supported`.\n',
       },
       {
         name: 'limit',
@@ -707,6 +1347,7 @@ export const CLI_OPERATIONS = [
         required: false,
         aliases: ['limit'],
         type: 'integer',
+        description: 'Number of items to return. Defaults to 50, max 200.',
       },
       {
         name: 'q',
@@ -714,6 +1355,7 @@ export const CLI_OPERATIONS = [
         required: false,
         aliases: ['q', 'query'],
         type: 'string',
+        description: 'Full-text search query.',
       },
     ],
     body: [],
@@ -731,15 +1373,19 @@ export const CLI_OPERATIONS = [
         name: 'project_id',
         in: 'path',
         required: true,
-        aliases: ['project', 'project-id'],
+        aliases: ['project', 'project-id', 'project_id'],
         type: 'string',
+        description:
+          'Amplitude project identifier, backed by the canonical app ID.',
       },
       {
         name: 'event_id',
         in: 'path',
         required: true,
-        aliases: ['event', 'event-id', 'event-type'],
+        aliases: ['event', 'event-id', 'event-type', 'event_id'],
         type: 'string',
+        description:
+          'Public event identifier. This value is the event type name (the string used when sending the event to Amplitude).',
       },
       {
         name: 'Idempotency-Key',
@@ -747,13 +1393,15 @@ export const CLI_OPERATIONS = [
         required: true,
         aliases: ['idempotency-key'],
         type: 'string',
+        description:
+          'Unique idempotency key used to safely retry write operations.',
       },
     ],
     body: [
       {
         name: 'property_name',
         required: true,
-        aliases: ['property', 'property-name', 'name'],
+        aliases: ['property', 'property-name', 'name', 'property_name'],
         type: 'string',
         nullable: false,
       },
@@ -767,24 +1415,29 @@ export const CLI_OPERATIONS = [
       {
         name: 'data_type',
         required: false,
-        aliases: ['data-type', 'type'],
+        aliases: ['data-type', 'type', 'data_type'],
         type: 'string',
         nullable: true,
         enum: ['string', 'number', 'boolean', 'object', 'enum', 'any'],
+        description:
+          'Logical data type of a property. `null` means untyped at the source;\nclients should treat it as `string` for ingestion.\n',
       },
       {
         name: 'is_array_type',
         required: false,
-        aliases: ['is-array'],
+        aliases: ['is-array', 'is_array_type'],
         type: 'boolean',
         nullable: false,
       },
       {
         name: 'enum_values',
         required: false,
-        aliases: ['enum-values'],
+        aliases: ['enum-values', 'enum_values'],
         type: 'array',
         nullable: false,
+        items: {
+          type: 'string',
+        },
       },
       {
         name: 'regex',
@@ -796,7 +1449,7 @@ export const CLI_OPERATIONS = [
       {
         name: 'is_hidden',
         required: false,
-        aliases: ['is-hidden'],
+        aliases: ['is-hidden', 'is_hidden'],
         type: 'boolean',
         nullable: false,
       },
@@ -806,6 +1459,9 @@ export const CLI_OPERATIONS = [
         aliases: ['classifications'],
         type: 'array',
         nullable: false,
+        items: {
+          type: 'string',
+        },
       },
     ],
   },
@@ -822,29 +1478,36 @@ export const CLI_OPERATIONS = [
         name: 'project_id',
         in: 'path',
         required: true,
-        aliases: ['project', 'project-id'],
+        aliases: ['project', 'project-id', 'project_id'],
         type: 'string',
+        description:
+          'Amplitude project identifier, backed by the canonical app ID.',
       },
       {
         name: 'event_id',
         in: 'path',
         required: true,
-        aliases: ['event', 'event-id', 'event-type'],
+        aliases: ['event', 'event-id', 'event-type', 'event_id'],
         type: 'string',
+        description:
+          'Public event identifier. This value is the event type name (the string used when sending the event to Amplitude).',
       },
       {
         name: 'event_property_id',
         in: 'path',
         required: true,
-        aliases: ['property', 'property-name', 'name'],
+        aliases: ['property', 'property-name', 'name', 'event_property_id'],
         type: 'string',
+        description:
+          'Public event property identifier. Equal to `property_name`. URL-encode\nwhen the property name contains spaces or special characters.\n',
       },
       {
         name: 'dry_run',
         in: 'query',
         required: false,
-        aliases: ['dry-run'],
+        aliases: ['dry-run', 'dry_run'],
         type: 'boolean',
+        description: 'Validate request without performing mutation.',
       },
       {
         name: 'Idempotency-Key',
@@ -852,6 +1515,8 @@ export const CLI_OPERATIONS = [
         required: true,
         aliases: ['idempotency-key'],
         type: 'string',
+        description:
+          'Unique idempotency key used to safely retry write operations.',
       },
     ],
     body: [],
@@ -869,22 +1534,28 @@ export const CLI_OPERATIONS = [
         name: 'project_id',
         in: 'path',
         required: true,
-        aliases: ['project', 'project-id'],
+        aliases: ['project', 'project-id', 'project_id'],
         type: 'string',
+        description:
+          'Amplitude project identifier, backed by the canonical app ID.',
       },
       {
         name: 'event_id',
         in: 'path',
         required: true,
-        aliases: ['event', 'event-id', 'event-type'],
+        aliases: ['event', 'event-id', 'event-type', 'event_id'],
         type: 'string',
+        description:
+          'Public event identifier. This value is the event type name (the string used when sending the event to Amplitude).',
       },
       {
         name: 'event_property_id',
         in: 'path',
         required: true,
-        aliases: ['property', 'property-name', 'name'],
+        aliases: ['property', 'property-name', 'name', 'event_property_id'],
         type: 'string',
+        description:
+          'Public event property identifier. Equal to `property_name`. URL-encode\nwhen the property name contains spaces or special characters.\n',
       },
     ],
     body: [],
@@ -902,22 +1573,28 @@ export const CLI_OPERATIONS = [
         name: 'project_id',
         in: 'path',
         required: true,
-        aliases: ['project', 'project-id'],
+        aliases: ['project', 'project-id', 'project_id'],
         type: 'string',
+        description:
+          'Amplitude project identifier, backed by the canonical app ID.',
       },
       {
         name: 'event_id',
         in: 'path',
         required: true,
-        aliases: ['event', 'event-id', 'event-type'],
+        aliases: ['event', 'event-id', 'event-type', 'event_id'],
         type: 'string',
+        description:
+          'Public event identifier. This value is the event type name (the string used when sending the event to Amplitude).',
       },
       {
         name: 'event_property_id',
         in: 'path',
         required: true,
-        aliases: ['property', 'property-name', 'name'],
+        aliases: ['property', 'property-name', 'name', 'event_property_id'],
         type: 'string',
+        description:
+          'Public event property identifier. Equal to `property_name`. URL-encode\nwhen the property name contains spaces or special characters.\n',
       },
       {
         name: 'Idempotency-Key',
@@ -925,6 +1602,8 @@ export const CLI_OPERATIONS = [
         required: true,
         aliases: ['idempotency-key'],
         type: 'string',
+        description:
+          'Unique idempotency key used to safely retry write operations.',
       },
     ],
     body: [
@@ -938,24 +1617,29 @@ export const CLI_OPERATIONS = [
       {
         name: 'data_type',
         required: false,
-        aliases: ['data-type', 'type'],
+        aliases: ['data-type', 'type', 'data_type'],
         type: 'string',
         nullable: true,
         enum: ['string', 'number', 'boolean', 'object', 'enum', 'any'],
+        description:
+          'Logical data type of a property. `null` means untyped at the source;\nclients should treat it as `string` for ingestion.\n',
       },
       {
         name: 'is_array_type',
         required: false,
-        aliases: ['is-array'],
+        aliases: ['is-array', 'is_array_type'],
         type: 'boolean',
         nullable: false,
       },
       {
         name: 'enum_values',
         required: false,
-        aliases: ['enum-values'],
+        aliases: ['enum-values', 'enum_values'],
         type: 'array',
         nullable: false,
+        items: {
+          type: 'string',
+        },
       },
       {
         name: 'regex',
@@ -967,7 +1651,7 @@ export const CLI_OPERATIONS = [
       {
         name: 'is_hidden',
         required: false,
-        aliases: ['is-hidden'],
+        aliases: ['is-hidden', 'is_hidden'],
         type: 'boolean',
         nullable: false,
       },
@@ -977,6 +1661,9 @@ export const CLI_OPERATIONS = [
         aliases: ['classifications'],
         type: 'array',
         nullable: false,
+        items: {
+          type: 'string',
+        },
       },
     ],
   },
@@ -993,8 +1680,10 @@ export const CLI_OPERATIONS = [
         name: 'project_id',
         in: 'path',
         required: true,
-        aliases: ['project', 'project-id'],
+        aliases: ['project', 'project-id', 'project_id'],
         type: 'string',
+        description:
+          'Amplitude project identifier, backed by the canonical app ID.',
       },
       {
         name: 'cursor',
@@ -1002,6 +1691,8 @@ export const CLI_OPERATIONS = [
         required: false,
         aliases: ['cursor'],
         type: 'string',
+        description:
+          'Opaque cursor from `pagination.next_cursor` on the previous response.\nNumeric offsets are capped by the underlying search index (10,000 results\nper query). Well-formed pagination stops before that window; requests whose\ncursor would exceed it return 400 `pagination_not_supported`.\n',
       },
       {
         name: 'limit',
@@ -1009,6 +1700,7 @@ export const CLI_OPERATIONS = [
         required: false,
         aliases: ['limit'],
         type: 'integer',
+        description: 'Number of items to return. Defaults to 50, max 200.',
       },
       {
         name: 'q',
@@ -1016,6 +1708,7 @@ export const CLI_OPERATIONS = [
         required: false,
         aliases: ['q', 'query'],
         type: 'string',
+        description: 'Full-text search query.',
       },
     ],
     body: [],
@@ -1033,8 +1726,10 @@ export const CLI_OPERATIONS = [
         name: 'project_id',
         in: 'path',
         required: true,
-        aliases: ['project', 'project-id'],
+        aliases: ['project', 'project-id', 'project_id'],
         type: 'string',
+        description:
+          'Amplitude project identifier, backed by the canonical app ID.',
       },
       {
         name: 'Idempotency-Key',
@@ -1042,20 +1737,22 @@ export const CLI_OPERATIONS = [
         required: true,
         aliases: ['idempotency-key'],
         type: 'string',
+        description:
+          'Unique idempotency key used to safely retry write operations.',
       },
     ],
     body: [
       {
         name: 'property_name',
         required: true,
-        aliases: ['property', 'property-name', 'name'],
+        aliases: ['property', 'property-name', 'name', 'property_name'],
         type: 'string',
         nullable: false,
       },
       {
         name: 'display_name',
         required: false,
-        aliases: ['display-name'],
+        aliases: ['display-name', 'display_name'],
         type: 'string',
         nullable: true,
       },
@@ -1069,24 +1766,29 @@ export const CLI_OPERATIONS = [
       {
         name: 'data_type',
         required: false,
-        aliases: ['data-type', 'type'],
+        aliases: ['data-type', 'type', 'data_type'],
         type: 'string',
         nullable: true,
         enum: ['string', 'number', 'boolean', 'object', 'enum', 'any'],
+        description:
+          'Logical data type of a property. `null` means untyped at the source;\nclients should treat it as `string` for ingestion.\n',
       },
       {
         name: 'is_array_type',
         required: false,
-        aliases: ['is-array'],
+        aliases: ['is-array', 'is_array_type'],
         type: 'boolean',
         nullable: false,
       },
       {
         name: 'enum_values',
         required: false,
-        aliases: ['enum-values'],
+        aliases: ['enum-values', 'enum_values'],
         type: 'array',
         nullable: false,
+        items: {
+          type: 'string',
+        },
       },
       {
         name: 'regex',
@@ -1098,7 +1800,7 @@ export const CLI_OPERATIONS = [
       {
         name: 'is_hidden',
         required: false,
-        aliases: ['is-hidden'],
+        aliases: ['is-hidden', 'is_hidden'],
         type: 'boolean',
         nullable: false,
       },
@@ -1108,6 +1810,9 @@ export const CLI_OPERATIONS = [
         aliases: ['classifications'],
         type: 'array',
         nullable: false,
+        items: {
+          type: 'string',
+        },
       },
     ],
   },
@@ -1124,22 +1829,27 @@ export const CLI_OPERATIONS = [
         name: 'project_id',
         in: 'path',
         required: true,
-        aliases: ['project', 'project-id'],
+        aliases: ['project', 'project-id', 'project_id'],
         type: 'string',
+        description:
+          'Amplitude project identifier, backed by the canonical app ID.',
       },
       {
         name: 'user_property_id',
         in: 'path',
         required: true,
-        aliases: ['property', 'property-name', 'name'],
+        aliases: ['property', 'property-name', 'name', 'user_property_id'],
         type: 'string',
+        description:
+          'Public user property identifier. Equal to `property_name`. URL-encode\nwhen the property name contains spaces or special characters.\n',
       },
       {
         name: 'dry_run',
         in: 'query',
         required: false,
-        aliases: ['dry-run'],
+        aliases: ['dry-run', 'dry_run'],
         type: 'boolean',
+        description: 'Validate request without performing mutation.',
       },
       {
         name: 'Idempotency-Key',
@@ -1147,6 +1857,8 @@ export const CLI_OPERATIONS = [
         required: true,
         aliases: ['idempotency-key'],
         type: 'string',
+        description:
+          'Unique idempotency key used to safely retry write operations.',
       },
     ],
     body: [],
@@ -1164,15 +1876,19 @@ export const CLI_OPERATIONS = [
         name: 'project_id',
         in: 'path',
         required: true,
-        aliases: ['project', 'project-id'],
+        aliases: ['project', 'project-id', 'project_id'],
         type: 'string',
+        description:
+          'Amplitude project identifier, backed by the canonical app ID.',
       },
       {
         name: 'user_property_id',
         in: 'path',
         required: true,
-        aliases: ['property', 'property-name', 'name'],
+        aliases: ['property', 'property-name', 'name', 'user_property_id'],
         type: 'string',
+        description:
+          'Public user property identifier. Equal to `property_name`. URL-encode\nwhen the property name contains spaces or special characters.\n',
       },
     ],
     body: [],
@@ -1190,15 +1906,19 @@ export const CLI_OPERATIONS = [
         name: 'project_id',
         in: 'path',
         required: true,
-        aliases: ['project', 'project-id'],
+        aliases: ['project', 'project-id', 'project_id'],
         type: 'string',
+        description:
+          'Amplitude project identifier, backed by the canonical app ID.',
       },
       {
         name: 'user_property_id',
         in: 'path',
         required: true,
-        aliases: ['property', 'property-name', 'name'],
+        aliases: ['property', 'property-name', 'name', 'user_property_id'],
         type: 'string',
+        description:
+          'Public user property identifier. Equal to `property_name`. URL-encode\nwhen the property name contains spaces or special characters.\n',
       },
       {
         name: 'Idempotency-Key',
@@ -1206,13 +1926,15 @@ export const CLI_OPERATIONS = [
         required: true,
         aliases: ['idempotency-key'],
         type: 'string',
+        description:
+          'Unique idempotency key used to safely retry write operations.',
       },
     ],
     body: [
       {
         name: 'display_name',
         required: false,
-        aliases: ['display-name'],
+        aliases: ['display-name', 'display_name'],
         type: 'string',
         nullable: true,
       },
@@ -1226,7 +1948,7 @@ export const CLI_OPERATIONS = [
       {
         name: 'is_hidden',
         required: false,
-        aliases: ['is-hidden'],
+        aliases: ['is-hidden', 'is_hidden'],
         type: 'boolean',
         nullable: false,
       },
@@ -1236,6 +1958,9 @@ export const CLI_OPERATIONS = [
         aliases: ['classifications'],
         type: 'array',
         nullable: false,
+        items: {
+          type: 'string',
+        },
       },
     ],
   },
@@ -1252,8 +1977,10 @@ export const CLI_OPERATIONS = [
         name: 'project_id',
         in: 'path',
         required: true,
-        aliases: ['project', 'project-id'],
+        aliases: ['project', 'project-id', 'project_id'],
         type: 'string',
+        description:
+          'Amplitude project identifier, backed by the canonical app ID.',
       },
       {
         name: 'cursor',
@@ -1261,6 +1988,8 @@ export const CLI_OPERATIONS = [
         required: false,
         aliases: ['cursor'],
         type: 'string',
+        description:
+          'Opaque cursor from `pagination.next_cursor` on the previous response.\nNumeric offsets are capped by the underlying search index (10,000 results\nper query). Well-formed pagination stops before that window; requests whose\ncursor would exceed it return 400 `pagination_not_supported`.\n',
       },
       {
         name: 'limit',
@@ -1268,6 +1997,7 @@ export const CLI_OPERATIONS = [
         required: false,
         aliases: ['limit'],
         type: 'integer',
+        description: 'Number of items to return. Defaults to 50, max 200.',
       },
       {
         name: 'q',
@@ -1275,13 +2005,16 @@ export const CLI_OPERATIONS = [
         required: false,
         aliases: ['q', 'query'],
         type: 'string',
+        description: 'Full-text search query.',
       },
       {
         name: 'chart_type',
         in: 'query',
         required: false,
-        aliases: ['chart-type', 'type'],
+        aliases: ['chart-type', 'type', 'chart_type'],
         type: 'string',
+        description:
+          'Filter list results to a specific chart type. Use `unknown` to return charts\nwhose type is not represented by a public API value.\n',
       },
       {
         name: 'sort',
@@ -1289,6 +2022,8 @@ export const CLI_OPERATIONS = [
         required: false,
         aliases: ['sort'],
         type: 'string',
+        description:
+          'Sort field. Prefix with `-` for descending. Supported values are `updated_at` and `name`.',
       },
     ],
     body: [],
@@ -1306,22 +2041,27 @@ export const CLI_OPERATIONS = [
         name: 'project_id',
         in: 'path',
         required: true,
-        aliases: ['project', 'project-id'],
+        aliases: ['project', 'project-id', 'project_id'],
         type: 'string',
+        description:
+          'Amplitude project identifier, backed by the canonical app ID.',
       },
       {
         name: 'chart_id',
         in: 'path',
         required: true,
-        aliases: ['chart', 'chart-id'],
+        aliases: ['chart', 'chart-id', 'chart_id'],
         type: 'string',
+        description: 'Saved chart identifier.',
       },
       {
         name: 'include_definition',
         in: 'query',
         required: false,
-        aliases: ['include-definition'],
+        aliases: ['include-definition', 'include_definition'],
         type: 'boolean',
+        description:
+          'When true, include the read-only chart definition on GET chart. The definition\nshape is unstable and not intended for authoring.\n',
       },
     ],
     body: [],
@@ -1339,22 +2079,25 @@ export const CLI_OPERATIONS = [
         name: 'project_id',
         in: 'path',
         required: true,
-        aliases: ['project', 'project-id'],
+        aliases: ['project', 'project-id', 'project_id'],
         type: 'string',
+        description:
+          'Amplitude project identifier, backed by the canonical app ID.',
       },
       {
         name: 'chart_id',
         in: 'path',
         required: true,
-        aliases: ['chart', 'chart-id'],
+        aliases: ['chart', 'chart-id', 'chart_id'],
         type: 'string',
+        description: 'Saved chart identifier.',
       },
     ],
     body: [
       {
         name: 'time_range',
         required: false,
-        aliases: ['time-range'],
+        aliases: ['time-range', 'time_range'],
         type: 'object',
         nullable: false,
       },
@@ -1364,27 +2107,36 @@ export const CLI_OPERATIONS = [
         aliases: ['timezone'],
         type: 'string',
         nullable: false,
+        description: 'IANA timezone identifier (e.g. `America/New_York`).',
       },
       {
         name: 'exclude_incomplete_datapoints',
         required: false,
-        aliases: ['exclude-incomplete-datapoints'],
+        aliases: [
+          'exclude-incomplete-datapoints',
+          'exclude_incomplete_datapoints',
+        ],
         type: 'boolean',
         nullable: false,
+        description:
+          'When true, excludes the current incomplete interval from results.\n',
       },
       {
         name: 'group_by_limit',
         required: false,
-        aliases: ['group-by-limit'],
+        aliases: ['group-by-limit', 'group_by_limit'],
         type: 'integer',
         nullable: false,
+        description: 'Maximum number of breakdown groups returned per series.',
       },
       {
         name: 'time_series_limit',
         required: false,
-        aliases: ['time-series-limit'],
+        aliases: ['time-series-limit', 'time_series_limit'],
         type: 'integer',
         nullable: false,
+        description:
+          'Maximum number of time buckets per series. `0` collapses each series to\na single scalar aggregate.\n',
       },
     ],
   },
@@ -1401,8 +2153,10 @@ export const CLI_OPERATIONS = [
         name: 'project_id',
         in: 'path',
         required: true,
-        aliases: ['project', 'project-id'],
+        aliases: ['project', 'project-id', 'project_id'],
         type: 'string',
+        description:
+          'Amplitude project identifier, backed by the canonical app ID.',
       },
       {
         name: 'cursor',
@@ -1410,6 +2164,8 @@ export const CLI_OPERATIONS = [
         required: false,
         aliases: ['cursor'],
         type: 'string',
+        description:
+          'Opaque cursor from `pagination.next_cursor` on the previous response.\nNumeric offsets are capped by the underlying search index (10,000 results\nper query). Well-formed pagination stops before that window; requests whose\ncursor would exceed it return 400 `pagination_not_supported`.\n',
       },
       {
         name: 'limit',
@@ -1417,6 +2173,7 @@ export const CLI_OPERATIONS = [
         required: false,
         aliases: ['limit'],
         type: 'integer',
+        description: 'Number of items to return. Defaults to 50, max 200.',
       },
       {
         name: 'q',
@@ -1424,13 +2181,15 @@ export const CLI_OPERATIONS = [
         required: false,
         aliases: ['q', 'query'],
         type: 'string',
+        description: 'Full-text search query.',
       },
       {
         name: 'metric_type',
         in: 'query',
         required: false,
-        aliases: ['metric-type'],
+        aliases: ['metric-type', 'metric_type'],
         type: 'string',
+        description: 'Filter list results to a specific metric type.',
       },
       {
         name: 'sort',
@@ -1438,6 +2197,8 @@ export const CLI_OPERATIONS = [
         required: false,
         aliases: ['sort'],
         type: 'string',
+        description:
+          'Sort field. Prefix with `-` for descending. Supported values are `updated_at` and `name`.',
       },
     ],
     body: [],
@@ -1455,15 +2216,18 @@ export const CLI_OPERATIONS = [
         name: 'project_id',
         in: 'path',
         required: true,
-        aliases: ['project', 'project-id'],
+        aliases: ['project', 'project-id', 'project_id'],
         type: 'string',
+        description:
+          'Amplitude project identifier, backed by the canonical app ID.',
       },
       {
         name: 'metric_id',
         in: 'path',
         required: true,
-        aliases: ['metric', 'metric-id'],
+        aliases: ['metric', 'metric-id', 'metric_id'],
         type: 'string',
+        description: 'Saved metric identifier.',
       },
     ],
     body: [],
@@ -1481,55 +2245,67 @@ export const CLI_OPERATIONS = [
         name: 'project_id',
         in: 'path',
         required: true,
-        aliases: ['project', 'project-id'],
+        aliases: ['project', 'project-id', 'project_id'],
         type: 'string',
+        description:
+          'Amplitude project identifier, backed by the canonical app ID.',
       },
     ],
     body: [
       {
         name: 'page_url',
         required: true,
-        aliases: ['page-url', 'url'],
+        aliases: ['page-url', 'url', 'page_url'],
         type: 'string',
         nullable: false,
+        description:
+          'Page URL to analyze. Accepts `http` and `https` URLs; a URL without a\nscheme is treated as `https`. The query string and fragment are removed\nbefore matching, so `https://example.com/pricing?utm=x` and\n`https://example.com/pricing` are the same page.\n',
       },
       {
         name: 'url_match',
         required: false,
-        aliases: ['url-match', 'match'],
+        aliases: ['url-match', 'match', 'url_match'],
         type: 'string',
         nullable: false,
         enum: ['is', 'contains', 'has_prefix', 'glob'],
+        description:
+          'How `page_url` is matched against the page URL recorded on each event.\n`is` matches the exact URL, `contains` matches any URL containing it,\n`has_prefix` matches URLs starting with it, and `glob` treats `*` as a\nwildcard.\n',
       },
       {
         name: 'device_type',
         required: false,
-        aliases: ['device-type', 'device'],
+        aliases: ['device-type', 'device', 'device_type'],
         type: 'string',
         nullable: false,
         enum: ['desktop', 'laptop', 'tablet', 'mobile', 'custom'],
+        description:
+          'Viewport band to include, matching the device selector in the product:\n`desktop` is at least 1440 px wide, `laptop` is 900 to 1440 px, `tablet`\nis 500 to 900 px, `mobile` is at most 500 px. Use `custom` with\n`viewport_width` to match one exact width.\n',
       },
       {
         name: 'viewport_width',
         required: false,
-        aliases: ['viewport-width'],
+        aliases: ['viewport-width', 'viewport_width'],
         type: 'integer',
         nullable: false,
+        description:
+          'Exact viewport width in pixels. Required when `device_type` is `custom`\nand not accepted otherwise.\n',
       },
       {
         name: 'time_range',
         required: false,
-        aliases: ['time-range'],
+        aliases: ['time-range', 'time_range'],
         type: 'object',
         nullable: false,
       },
       {
         name: 'group_by',
         required: false,
-        aliases: ['group-by'],
+        aliases: ['group-by', 'group_by'],
         type: 'string',
         nullable: false,
         enum: ['selector', 'pixel'],
+        description:
+          '`selector` groups clicks by the CSS selector of the clicked element;\n`pixel` groups them by page coordinate.\n',
       },
       {
         name: 'metric',
@@ -1538,6 +2314,8 @@ export const CLI_OPERATIONS = [
         type: 'string',
         nullable: false,
         enum: ['totals', 'uniques'],
+        description:
+          '`totals` counts every click; `uniques` counts distinct users who\nclicked.\n',
       },
       {
         name: 'limit',
@@ -1545,6 +2323,8 @@ export const CLI_OPERATIONS = [
         aliases: ['limit'],
         type: 'integer',
         nullable: false,
+        description:
+          'Maximum number of rows returned after ranking by `count`.',
       },
     ],
   },
@@ -1561,45 +2341,55 @@ export const CLI_OPERATIONS = [
         name: 'project_id',
         in: 'path',
         required: true,
-        aliases: ['project', 'project-id'],
+        aliases: ['project', 'project-id', 'project_id'],
         type: 'string',
+        description:
+          'Amplitude project identifier, backed by the canonical app ID.',
       },
     ],
     body: [
       {
         name: 'page_url',
         required: true,
-        aliases: ['page-url', 'url'],
+        aliases: ['page-url', 'url', 'page_url'],
         type: 'string',
         nullable: false,
+        description:
+          'Page URL to analyze. Accepts `http` and `https` URLs; a URL without a\nscheme is treated as `https`. The query string and fragment are removed\nbefore matching, so `https://example.com/pricing?utm=x` and\n`https://example.com/pricing` are the same page.\n',
       },
       {
         name: 'url_match',
         required: false,
-        aliases: ['url-match', 'match'],
+        aliases: ['url-match', 'match', 'url_match'],
         type: 'string',
         nullable: false,
         enum: ['is', 'contains', 'has_prefix', 'glob'],
+        description:
+          'How `page_url` is matched against the page URL recorded on each event.\n`is` matches the exact URL, `contains` matches any URL containing it,\n`has_prefix` matches URLs starting with it, and `glob` treats `*` as a\nwildcard.\n',
       },
       {
         name: 'device_type',
         required: false,
-        aliases: ['device-type', 'device'],
+        aliases: ['device-type', 'device', 'device_type'],
         type: 'string',
         nullable: false,
         enum: ['desktop', 'laptop', 'tablet', 'mobile', 'custom'],
+        description:
+          'Viewport band to include, matching the device selector in the product:\n`desktop` is at least 1440 px wide, `laptop` is 900 to 1440 px, `tablet`\nis 500 to 900 px, `mobile` is at most 500 px. Use `custom` with\n`viewport_width` to match one exact width.\n',
       },
       {
         name: 'viewport_width',
         required: false,
-        aliases: ['viewport-width'],
+        aliases: ['viewport-width', 'viewport_width'],
         type: 'integer',
         nullable: false,
+        description:
+          'Exact viewport width in pixels. Required when `device_type` is `custom`\nand not accepted otherwise.\n',
       },
       {
         name: 'time_range',
         required: false,
-        aliases: ['time-range'],
+        aliases: ['time-range', 'time_range'],
         type: 'object',
         nullable: false,
       },
@@ -1618,30 +2408,36 @@ export const CLI_OPERATIONS = [
         name: 'project_id',
         in: 'path',
         required: true,
-        aliases: ['project', 'project-id'],
+        aliases: ['project', 'project-id', 'project_id'],
         type: 'string',
+        description:
+          'Amplitude project identifier, backed by the canonical app ID.',
       },
     ],
     body: [
       {
         name: 'page_url',
         required: true,
-        aliases: ['page-url', 'url'],
+        aliases: ['page-url', 'url', 'page_url'],
         type: 'string',
         nullable: false,
+        description:
+          'Page URL to analyze. Accepts `http` and `https` URLs; a URL without a\nscheme is treated as `https`. The query string and fragment are removed\nbefore matching, so `https://example.com/pricing?utm=x` and\n`https://example.com/pricing` are the same page.\n',
       },
       {
         name: 'url_match',
         required: false,
-        aliases: ['url-match', 'match'],
+        aliases: ['url-match', 'match', 'url_match'],
         type: 'string',
         nullable: false,
         enum: ['is', 'contains'],
+        description:
+          'How `page_url` is matched against the page URL recorded on each event.\n`is` matches the exact URL; `contains` matches any URL containing it.\n',
       },
       {
         name: 'time_range',
         required: false,
-        aliases: ['time-range'],
+        aliases: ['time-range', 'time_range'],
         type: 'object',
         nullable: false,
       },
@@ -1663,13 +2459,20 @@ export const CLI_OPERATIONS = [
           'attractiveness_rate',
           'revenue_per_click',
         ],
+        description:
+          "Metric computed per zone. Rates are fractions (`0.18` is 18%).\n\n- `click_rate_pageview`: page views with a click in the zone, divided by page views.\n- `click_rate_session`: sessions with a click in the zone, divided by sessions.\n- `rage_click_rate_pageview`: page views with a rage click in the zone, divided by page views.\n- `rage_click_rate_session`: sessions with a rage click in the zone, divided by sessions.\n- `click_distribution`: clicks in the zone, divided by all clicks on the page.\n- `click_recurrence`: clicks in the zone, divided by page views. Can exceed 1.\n- `rage_click_recurrence`: rage clicks in the zone, divided by page views. Can exceed 1.\n- `exposure_rate`: page views where the zone was visible, divided by page views.\n- `attractiveness_rate`: page views where the zone was visible and clicked, divided by page views where it was visible. Can exceed 1.\n- `revenue_per_click`: revenue attributed to the zone, divided by sessions that clicked it, in the project's revenue unit.\n",
       },
       {
         name: 'zone_ids',
         required: false,
-        aliases: ['zone-ids', 'zones'],
+        aliases: ['zone-ids', 'zones', 'zone_ids'],
         type: 'array',
         nullable: false,
+        description:
+          'Restrict the result to these zones. A zone id is the CSS selector of\nthe element, as returned in `zones[].zone_id`. Omit to rank every zone\non the page.\n',
+        items: {
+          type: 'string',
+        },
       },
       {
         name: 'limit',
@@ -1677,6 +2480,8 @@ export const CLI_OPERATIONS = [
         aliases: ['limit'],
         type: 'integer',
         nullable: false,
+        description:
+          'Maximum number of zones returned after ranking by `value`.',
       },
     ],
   },
@@ -1693,8 +2498,10 @@ export const CLI_OPERATIONS = [
         name: 'project_id',
         in: 'path',
         required: true,
-        aliases: ['project', 'project-id'],
+        aliases: ['project', 'project-id', 'project_id'],
         type: 'string',
+        description:
+          'Amplitude project identifier, backed by the canonical app ID.',
       },
       {
         name: 'cursor',
@@ -1702,6 +2509,8 @@ export const CLI_OPERATIONS = [
         required: false,
         aliases: ['cursor'],
         type: 'string',
+        description:
+          'Opaque cursor from `pagination.next_cursor` on the previous response.\nNumeric offsets are capped by the underlying search index (10,000 results\nper query). Well-formed pagination stops before that window; requests whose\ncursor would exceed it return 400 `pagination_not_supported`.\n',
       },
       {
         name: 'limit',
@@ -1709,6 +2518,7 @@ export const CLI_OPERATIONS = [
         required: false,
         aliases: ['limit'],
         type: 'integer',
+        description: 'Number of items to return. Defaults to 50, max 200.',
       },
     ],
     body: [],
@@ -1726,8 +2536,10 @@ export const CLI_OPERATIONS = [
         name: 'project_id',
         in: 'path',
         required: true,
-        aliases: ['project', 'project-id'],
+        aliases: ['project', 'project-id', 'project_id'],
         type: 'string',
+        description:
+          'Amplitude project identifier, backed by the canonical app ID.',
       },
       {
         name: 'Idempotency-Key',
@@ -1735,6 +2547,8 @@ export const CLI_OPERATIONS = [
         required: true,
         aliases: ['idempotency-key'],
         type: 'string',
+        description:
+          'Unique idempotency key used to safely retry write operations.',
       },
     ],
     body: [
@@ -1744,6 +2558,8 @@ export const CLI_OPERATIONS = [
         aliases: ['key'],
         type: 'string',
         nullable: false,
+        description:
+          'Lowercase letters, numbers, hyphens, and underscores only.',
       },
       {
         name: 'name',
@@ -1762,7 +2578,7 @@ export const CLI_OPERATIONS = [
       {
         name: 'evaluation_mode',
         required: false,
-        aliases: ['evaluation-mode'],
+        aliases: ['evaluation-mode', 'evaluation_mode'],
         type: 'string',
         nullable: false,
         enum: ['local', 'remote'],
@@ -1770,7 +2586,7 @@ export const CLI_OPERATIONS = [
       {
         name: 'bucketing_key',
         required: false,
-        aliases: ['bucketing-key'],
+        aliases: ['bucketing-key', 'bucketing_key'],
         type: 'string',
         nullable: false,
       },
@@ -1780,27 +2596,51 @@ export const CLI_OPERATIONS = [
         aliases: ['variants'],
         type: 'array',
         nullable: false,
+        items: {
+          type: 'object',
+          required: ['key'],
+          properties: {
+            key: {
+              type: 'string',
+              description: 'Stable variant key. The value `off` is reserved.',
+            },
+            name: {
+              type: ['string', 'null'],
+            },
+            description: {
+              type: ['string', 'null'],
+            },
+            payload: {
+              description: 'Optional JSON payload returned by evaluation.',
+            },
+          },
+        },
       },
       {
         name: 'deployment_ids',
         required: false,
-        aliases: ['deployment-ids'],
+        aliases: ['deployment-ids', 'deployment_ids'],
         type: 'array',
         nullable: false,
+        items: {
+          type: 'string',
+        },
       },
       {
         name: 'rollout_percentage',
         required: false,
-        aliases: ['rollout-percentage'],
+        aliases: ['rollout-percentage', 'rollout_percentage'],
         type: 'integer',
         nullable: false,
       },
       {
         name: 'rollout_weights',
         required: false,
-        aliases: ['rollout-weights'],
+        aliases: ['rollout-weights', 'rollout_weights'],
         type: 'object',
         nullable: false,
+        description:
+          'Variant-keyed rollout weights. Values may be normalized to sum to 100 (percentages) or expressed as unnormalized relative weights (for example `{ "control": 1, "treatment": 1 }` for an even split). Weights are non-negative and may be fractional.',
       },
       {
         name: 'testers',
@@ -1808,13 +2648,109 @@ export const CLI_OPERATIONS = [
         aliases: ['testers'],
         type: 'array',
         nullable: false,
+        items: {
+          type: 'object',
+          required: ['variant_key', 'values'],
+          properties: {
+            variant_key: {
+              type: 'string',
+            },
+            values: {
+              type: 'array',
+              description:
+                'User IDs, device IDs, or cohort identifiers included in this variant. At most 2000 entries per variant (the limit is 10 when the entries are cohort identifiers).',
+              items: {
+                type: 'string',
+              },
+            },
+          },
+        },
       },
       {
         name: 'target_segments',
         required: false,
-        aliases: ['target-segments'],
+        aliases: ['target-segments', 'target_segments'],
         type: 'array',
         nullable: false,
+        items: {
+          type: 'object',
+          required: ['percentage', 'rollout_weights'],
+          properties: {
+            name: {
+              type: ['string', 'null'],
+            },
+            conditions: {
+              type: 'array',
+              description:
+                'Omitted (or empty) for the catch-all "all other users" segment.',
+              items: {
+                type: 'object',
+                required: ['prop', 'op', 'type', 'values'],
+                properties: {
+                  group_type: {
+                    type: ['string', 'null'],
+                  },
+                  prop: {
+                    type: 'string',
+                    description:
+                      'Property name or cohort identifier being targeted.',
+                  },
+                  prop_type: {
+                    type: ['string', 'null'],
+                    description:
+                      'Namespace of the targeted property, for example `user`, `event`, or `group`. Omitted for conditions that target a cohort rather than a property.',
+                  },
+                  op: {
+                    type: 'string',
+                    description:
+                      'Targeting operator applied to the property values.',
+                    enum: [
+                      'is',
+                      'is not',
+                      'contains',
+                      'does not contain',
+                      'less',
+                      'less or equal',
+                      'greater',
+                      'greater or equal',
+                      'set is',
+                      'set is not',
+                      'set contains',
+                      'set does not contain',
+                      'glob match',
+                      'glob does not match',
+                    ],
+                  },
+                  type: {
+                    type: 'string',
+                    description:
+                      'Condition type, for example `property` or `cohort`.',
+                  },
+                  values: {
+                    type: 'array',
+                    description:
+                      'At least one value to match against. Conditions with no values are rejected.',
+                    items: {
+                      type: 'string',
+                    },
+                  },
+                },
+              },
+            },
+            percentage: {
+              type: 'integer',
+              description: 'Segment rollout percentage.',
+            },
+            rollout_weights: {
+              type: 'object',
+              description:
+                'Variant-keyed rollout weights. Values may be normalized to sum to 100 (percentages) or expressed as unnormalized relative weights (for example `{ "control": 1, "treatment": 1 }` for an even split). Weights are non-negative and may be fractional.',
+            },
+            bucketing_key: {
+              type: ['string', 'null'],
+            },
+          },
+        },
       },
     ],
   },
@@ -1831,22 +2767,26 @@ export const CLI_OPERATIONS = [
         name: 'project_id',
         in: 'path',
         required: true,
-        aliases: ['project', 'project-id'],
+        aliases: ['project', 'project-id', 'project_id'],
         type: 'string',
+        description:
+          'Amplitude project identifier, backed by the canonical app ID.',
       },
       {
         name: 'flag_id',
         in: 'path',
         required: true,
-        aliases: ['flag', 'flag-id', 'key'],
+        aliases: ['flag', 'flag-id', 'key', 'flag_id'],
         type: 'string',
+        description: 'Feature flag identifier.',
       },
       {
         name: 'dry_run',
         in: 'query',
         required: false,
-        aliases: ['dry-run'],
+        aliases: ['dry-run', 'dry_run'],
         type: 'boolean',
+        description: 'Validate request without performing mutation.',
       },
       {
         name: 'Idempotency-Key',
@@ -1854,6 +2794,8 @@ export const CLI_OPERATIONS = [
         required: true,
         aliases: ['idempotency-key'],
         type: 'string',
+        description:
+          'Unique idempotency key used to safely retry write operations.',
       },
     ],
     body: [],
@@ -1871,15 +2813,18 @@ export const CLI_OPERATIONS = [
         name: 'project_id',
         in: 'path',
         required: true,
-        aliases: ['project', 'project-id'],
+        aliases: ['project', 'project-id', 'project_id'],
         type: 'string',
+        description:
+          'Amplitude project identifier, backed by the canonical app ID.',
       },
       {
         name: 'flag_id',
         in: 'path',
         required: true,
-        aliases: ['flag', 'flag-id', 'key'],
+        aliases: ['flag', 'flag-id', 'key', 'flag_id'],
         type: 'string',
+        description: 'Feature flag identifier.',
       },
     ],
     body: [],
@@ -1897,15 +2842,18 @@ export const CLI_OPERATIONS = [
         name: 'project_id',
         in: 'path',
         required: true,
-        aliases: ['project', 'project-id'],
+        aliases: ['project', 'project-id', 'project_id'],
         type: 'string',
+        description:
+          'Amplitude project identifier, backed by the canonical app ID.',
       },
       {
         name: 'flag_id',
         in: 'path',
         required: true,
-        aliases: ['flag', 'flag-id', 'key'],
+        aliases: ['flag', 'flag-id', 'key', 'flag_id'],
         type: 'string',
+        description: 'Feature flag identifier.',
       },
       {
         name: 'Idempotency-Key',
@@ -1913,6 +2861,8 @@ export const CLI_OPERATIONS = [
         required: true,
         aliases: ['idempotency-key'],
         type: 'string',
+        description:
+          'Unique idempotency key used to safely retry write operations.',
       },
     ],
     body: [
@@ -1940,7 +2890,7 @@ export const CLI_OPERATIONS = [
       {
         name: 'evaluation_mode',
         required: false,
-        aliases: ['evaluation-mode'],
+        aliases: ['evaluation-mode', 'evaluation_mode'],
         type: 'string',
         nullable: false,
         enum: ['local', 'remote'],
@@ -1948,14 +2898,14 @@ export const CLI_OPERATIONS = [
       {
         name: 'bucketing_key',
         required: false,
-        aliases: ['bucketing-key'],
+        aliases: ['bucketing-key', 'bucketing_key'],
         type: 'string',
         nullable: false,
       },
       {
         name: 'rollout_percentage',
         required: false,
-        aliases: ['rollout-percentage'],
+        aliases: ['rollout-percentage', 'rollout_percentage'],
         type: 'integer',
         nullable: false,
       },
@@ -1965,6 +2915,1147 @@ export const CLI_OPERATIONS = [
         aliases: ['tags'],
         type: 'array',
         nullable: false,
+        items: {
+          type: 'string',
+        },
+      },
+    ],
+  },
+  {
+    command: ['guides', 'list'],
+    method: 'GET',
+    operationId: 'listGuides',
+    path: '/v1/projects/{project_id}/guides',
+    requiredScopes: ['guides:read'],
+    summary: 'List guides',
+    successStatus: 200,
+    parameters: [
+      {
+        name: 'project_id',
+        in: 'path',
+        required: true,
+        aliases: ['project', 'project-id', 'project_id'],
+        type: 'string',
+        description:
+          'Amplitude project identifier, backed by the canonical app ID.',
+      },
+      {
+        name: 'cursor',
+        in: 'query',
+        required: false,
+        aliases: ['cursor'],
+        type: 'string',
+        description:
+          'Opaque cursor from `pagination.next_cursor` on the previous response.\nNumeric offsets are capped by the underlying search index (10,000 results\nper query). Well-formed pagination stops before that window; requests whose\ncursor would exceed it return 400 `pagination_not_supported`.\n',
+      },
+      {
+        name: 'limit',
+        in: 'query',
+        required: false,
+        aliases: ['limit'],
+        type: 'integer',
+        description: 'Number of items to return. Defaults to 50, max 200.',
+      },
+      {
+        name: 'platform',
+        in: 'query',
+        required: false,
+        aliases: ['platform'],
+        type: 'string',
+      },
+      {
+        name: 'created_after',
+        in: 'query',
+        required: false,
+        aliases: ['created-after', 'created_after'],
+        type: 'string',
+      },
+      {
+        name: 'created_before',
+        in: 'query',
+        required: false,
+        aliases: ['created-before', 'created_before'],
+        type: 'string',
+      },
+      {
+        name: 'created_by',
+        in: 'query',
+        required: false,
+        aliases: ['created-by', 'created_by'],
+        type: 'string',
+        description: 'Filter by creator email or login id (exact match).',
+      },
+      {
+        name: 'include_archived',
+        in: 'query',
+        required: false,
+        aliases: ['include-archived', 'include_archived'],
+        type: 'boolean',
+      },
+    ],
+    body: [],
+  },
+  {
+    command: ['guides', 'create'],
+    method: 'POST',
+    operationId: 'createGuide',
+    path: '/v1/projects/{project_id}/guides',
+    requiredScopes: ['guides:write'],
+    summary: 'Create guide',
+    successStatus: 201,
+    parameters: [
+      {
+        name: 'project_id',
+        in: 'path',
+        required: true,
+        aliases: ['project', 'project-id', 'project_id'],
+        type: 'string',
+        description:
+          'Amplitude project identifier, backed by the canonical app ID.',
+      },
+      {
+        name: 'Idempotency-Key',
+        in: 'header',
+        required: true,
+        aliases: ['idempotency-key'],
+        type: 'string',
+        description:
+          'Unique idempotency key used to safely retry write operations.',
+      },
+    ],
+    body: [
+      {
+        name: 'title',
+        required: true,
+        aliases: ['title'],
+        type: 'string',
+        nullable: false,
+      },
+      {
+        name: 'description',
+        required: false,
+        aliases: ['description'],
+        type: 'string',
+        nullable: true,
+      },
+      {
+        name: 'platform',
+        required: false,
+        aliases: ['platform'],
+        type: 'string',
+        nullable: false,
+        enum: ['web', 'ios', 'android', 'react-native', 'desktop', 'flutter'],
+        description:
+          'Target platform. Guides and surveys without an explicit platform are\nreturned as `web`.\n',
+      },
+      {
+        name: 'priority',
+        required: false,
+        aliases: ['priority'],
+        type: 'integer',
+        nullable: false,
+      },
+      {
+        name: 'variants',
+        required: false,
+        aliases: ['variants'],
+        type: 'array',
+        nullable: false,
+        items: {
+          type: 'object',
+          description:
+            "Variant payload on create/update. `id` is optional — omit for new variants;\ninclude when updating an existing variant row. A negative `id` is a variant\nadded to a published guide or survey's draft that has not been published yet.\n`variant` key is required.\n",
+          required: ['variant'],
+          properties: {
+            id: {
+              type: 'string',
+            },
+            variant: {
+              type: 'string',
+              description: 'Variant key within the nudge.',
+            },
+            display_title: {
+              type: ['string', 'null'],
+            },
+            display_description: {
+              type: ['string', 'null'],
+            },
+            snooze_label: {
+              type: ['string', 'null'],
+            },
+            done_label: {
+              type: ['string', 'null'],
+            },
+            steps: {
+              type: 'array',
+              items: {
+                type: 'object',
+                description:
+                  "Step payload on create/update. `id` is optional — omit for new steps; include\nwhen updating an existing step row. A negative `id` is a step added to a\npublished guide or survey's draft that has not been published yet.\n",
+                properties: {
+                  id: {
+                    type: 'string',
+                  },
+                  title: {
+                    type: ['string', 'null'],
+                  },
+                  form_factor: {
+                    type: 'object',
+                    description:
+                      'Layout object for a step. `type` selects the form factor; additional keys\nare layout-specific.\n',
+                    required: ['type'],
+                    properties: {
+                      type: {
+                        type: 'string',
+                        description:
+                          'Step presentation layout. Required layout keys and allowed values differ\nby form factor.\n',
+                        enum: [
+                          'banner',
+                          'card',
+                          'checklist',
+                          'modal',
+                          'pin',
+                          'popover',
+                          'tooltip',
+                        ],
+                      },
+                    },
+                  },
+                  content: {
+                    description:
+                      'Step body content (structure varies by form factor).',
+                  },
+                  sort_key: {
+                    type: ['integer', 'null'],
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    ],
+  },
+  {
+    command: ['guides', 'archive'],
+    method: 'DELETE',
+    operationId: 'archiveGuide',
+    path: '/v1/projects/{project_id}/guides/{guide_id}',
+    requiredScopes: ['guides:write'],
+    summary: 'Archive guide',
+    successStatus: 204,
+    parameters: [
+      {
+        name: 'project_id',
+        in: 'path',
+        required: true,
+        aliases: ['project', 'project-id', 'project_id'],
+        type: 'string',
+        description:
+          'Amplitude project identifier, backed by the canonical app ID.',
+      },
+      {
+        name: 'guide_id',
+        in: 'path',
+        required: true,
+        aliases: ['guide', 'guide-id', 'guide_id'],
+        type: 'string',
+        description: 'Guide (tour nudge) identifier.',
+      },
+      {
+        name: 'dry_run',
+        in: 'query',
+        required: false,
+        aliases: ['dry-run', 'dry_run'],
+        type: 'boolean',
+        description: 'Validate request without performing mutation.',
+      },
+      {
+        name: 'Idempotency-Key',
+        in: 'header',
+        required: true,
+        aliases: ['idempotency-key'],
+        type: 'string',
+        description:
+          'Unique idempotency key used to safely retry write operations.',
+      },
+    ],
+    body: [],
+  },
+  {
+    command: ['guides', 'get'],
+    method: 'GET',
+    operationId: 'getGuide',
+    path: '/v1/projects/{project_id}/guides/{guide_id}',
+    requiredScopes: ['guides:read'],
+    summary: 'Get guide',
+    successStatus: 200,
+    parameters: [
+      {
+        name: 'project_id',
+        in: 'path',
+        required: true,
+        aliases: ['project', 'project-id', 'project_id'],
+        type: 'string',
+        description:
+          'Amplitude project identifier, backed by the canonical app ID.',
+      },
+      {
+        name: 'guide_id',
+        in: 'path',
+        required: true,
+        aliases: ['guide', 'guide-id', 'guide_id'],
+        type: 'string',
+        description: 'Guide (tour nudge) identifier.',
+      },
+      {
+        name: 'include_unpublished_changes',
+        in: 'query',
+        required: false,
+        aliases: ['include-unpublished-changes', 'include_unpublished_changes'],
+        type: 'boolean',
+        description:
+          'When true, return the latest draft (unpublished edits) when one exists.\nDefault false returns the live published guide.\n',
+      },
+    ],
+    body: [],
+  },
+  {
+    command: ['guides', 'update'],
+    method: 'PATCH',
+    operationId: 'updateGuide',
+    path: '/v1/projects/{project_id}/guides/{guide_id}',
+    requiredScopes: ['guides:write'],
+    summary: 'Update guide',
+    successStatus: 200,
+    parameters: [
+      {
+        name: 'project_id',
+        in: 'path',
+        required: true,
+        aliases: ['project', 'project-id', 'project_id'],
+        type: 'string',
+        description:
+          'Amplitude project identifier, backed by the canonical app ID.',
+      },
+      {
+        name: 'guide_id',
+        in: 'path',
+        required: true,
+        aliases: ['guide', 'guide-id', 'guide_id'],
+        type: 'string',
+        description: 'Guide (tour nudge) identifier.',
+      },
+      {
+        name: 'Idempotency-Key',
+        in: 'header',
+        required: true,
+        aliases: ['idempotency-key'],
+        type: 'string',
+        description:
+          'Unique idempotency key used to safely retry write operations.',
+      },
+    ],
+    body: [
+      {
+        name: 'title',
+        required: false,
+        aliases: ['title'],
+        type: 'string',
+        nullable: false,
+      },
+      {
+        name: 'description',
+        required: false,
+        aliases: ['description'],
+        type: 'string',
+        nullable: true,
+      },
+      {
+        name: 'platform',
+        required: false,
+        aliases: ['platform'],
+        type: 'string',
+        nullable: false,
+        enum: ['web', 'ios', 'android', 'react-native', 'desktop', 'flutter'],
+        description:
+          'Target platform. Guides and surveys without an explicit platform are\nreturned as `web`.\n',
+      },
+      {
+        name: 'priority',
+        required: false,
+        aliases: ['priority'],
+        type: 'integer',
+        nullable: false,
+      },
+      {
+        name: 'page_target_segments',
+        required: false,
+        aliases: ['page-target-segments', 'page_target_segments'],
+        type: 'array',
+        nullable: false,
+        items: {},
+      },
+      {
+        name: 'temporarily_hide_page_target_segments',
+        required: false,
+        aliases: [
+          'temporarily-hide-page-target-segments',
+          'temporarily_hide_page_target_segments',
+        ],
+        type: 'array',
+        nullable: false,
+        items: {},
+      },
+      {
+        name: 'hide_if_page_targeting_not_met',
+        required: false,
+        aliases: [
+          'hide-if-page-targeting-not-met',
+          'hide_if_page_targeting_not_met',
+        ],
+        type: 'boolean',
+        nullable: false,
+      },
+      {
+        name: 'trigger_config',
+        required: false,
+        aliases: ['trigger-config', 'trigger_config'],
+        type: 'object',
+        nullable: false,
+        description: 'Trigger configuration object.',
+      },
+      {
+        name: 'lifecycle',
+        required: false,
+        aliases: ['lifecycle'],
+        type: 'object',
+        nullable: false,
+        description: 'Lifecycle rules object.',
+      },
+      {
+        name: 'dismissible',
+        required: false,
+        aliases: ['dismissible'],
+        type: 'boolean',
+        nullable: false,
+      },
+      {
+        name: 'snoozable',
+        required: false,
+        aliases: ['snoozable'],
+        type: 'boolean',
+        nullable: false,
+      },
+      {
+        name: 'snoozable_on_all_steps',
+        required: false,
+        aliases: ['snoozable-on-all-steps', 'snoozable_on_all_steps'],
+        type: 'boolean',
+        nullable: false,
+      },
+      {
+        name: 'snooze_duration',
+        required: false,
+        aliases: ['snooze-duration', 'snooze_duration'],
+        type: 'string',
+        nullable: false,
+        description: 'Snooze duration configuration.',
+      },
+      {
+        name: 'snooze_label',
+        required: false,
+        aliases: ['snooze-label', 'snooze_label'],
+        type: 'string',
+        nullable: true,
+      },
+      {
+        name: 'template_source',
+        required: false,
+        aliases: ['template-source', 'template_source'],
+        type: 'string',
+        nullable: true,
+      },
+      {
+        name: 'show_step_counter',
+        required: false,
+        aliases: ['show-step-counter', 'show_step_counter'],
+        type: 'boolean',
+        nullable: false,
+      },
+      {
+        name: 'step_counter_format',
+        required: false,
+        aliases: ['step-counter-format', 'step_counter_format'],
+        type: 'string',
+        nullable: true,
+      },
+      {
+        name: 'tags',
+        required: false,
+        aliases: ['tags'],
+        type: 'array',
+        nullable: false,
+        items: {
+          type: 'string',
+        },
+      },
+      {
+        name: 'variants',
+        required: false,
+        aliases: ['variants'],
+        type: 'array',
+        nullable: false,
+        items: {
+          type: 'object',
+          description:
+            "Variant payload on create/update. `id` is optional — omit for new variants;\ninclude when updating an existing variant row. A negative `id` is a variant\nadded to a published guide or survey's draft that has not been published yet.\n`variant` key is required.\n",
+          required: ['variant'],
+          properties: {
+            id: {
+              type: 'string',
+            },
+            variant: {
+              type: 'string',
+              description: 'Variant key within the nudge.',
+            },
+            display_title: {
+              type: ['string', 'null'],
+            },
+            display_description: {
+              type: ['string', 'null'],
+            },
+            snooze_label: {
+              type: ['string', 'null'],
+            },
+            done_label: {
+              type: ['string', 'null'],
+            },
+            steps: {
+              type: 'array',
+              items: {
+                type: 'object',
+                description:
+                  "Step payload on create/update. `id` is optional — omit for new steps; include\nwhen updating an existing step row. A negative `id` is a step added to a\npublished guide or survey's draft that has not been published yet.\n",
+                properties: {
+                  id: {
+                    type: 'string',
+                  },
+                  title: {
+                    type: ['string', 'null'],
+                  },
+                  form_factor: {
+                    type: 'object',
+                    description:
+                      'Layout object for a step. `type` selects the form factor; additional keys\nare layout-specific.\n',
+                    required: ['type'],
+                    properties: {
+                      type: {
+                        type: 'string',
+                        description:
+                          'Step presentation layout. Required layout keys and allowed values differ\nby form factor.\n',
+                        enum: [
+                          'banner',
+                          'card',
+                          'checklist',
+                          'modal',
+                          'pin',
+                          'popover',
+                          'tooltip',
+                        ],
+                      },
+                    },
+                  },
+                  content: {
+                    description:
+                      'Step body content (structure varies by form factor).',
+                  },
+                  sort_key: {
+                    type: ['integer', 'null'],
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+      {
+        name: 'latest_version',
+        required: true,
+        aliases: ['latest-version', 'latest_version'],
+        type: 'integer',
+        nullable: false,
+        description:
+          'Expected `latest_version` from the last GET with\n`include_unpublished_changes=true`.\n',
+      },
+    ],
+  },
+  {
+    command: ['surveys', 'list'],
+    method: 'GET',
+    operationId: 'listSurveys',
+    path: '/v1/projects/{project_id}/surveys',
+    requiredScopes: ['surveys:read'],
+    summary: 'List surveys',
+    successStatus: 200,
+    parameters: [
+      {
+        name: 'project_id',
+        in: 'path',
+        required: true,
+        aliases: ['project', 'project-id', 'project_id'],
+        type: 'string',
+        description:
+          'Amplitude project identifier, backed by the canonical app ID.',
+      },
+      {
+        name: 'cursor',
+        in: 'query',
+        required: false,
+        aliases: ['cursor'],
+        type: 'string',
+        description:
+          'Opaque cursor from `pagination.next_cursor` on the previous response.\nNumeric offsets are capped by the underlying search index (10,000 results\nper query). Well-formed pagination stops before that window; requests whose\ncursor would exceed it return 400 `pagination_not_supported`.\n',
+      },
+      {
+        name: 'limit',
+        in: 'query',
+        required: false,
+        aliases: ['limit'],
+        type: 'integer',
+        description: 'Number of items to return. Defaults to 50, max 200.',
+      },
+      {
+        name: 'platform',
+        in: 'query',
+        required: false,
+        aliases: ['platform'],
+        type: 'string',
+      },
+      {
+        name: 'created_after',
+        in: 'query',
+        required: false,
+        aliases: ['created-after', 'created_after'],
+        type: 'string',
+      },
+      {
+        name: 'created_before',
+        in: 'query',
+        required: false,
+        aliases: ['created-before', 'created_before'],
+        type: 'string',
+      },
+      {
+        name: 'created_by',
+        in: 'query',
+        required: false,
+        aliases: ['created-by', 'created_by'],
+        type: 'string',
+        description: 'Filter by creator email or login id (exact match).',
+      },
+      {
+        name: 'include_archived',
+        in: 'query',
+        required: false,
+        aliases: ['include-archived', 'include_archived'],
+        type: 'boolean',
+      },
+    ],
+    body: [],
+  },
+  {
+    command: ['surveys', 'create'],
+    method: 'POST',
+    operationId: 'createSurvey',
+    path: '/v1/projects/{project_id}/surveys',
+    requiredScopes: ['surveys:write'],
+    summary: 'Create survey',
+    successStatus: 201,
+    parameters: [
+      {
+        name: 'project_id',
+        in: 'path',
+        required: true,
+        aliases: ['project', 'project-id', 'project_id'],
+        type: 'string',
+        description:
+          'Amplitude project identifier, backed by the canonical app ID.',
+      },
+      {
+        name: 'Idempotency-Key',
+        in: 'header',
+        required: true,
+        aliases: ['idempotency-key'],
+        type: 'string',
+        description:
+          'Unique idempotency key used to safely retry write operations.',
+      },
+    ],
+    body: [
+      {
+        name: 'title',
+        required: true,
+        aliases: ['title'],
+        type: 'string',
+        nullable: false,
+      },
+      {
+        name: 'description',
+        required: false,
+        aliases: ['description'],
+        type: 'string',
+        nullable: true,
+      },
+      {
+        name: 'platform',
+        required: false,
+        aliases: ['platform'],
+        type: 'string',
+        nullable: false,
+        enum: ['web', 'ios', 'android', 'react-native', 'desktop', 'flutter'],
+        description:
+          'Target platform. Guides and surveys without an explicit platform are\nreturned as `web`.\n',
+      },
+      {
+        name: 'priority',
+        required: false,
+        aliases: ['priority'],
+        type: 'integer',
+        nullable: false,
+      },
+      {
+        name: 'variants',
+        required: false,
+        aliases: ['variants'],
+        type: 'array',
+        nullable: false,
+        items: {
+          type: 'object',
+          description:
+            "Variant payload on create/update. `id` is optional — omit for new variants;\ninclude when updating an existing variant row. A negative `id` is a variant\nadded to a published guide or survey's draft that has not been published yet.\n`variant` key is required.\n",
+          required: ['variant'],
+          properties: {
+            id: {
+              type: 'string',
+            },
+            variant: {
+              type: 'string',
+              description: 'Variant key within the nudge.',
+            },
+            display_title: {
+              type: ['string', 'null'],
+            },
+            display_description: {
+              type: ['string', 'null'],
+            },
+            snooze_label: {
+              type: ['string', 'null'],
+            },
+            done_label: {
+              type: ['string', 'null'],
+            },
+            steps: {
+              type: 'array',
+              items: {
+                type: 'object',
+                description:
+                  "Step payload on create/update. `id` is optional — omit for new steps; include\nwhen updating an existing step row. A negative `id` is a step added to a\npublished guide or survey's draft that has not been published yet.\n",
+                properties: {
+                  id: {
+                    type: 'string',
+                  },
+                  title: {
+                    type: ['string', 'null'],
+                  },
+                  form_factor: {
+                    type: 'object',
+                    description:
+                      'Layout object for a step. `type` selects the form factor; additional keys\nare layout-specific.\n',
+                    required: ['type'],
+                    properties: {
+                      type: {
+                        type: 'string',
+                        description:
+                          'Step presentation layout. Required layout keys and allowed values differ\nby form factor.\n',
+                        enum: [
+                          'banner',
+                          'card',
+                          'checklist',
+                          'modal',
+                          'pin',
+                          'popover',
+                          'tooltip',
+                        ],
+                      },
+                    },
+                  },
+                  content: {
+                    description:
+                      'Step body content (structure varies by form factor).',
+                  },
+                  sort_key: {
+                    type: ['integer', 'null'],
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    ],
+  },
+  {
+    command: ['surveys', 'archive'],
+    method: 'DELETE',
+    operationId: 'archiveSurvey',
+    path: '/v1/projects/{project_id}/surveys/{survey_id}',
+    requiredScopes: ['surveys:write'],
+    summary: 'Archive survey',
+    successStatus: 204,
+    parameters: [
+      {
+        name: 'project_id',
+        in: 'path',
+        required: true,
+        aliases: ['project', 'project-id', 'project_id'],
+        type: 'string',
+        description:
+          'Amplitude project identifier, backed by the canonical app ID.',
+      },
+      {
+        name: 'survey_id',
+        in: 'path',
+        required: true,
+        aliases: ['survey', 'survey-id', 'survey_id'],
+        type: 'string',
+        description: 'Survey nudge identifier.',
+      },
+      {
+        name: 'dry_run',
+        in: 'query',
+        required: false,
+        aliases: ['dry-run', 'dry_run'],
+        type: 'boolean',
+        description: 'Validate request without performing mutation.',
+      },
+      {
+        name: 'Idempotency-Key',
+        in: 'header',
+        required: true,
+        aliases: ['idempotency-key'],
+        type: 'string',
+        description:
+          'Unique idempotency key used to safely retry write operations.',
+      },
+    ],
+    body: [],
+  },
+  {
+    command: ['surveys', 'get'],
+    method: 'GET',
+    operationId: 'getSurvey',
+    path: '/v1/projects/{project_id}/surveys/{survey_id}',
+    requiredScopes: ['surveys:read'],
+    summary: 'Get survey',
+    successStatus: 200,
+    parameters: [
+      {
+        name: 'project_id',
+        in: 'path',
+        required: true,
+        aliases: ['project', 'project-id', 'project_id'],
+        type: 'string',
+        description:
+          'Amplitude project identifier, backed by the canonical app ID.',
+      },
+      {
+        name: 'survey_id',
+        in: 'path',
+        required: true,
+        aliases: ['survey', 'survey-id', 'survey_id'],
+        type: 'string',
+        description: 'Survey nudge identifier.',
+      },
+      {
+        name: 'include_unpublished_changes',
+        in: 'query',
+        required: false,
+        aliases: ['include-unpublished-changes', 'include_unpublished_changes'],
+        type: 'boolean',
+        description:
+          'When true, return the latest draft (unpublished edits) when one exists.\nDefault false returns the live published survey.\n',
+      },
+    ],
+    body: [],
+  },
+  {
+    command: ['surveys', 'update'],
+    method: 'PATCH',
+    operationId: 'updateSurvey',
+    path: '/v1/projects/{project_id}/surveys/{survey_id}',
+    requiredScopes: ['surveys:write'],
+    summary: 'Update survey',
+    successStatus: 200,
+    parameters: [
+      {
+        name: 'project_id',
+        in: 'path',
+        required: true,
+        aliases: ['project', 'project-id', 'project_id'],
+        type: 'string',
+        description:
+          'Amplitude project identifier, backed by the canonical app ID.',
+      },
+      {
+        name: 'survey_id',
+        in: 'path',
+        required: true,
+        aliases: ['survey', 'survey-id', 'survey_id'],
+        type: 'string',
+        description: 'Survey nudge identifier.',
+      },
+      {
+        name: 'Idempotency-Key',
+        in: 'header',
+        required: true,
+        aliases: ['idempotency-key'],
+        type: 'string',
+        description:
+          'Unique idempotency key used to safely retry write operations.',
+      },
+    ],
+    body: [
+      {
+        name: 'title',
+        required: false,
+        aliases: ['title'],
+        type: 'string',
+        nullable: false,
+      },
+      {
+        name: 'description',
+        required: false,
+        aliases: ['description'],
+        type: 'string',
+        nullable: true,
+      },
+      {
+        name: 'platform',
+        required: false,
+        aliases: ['platform'],
+        type: 'string',
+        nullable: false,
+        enum: ['web', 'ios', 'android', 'react-native', 'desktop', 'flutter'],
+        description:
+          'Target platform. Guides and surveys without an explicit platform are\nreturned as `web`.\n',
+      },
+      {
+        name: 'priority',
+        required: false,
+        aliases: ['priority'],
+        type: 'integer',
+        nullable: false,
+      },
+      {
+        name: 'page_target_segments',
+        required: false,
+        aliases: ['page-target-segments', 'page_target_segments'],
+        type: 'array',
+        nullable: false,
+        items: {},
+      },
+      {
+        name: 'temporarily_hide_page_target_segments',
+        required: false,
+        aliases: [
+          'temporarily-hide-page-target-segments',
+          'temporarily_hide_page_target_segments',
+        ],
+        type: 'array',
+        nullable: false,
+        items: {},
+      },
+      {
+        name: 'hide_if_page_targeting_not_met',
+        required: false,
+        aliases: [
+          'hide-if-page-targeting-not-met',
+          'hide_if_page_targeting_not_met',
+        ],
+        type: 'boolean',
+        nullable: false,
+      },
+      {
+        name: 'trigger_config',
+        required: false,
+        aliases: ['trigger-config', 'trigger_config'],
+        type: 'object',
+        nullable: false,
+        description: 'Trigger configuration object.',
+      },
+      {
+        name: 'lifecycle',
+        required: false,
+        aliases: ['lifecycle'],
+        type: 'object',
+        nullable: false,
+        description: 'Lifecycle rules object.',
+      },
+      {
+        name: 'dismissible',
+        required: false,
+        aliases: ['dismissible'],
+        type: 'boolean',
+        nullable: false,
+      },
+      {
+        name: 'snoozable',
+        required: false,
+        aliases: ['snoozable'],
+        type: 'boolean',
+        nullable: false,
+      },
+      {
+        name: 'snoozable_on_all_steps',
+        required: false,
+        aliases: ['snoozable-on-all-steps', 'snoozable_on_all_steps'],
+        type: 'boolean',
+        nullable: false,
+      },
+      {
+        name: 'snooze_duration',
+        required: false,
+        aliases: ['snooze-duration', 'snooze_duration'],
+        type: 'string',
+        nullable: false,
+        description: 'Snooze duration configuration.',
+      },
+      {
+        name: 'snooze_label',
+        required: false,
+        aliases: ['snooze-label', 'snooze_label'],
+        type: 'string',
+        nullable: true,
+      },
+      {
+        name: 'template_source',
+        required: false,
+        aliases: ['template-source', 'template_source'],
+        type: 'string',
+        nullable: true,
+      },
+      {
+        name: 'show_step_counter',
+        required: false,
+        aliases: ['show-step-counter', 'show_step_counter'],
+        type: 'boolean',
+        nullable: false,
+      },
+      {
+        name: 'step_counter_format',
+        required: false,
+        aliases: ['step-counter-format', 'step_counter_format'],
+        type: 'string',
+        nullable: true,
+      },
+      {
+        name: 'tags',
+        required: false,
+        aliases: ['tags'],
+        type: 'array',
+        nullable: false,
+        items: {
+          type: 'string',
+        },
+      },
+      {
+        name: 'variants',
+        required: false,
+        aliases: ['variants'],
+        type: 'array',
+        nullable: false,
+        items: {
+          type: 'object',
+          description:
+            "Variant payload on create/update. `id` is optional — omit for new variants;\ninclude when updating an existing variant row. A negative `id` is a variant\nadded to a published guide or survey's draft that has not been published yet.\n`variant` key is required.\n",
+          required: ['variant'],
+          properties: {
+            id: {
+              type: 'string',
+            },
+            variant: {
+              type: 'string',
+              description: 'Variant key within the nudge.',
+            },
+            display_title: {
+              type: ['string', 'null'],
+            },
+            display_description: {
+              type: ['string', 'null'],
+            },
+            snooze_label: {
+              type: ['string', 'null'],
+            },
+            done_label: {
+              type: ['string', 'null'],
+            },
+            steps: {
+              type: 'array',
+              items: {
+                type: 'object',
+                description:
+                  "Step payload on create/update. `id` is optional — omit for new steps; include\nwhen updating an existing step row. A negative `id` is a step added to a\npublished guide or survey's draft that has not been published yet.\n",
+                properties: {
+                  id: {
+                    type: 'string',
+                  },
+                  title: {
+                    type: ['string', 'null'],
+                  },
+                  form_factor: {
+                    type: 'object',
+                    description:
+                      'Layout object for a step. `type` selects the form factor; additional keys\nare layout-specific.\n',
+                    required: ['type'],
+                    properties: {
+                      type: {
+                        type: 'string',
+                        description:
+                          'Step presentation layout. Required layout keys and allowed values differ\nby form factor.\n',
+                        enum: [
+                          'banner',
+                          'card',
+                          'checklist',
+                          'modal',
+                          'pin',
+                          'popover',
+                          'tooltip',
+                        ],
+                      },
+                    },
+                  },
+                  content: {
+                    description:
+                      'Step body content (structure varies by form factor).',
+                  },
+                  sort_key: {
+                    type: ['integer', 'null'],
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+      {
+        name: 'latest_version',
+        required: true,
+        aliases: ['latest-version', 'latest_version'],
+        type: 'integer',
+        nullable: false,
+        description:
+          'Expected `latest_version` from the last GET with\n`include_unpublished_changes=true`.\n',
       },
     ],
   },
@@ -1981,8 +4072,10 @@ export const CLI_OPERATIONS = [
         name: 'project_id',
         in: 'path',
         required: true,
-        aliases: ['project', 'project-id'],
+        aliases: ['project', 'project-id', 'project_id'],
         type: 'string',
+        description:
+          'Amplitude project identifier, backed by the canonical app ID.',
       },
       {
         name: 'cursor',
@@ -1990,6 +4083,8 @@ export const CLI_OPERATIONS = [
         required: false,
         aliases: ['cursor'],
         type: 'string',
+        description:
+          'Opaque cursor from `pagination.next_cursor` on the previous response.\nNumeric offsets are capped by the underlying search index (10,000 results\nper query). Well-formed pagination stops before that window; requests whose\ncursor would exceed it return 400 `pagination_not_supported`.\n',
       },
       {
         name: 'limit',
@@ -1997,6 +4092,7 @@ export const CLI_OPERATIONS = [
         required: false,
         aliases: ['limit'],
         type: 'integer',
+        description: 'Number of items to return. Defaults to 50, max 200.',
       },
       {
         name: 'q',
@@ -2004,6 +4100,7 @@ export const CLI_OPERATIONS = [
         required: false,
         aliases: ['q', 'query'],
         type: 'string',
+        description: 'Full-text search query.',
       },
       {
         name: 'partner',
@@ -2011,6 +4108,7 @@ export const CLI_OPERATIONS = [
         required: false,
         aliases: ['partner'],
         type: 'string',
+        description: 'Filter by destination partner key.',
       },
       {
         name: 'enabled',
@@ -2018,6 +4116,7 @@ export const CLI_OPERATIONS = [
         required: false,
         aliases: ['enabled'],
         type: 'boolean',
+        description: 'Filter by enabled/active flag.',
       },
       {
         name: 'kind',
@@ -2025,6 +4124,8 @@ export const CLI_OPERATIONS = [
         required: false,
         aliases: ['kind'],
         type: 'string',
+        description:
+          'Filter by a single connector kind; matches destinations whose `kind` array\ncontains this value.\n',
       },
     ],
     body: [],
@@ -2042,15 +4143,18 @@ export const CLI_OPERATIONS = [
         name: 'project_id',
         in: 'path',
         required: true,
-        aliases: ['project', 'project-id'],
+        aliases: ['project', 'project-id', 'project_id'],
         type: 'string',
+        description:
+          'Amplitude project identifier, backed by the canonical app ID.',
       },
       {
         name: 'dry_run',
         in: 'query',
         required: false,
-        aliases: ['dry-run'],
+        aliases: ['dry-run', 'dry_run'],
         type: 'boolean',
+        description: 'Validate request without performing mutation.',
       },
     ],
     body: [
@@ -2064,7 +4168,7 @@ export const CLI_OPERATIONS = [
       {
         name: 'display_name',
         required: true,
-        aliases: ['display-name'],
+        aliases: ['display-name', 'display_name'],
         type: 'string',
         nullable: false,
       },
@@ -2074,6 +4178,14 @@ export const CLI_OPERATIONS = [
         aliases: ['kind'],
         type: 'array',
         nullable: false,
+        description:
+          "Optional connector kinds. When omitted, the kind is inferred\nfrom the partner's capabilities; a multi-capability partner with\nno kind is rejected as ambiguous. When provided it is\nauthoritative and validated against the partner. The three\nfamilies are mutually exclusive: a subset of [event, identify],\nor [cohort], or [warehouse_export] — never combined.\n",
+        items: {
+          type: 'string',
+          description:
+            'Authoritative connector kind on a destination. `event`/`identify`/`cohort`\nare for streaming and cohort destinations; `warehouse_export` is for\nwarehouse-export destinations. Routing is derived from the array of these\nvalues, so there is no separate routing field. `warehouse_export` cannot\nbe combined with the other kinds.\n',
+          enum: ['event', 'identify', 'cohort', 'warehouse_export'],
+        },
       },
       {
         name: 'config',
@@ -2092,28 +4204,28 @@ export const CLI_OPERATIONS = [
       {
         name: 'event_filter',
         required: false,
-        aliases: ['event-filter'],
+        aliases: ['event-filter', 'event_filter'],
         type: 'object',
         nullable: false,
       },
       {
         name: 'property_mappings',
         required: false,
-        aliases: ['property-mappings'],
+        aliases: ['property-mappings', 'property_mappings'],
         type: 'object',
         nullable: false,
       },
       {
         name: 'send_events',
         required: false,
-        aliases: ['send-events'],
+        aliases: ['send-events', 'send_events'],
         type: 'boolean',
         nullable: false,
       },
       {
         name: 'send_users',
         required: false,
-        aliases: ['send-users'],
+        aliases: ['send-users', 'send_users'],
         type: 'boolean',
         nullable: false,
       },
@@ -2132,8 +4244,10 @@ export const CLI_OPERATIONS = [
         name: 'project_id',
         in: 'path',
         required: true,
-        aliases: ['project', 'project-id'],
+        aliases: ['project', 'project-id', 'project_id'],
         type: 'string',
+        description:
+          'Amplitude project identifier, backed by the canonical app ID.',
       },
       {
         name: 'id',
@@ -2141,6 +4255,7 @@ export const CLI_OPERATIONS = [
         required: true,
         aliases: ['id'],
         type: 'string',
+        description: 'Destination id.',
       },
     ],
     body: [],
@@ -2158,8 +4273,10 @@ export const CLI_OPERATIONS = [
         name: 'project_id',
         in: 'path',
         required: true,
-        aliases: ['project', 'project-id'],
+        aliases: ['project', 'project-id', 'project_id'],
         type: 'string',
+        description:
+          'Amplitude project identifier, backed by the canonical app ID.',
       },
       {
         name: 'id',
@@ -2167,13 +4284,15 @@ export const CLI_OPERATIONS = [
         required: true,
         aliases: ['id'],
         type: 'string',
+        description: 'Destination id.',
       },
       {
         name: 'dry_run',
         in: 'query',
         required: false,
-        aliases: ['dry-run'],
+        aliases: ['dry-run', 'dry_run'],
         type: 'boolean',
+        description: 'Validate request without performing mutation.',
       },
       {
         name: 'If-Match',
@@ -2181,13 +4300,15 @@ export const CLI_OPERATIONS = [
         required: false,
         aliases: ['if-match'],
         type: 'integer',
+        description:
+          'Optimistic concurrency token. Must equal the resource `version` for the\nwrite to proceed; otherwise the API returns 412.\n',
       },
     ],
     body: [
       {
         name: 'display_name',
         required: false,
-        aliases: ['display-name'],
+        aliases: ['display-name', 'display_name'],
         type: 'string',
         nullable: false,
       },
@@ -2197,6 +4318,12 @@ export const CLI_OPERATIONS = [
         aliases: ['kind'],
         type: 'array',
         nullable: false,
+        items: {
+          type: 'string',
+          description:
+            'Authoritative connector kind on a destination. `event`/`identify`/`cohort`\nare for streaming and cohort destinations; `warehouse_export` is for\nwarehouse-export destinations. Routing is derived from the array of these\nvalues, so there is no separate routing field. `warehouse_export` cannot\nbe combined with the other kinds.\n',
+          enum: ['event', 'identify', 'cohort', 'warehouse_export'],
+        },
       },
       {
         name: 'config',
@@ -2215,28 +4342,28 @@ export const CLI_OPERATIONS = [
       {
         name: 'event_filter',
         required: false,
-        aliases: ['event-filter'],
+        aliases: ['event-filter', 'event_filter'],
         type: 'object',
         nullable: false,
       },
       {
         name: 'property_mappings',
         required: false,
-        aliases: ['property-mappings'],
+        aliases: ['property-mappings', 'property_mappings'],
         type: 'object',
         nullable: false,
       },
       {
         name: 'send_events',
         required: false,
-        aliases: ['send-events'],
+        aliases: ['send-events', 'send_events'],
         type: 'boolean',
         nullable: false,
       },
       {
         name: 'send_users',
         required: false,
-        aliases: ['send-users'],
+        aliases: ['send-users', 'send_users'],
         type: 'boolean',
         nullable: false,
       },
@@ -2255,8 +4382,10 @@ export const CLI_OPERATIONS = [
         name: 'project_id',
         in: 'path',
         required: true,
-        aliases: ['project', 'project-id'],
+        aliases: ['project', 'project-id', 'project_id'],
         type: 'string',
+        description:
+          'Amplitude project identifier, backed by the canonical app ID.',
       },
       {
         name: 'id',
@@ -2264,15 +4393,18 @@ export const CLI_OPERATIONS = [
         required: true,
         aliases: ['id'],
         type: 'string',
+        description: 'Destination id.',
       },
     ],
     body: [
       {
         name: 'test_event_payload',
         required: false,
-        aliases: ['test-event-payload'],
+        aliases: ['test-event-payload', 'test_event_payload'],
         type: 'string',
         nullable: false,
+        description:
+          "JSON event to send to the destination. Omit the field to use\nthe partner's example event. An empty string is rejected.\n",
       },
     ],
   },
@@ -2289,8 +4421,10 @@ export const CLI_OPERATIONS = [
         name: 'project_id',
         in: 'path',
         required: true,
-        aliases: ['project', 'project-id'],
+        aliases: ['project', 'project-id', 'project_id'],
         type: 'string',
+        description:
+          'Amplitude project identifier, backed by the canonical app ID.',
       },
       {
         name: 'Idempotency-Key',
@@ -2298,6 +4432,8 @@ export const CLI_OPERATIONS = [
         required: true,
         aliases: ['idempotency-key'],
         type: 'string',
+        description:
+          'Unique idempotency key used to safely retry write operations.',
       },
     ],
     body: [],

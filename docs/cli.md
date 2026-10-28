@@ -78,6 +78,8 @@ scopes below document what each command needs.
 | `context`, `projects list`           | `projects:read`                   |
 | `events *`                           | `taxonomy:read`, `taxonomy:write` |
 | `flags *`                            | `flags:read`, `flags:write`       |
+| `guides *`                           | `guides:read`, `guides:write`     |
+| `surveys *`                          | `surveys:read`, `surveys:write`   |
 | `charts *`, `heatmaps *`, `zoning *` | `analytics:read`                  |
 
 Route-level scopes are defined on each OpenAPI operation (`x-required-scopes`).

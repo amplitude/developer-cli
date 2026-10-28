@@ -107,12 +107,12 @@ describe('manifest invariants', () => {
         authentication: 'none',
         body: [
           expect.objectContaining({
-            aliases: ['api-key'],
+            aliases: ['api-key', 'api_key'],
             name: 'api_key',
             required: true,
           }),
           expect.objectContaining({
-            aliases: ['timeout-seconds'],
+            aliases: ['timeout-seconds', 'polling_timeout_seconds'],
             name: 'polling_timeout_seconds',
             required: false,
           }),
@@ -224,6 +224,36 @@ describe('buildRequest', () => {
       data_type: 'string',
       is_array_type: true,
       is_hidden: true,
+    });
+  });
+
+  it('parses guide and survey update configuration flags as JSON objects', () => {
+    const triggerConfig = { type: 'immediate' };
+    const lifecycle = { frequency: 'once' };
+    const shared = [
+      '--project',
+      '187520',
+      '--latest-version',
+      '3',
+      '--trigger-config',
+      JSON.stringify(triggerConfig),
+      '--lifecycle',
+      JSON.stringify(lifecycle),
+    ];
+
+    expect(
+      request(['guides', 'update'], ['--guide', 'g1', ...shared]).body,
+    ).toMatchObject({
+      latest_version: 3,
+      trigger_config: triggerConfig,
+      lifecycle,
+    });
+    expect(
+      request(['surveys', 'update'], ['--survey', 's1', ...shared]).body,
+    ).toMatchObject({
+      latest_version: 3,
+      trigger_config: triggerConfig,
+      lifecycle,
     });
   });
 
