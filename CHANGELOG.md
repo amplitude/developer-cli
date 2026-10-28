@@ -1,5 +1,29 @@
 # Changelog
 
+## [0.6.0](https://github.com/amplitude/developer-cli/compare/developer-cli-v0.5.0...developer-cli-v0.6.0) (2026-10-28)
+
+
+### Features
+
+* **agent-analytics:** add dataset, evaluator, and eval-run write commands (`datasets create|update|add-sessions|remove-sessions`, `evaluators create|update`, `eval-runs list|get|trigger`) ([fc91e0a](https://github.com/amplitude/developer-cli/commit/fc91e0acaf0d0c5fefb7e11e3d88d3cba579169f))
+* **agent-analytics:** add dataset, evaluator, and eval-run write commands (`datasets create|update|add-sessions|remove-sessions`, `evaluators create|update`, `eval-runs list|get|trigger`) ([db8b8fe](https://github.com/amplitude/developer-cli/commit/db8b8feaad2b0a20dc7f2554eaf46b095d53aa9a))
+* **agent-analytics:** add dataset, evaluator, and eval-run write commands (`datasets create|update|add-sessions|remove-sessions`, `evaluators create|update`, `eval-runs list|get|trigger`) ([00ea771](https://github.com/amplitude/developer-cli/commit/00ea771c55b3bf60f28b6b1e86729479e0fe0373))
+* **guides:** add `amp guides list`, `get`, `create`, `update`, and `archive` ([fc91e0a](https://github.com/amplitude/developer-cli/commit/fc91e0acaf0d0c5fefb7e11e3d88d3cba579169f))
+* **guides:** add `amp guides list`, `get`, `create`, `update`, and `archive` ([db8b8fe](https://github.com/amplitude/developer-cli/commit/db8b8feaad2b0a20dc7f2554eaf46b095d53aa9a))
+* **guides:** add `amp guides list`, `get`, `create`, `update`, and `archive` ([00ea771](https://github.com/amplitude/developer-cli/commit/00ea771c55b3bf60f28b6b1e86729479e0fe0373))
+* **surveys:** add `amp surveys list`, `get`, `create`, `update`, and `archive` ([fc91e0a](https://github.com/amplitude/developer-cli/commit/fc91e0acaf0d0c5fefb7e11e3d88d3cba579169f))
+* **surveys:** add `amp surveys list`, `get`, `create`, `update`, and `archive` ([db8b8fe](https://github.com/amplitude/developer-cli/commit/db8b8feaad2b0a20dc7f2554eaf46b095d53aa9a))
+* **surveys:** add `amp surveys list`, `get`, `create`, `update`, and `archive` ([00ea771](https://github.com/amplitude/developer-cli/commit/00ea771c55b3bf60f28b6b1e86729479e0fe0373))
+
+
+### Bug Fixes
+
+* **auth:** let the server decide whether `amp auth signup` needs Terms of Service acceptance, and report missing signup fields together ([fc91e0a](https://github.com/amplitude/developer-cli/commit/fc91e0acaf0d0c5fefb7e11e3d88d3cba579169f))
+* **auth:** let the server decide whether `amp auth signup` needs Terms of Service acceptance, and report missing signup fields together ([db8b8fe](https://github.com/amplitude/developer-cli/commit/db8b8feaad2b0a20dc7f2554eaf46b095d53aa9a))
+* **auth:** let the server decide whether `amp auth signup` needs Terms of Service acceptance, and report missing signup fields together ([00ea771](https://github.com/amplitude/developer-cli/commit/00ea771c55b3bf60f28b6b1e86729479e0fe0373))
+* **guides,surveys:** parse `--trigger-config`, `--lifecycle`, and `--snooze-duration` on `update` as JSON objects instead of sending them as strings ([7dc78af](https://github.com/amplitude/developer-cli/commit/7dc78afeafceff05d14f253cf598fcbc23ad3857))
+* **guides,surveys:** parse `--trigger-config`, `--lifecycle`, and `--snooze-duration` on `update` as JSON objects instead of sending them as strings ([b03debe](https://github.com/amplitude/developer-cli/commit/b03debeb6e6d743e94268ca33a9adb12b0720284))
+
 ## [0.5.0](https://github.com/amplitude/developer-cli/compare/developer-cli-v0.4.0...developer-cli-v0.5.0) (2026-10-16)
 
 
