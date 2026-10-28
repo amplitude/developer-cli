@@ -4397,10 +4397,12 @@
                   },
                   "trigger_config": {
                     "type": "object",
+                    "additionalProperties": true,
                     "description": "Trigger configuration object."
                   },
                   "lifecycle": {
                     "type": "object",
+                    "additionalProperties": true,
                     "description": "Lifecycle rules object."
                   },
                   "dismissible": {
@@ -4413,6 +4415,8 @@
                     "type": "boolean"
                   },
                   "snooze_duration": {
+                    "type": "object",
+                    "additionalProperties": true,
                     "description": "Snooze duration configuration."
                   },
                   "snooze_label": {
@@ -4827,10 +4831,12 @@
                   },
                   "trigger_config": {
                     "type": "object",
+                    "additionalProperties": true,
                     "description": "Trigger configuration object."
                   },
                   "lifecycle": {
                     "type": "object",
+                    "additionalProperties": true,
                     "description": "Lifecycle rules object."
                   },
                   "dismissible": {
@@ -4843,6 +4849,8 @@
                     "type": "boolean"
                   },
                   "snooze_duration": {
+                    "type": "object",
+                    "additionalProperties": true,
                     "description": "Snooze duration configuration."
                   },
                   "snooze_label": {
@@ -7099,7 +7107,10 @@
       "Guide": {
         "allOf": [
           {
-            "$ref": "#/components/schemas/GuideSurvey"
+            "$ref": "#/components/schemas/GuideSurveySummary"
+          },
+          {
+            "$ref": "#/components/schemas/GuideSurveyDetail"
           },
           {
             "type": "object",
@@ -7139,7 +7150,10 @@
       "Survey": {
         "allOf": [
           {
-            "$ref": "#/components/schemas/GuideSurvey"
+            "$ref": "#/components/schemas/GuideSurveySummary"
+          },
+          {
+            "$ref": "#/components/schemas/GuideSurveyDetail"
           },
           {
             "type": "object",
@@ -9545,79 +9559,72 @@
           }
         }
       },
-      "GuideSurvey": {
-        "allOf": [
-          {
-            "$ref": "#/components/schemas/GuideSurveySummary"
+      "GuideSurveyDetail": {
+        "type": "object",
+        "properties": {
+          "temporarily_hide_page_target_segments": {
+            "type": "array",
+            "items": {}
           },
-          {
-            "type": "object",
-            "properties": {
-              "temporarily_hide_page_target_segments": {
-                "type": "array",
-                "items": {}
-              },
-              "hide_if_page_targeting_not_met": {
-                "type": "boolean"
-              },
-              "trigger_config": {
-                "description": "When and how the nudge triggers."
-              },
-              "lifecycle": {
-                "description": "Frequency and display lifecycle rules."
-              },
-              "dismissible": {
-                "type": "boolean"
-              },
-              "snoozable": {
-                "type": "boolean"
-              },
-              "snoozable_on_all_steps": {
-                "type": "boolean"
-              },
-              "snooze_duration": {
-                "description": "Snooze duration configuration."
-              },
-              "snooze_label": {
-                "type": ["string", "null"]
-              },
-              "template_source": {
-                "type": ["string", "null"]
-              },
-              "show_step_counter": {
-                "type": "boolean"
-              },
-              "step_counter_format": {
-                "type": ["string", "null"]
-              },
-              "variants": {
-                "type": "array",
-                "items": {
-                  "$ref": "#/components/schemas/GuideSurveyVariant"
-                }
-              },
-              "experiment_variants": {
-                "type": "array",
-                "items": {
-                  "$ref": "#/components/schemas/ExperimentVariantSummary"
-                },
-                "description": "Read-only experiment variant keys when the nudge is experiment-backed."
-              },
-              "flag_config": {
-                "oneOf": [
-                  {
-                    "$ref": "#/components/schemas/FeatureFlag"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "readOnly": true,
-                "description": "The Experiment feature flag that delivers this nudge, in the same\nshape as the Feature Flags API. Includes audience targeting\n(`target_segments`) and rollout. With\n`include_unpublished_changes=true`, draft rollout and targeting\nsettings are applied over the live flag.\n"
-              }
+          "hide_if_page_targeting_not_met": {
+            "type": "boolean"
+          },
+          "trigger_config": {
+            "description": "When and how the nudge triggers."
+          },
+          "lifecycle": {
+            "description": "Frequency and display lifecycle rules."
+          },
+          "dismissible": {
+            "type": "boolean"
+          },
+          "snoozable": {
+            "type": "boolean"
+          },
+          "snoozable_on_all_steps": {
+            "type": "boolean"
+          },
+          "snooze_duration": {
+            "description": "Snooze duration configuration."
+          },
+          "snooze_label": {
+            "type": ["string", "null"]
+          },
+          "template_source": {
+            "type": ["string", "null"]
+          },
+          "show_step_counter": {
+            "type": "boolean"
+          },
+          "step_counter_format": {
+            "type": ["string", "null"]
+          },
+          "variants": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GuideSurveyVariant"
             }
+          },
+          "experiment_variants": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ExperimentVariantSummary"
+            },
+            "description": "Read-only experiment variant keys when the nudge is experiment-backed."
+          },
+          "flag_config": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/FeatureFlag"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "readOnly": true,
+            "description": "The Experiment feature flag that delivers this nudge, in the same\nshape as the Feature Flags API. Includes audience targeting\n(`target_segments`) and rollout. With\n`include_unpublished_changes=true`, draft rollout and targeting\nsettings are applied over the live flag.\n"
           }
-        ]
+        }
       },
       "DestinationConnectorKind": {
         "type": "string",

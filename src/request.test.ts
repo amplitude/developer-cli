@@ -227,36 +227,6 @@ describe('buildRequest', () => {
     });
   });
 
-  it('parses guide and survey update configuration flags as JSON objects', () => {
-    const triggerConfig = { type: 'immediate' };
-    const lifecycle = { frequency: 'once' };
-    const shared = [
-      '--project',
-      '187520',
-      '--latest-version',
-      '3',
-      '--trigger-config',
-      JSON.stringify(triggerConfig),
-      '--lifecycle',
-      JSON.stringify(lifecycle),
-    ];
-
-    expect(
-      request(['guides', 'update'], ['--guide', 'g1', ...shared]).body,
-    ).toMatchObject({
-      latest_version: 3,
-      trigger_config: triggerConfig,
-      lifecycle,
-    });
-    expect(
-      request(['surveys', 'update'], ['--survey', 's1', ...shared]).body,
-    ).toMatchObject({
-      latest_version: 3,
-      trigger_config: triggerConfig,
-      lifecycle,
-    });
-  });
-
   it('parses referenced object and array body schemas as JSON', () => {
     const built = request(
       ['flags', 'create'],
@@ -285,6 +255,35 @@ describe('buildRequest', () => {
       ],
     });
   });
+
+  it.each([['guides'], ['surveys']])(
+    'parses %s update config flags as JSON objects',
+    (resource) => {
+      const built = request(
+        [resource, 'update'],
+        [
+          '--project',
+          '187520',
+          `--${resource.slice(0, -1)}`,
+          '42',
+          '--latest-version',
+          '3',
+          '--trigger-config',
+          '{"type":"immediately","data":{}}',
+          '--lifecycle',
+          '{"cooldown_limits":[],"stop_showing_if_completed":true}',
+          '--snooze-duration',
+          '{"value":3,"interval":"day"}',
+        ],
+      );
+
+      expect(built.body).toMatchObject({
+        trigger_config: { type: 'immediately', data: {} },
+        lifecycle: { cooldown_limits: [], stop_showing_if_completed: true },
+        snooze_duration: { value: 3, interval: 'day' },
+      });
+    },
+  );
 
   it('rejects string-valued flags passed without a value', () => {
     expect(() =>
