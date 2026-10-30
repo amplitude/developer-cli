@@ -20,39 +20,55 @@
 
 ### Features
 
+* **mcp-analytics:** add `amp mcp-analytics servers list`, `taxonomy get`, `topics get`, `episodes list`, and `episodes get` for the MCP taxonomy drill ([d2df2a6](https://github.com/amplitude/developer-cli/commit/d2df2a6f5f91f006514d9ec388ad8d055c51fb03))
+* **metrics:** add `amp metrics list` and `amp metrics get` ([d2df2a6](https://github.com/amplitude/developer-cli/commit/d2df2a6f5f91f006514d9ec388ad8d055c51fb03))
+* **auth:** add `amp auth signup` for non-interactive account signup ([d2df2a6](https://github.com/amplitude/developer-cli/commit/d2df2a6f5f91f006514d9ec388ad8d055c51fb03))
 
 ## [0.4.0](https://github.com/amplitude/developer-cli/compare/developer-cli-v0.3.1...developer-cli-v0.4.0) (2026-10-02)
 
 
 ### Features
 
+* **heatmaps:** add `amp heatmaps click-map` and `amp heatmaps scroll-map` for click and scroll-depth data on a page URL ([16307f2](https://github.com/amplitude/developer-cli/commit/16307f2bee010c38ce2c239d6b90b024829f46c2))
+* **zoning:** add `amp zoning zone-metrics` for per-zone engagement metrics on a page URL ([16307f2](https://github.com/amplitude/developer-cli/commit/16307f2bee010c38ce2c239d6b90b024829f46c2))
+* **skills:** `amp skills get --save` writes a skill document to a local directory ([16307f2](https://github.com/amplitude/developer-cli/commit/16307f2bee010c38ce2c239d6b90b024829f46c2))
 
 
 ### Bug Fixes
 
+* **help:** `--help --json` now expands multi-level command prefixes, and `amp help auth --json` lists `logout` again ([16307f2](https://github.com/amplitude/developer-cli/commit/16307f2bee010c38ce2c239d6b90b024829f46c2))
 
 ## [0.3.1](https://github.com/amplitude/developer-cli/compare/developer-cli-v0.3.0...developer-cli-v0.3.1) (2026-09-22)
 
 
 ### Bug Fixes
 
+* update dependencies ([33358b3](https://github.com/amplitude/developer-cli/commit/33358b3c561da41088ede5e9c85840b962fc1dd6))
+* update dependencies ([8cb37bb](https://github.com/amplitude/developer-cli/commit/8cb37bb8c901bd3042364e933fd45cb098b91840))
 
 ## [0.3.0](https://github.com/amplitude/developer-cli/compare/developer-cli-v0.2.0...developer-cli-v0.3.0) (2026-09-15)
 
 
 ### Features
 
+* update Developer CLI capabilities ([16172fe](https://github.com/amplitude/developer-cli/commit/16172fe4dcfd75efafc02f2728a7a30d13ef29f6))
+* update Developer CLI capabilities ([dbc3251](https://github.com/amplitude/developer-cli/commit/dbc325160c30efd8c3b720f4e4e485589c4758b5))
 
 
 ### Bug Fixes
 
+* align lockfile install settings ([a156bc0](https://github.com/amplitude/developer-cli/commit/a156bc05c4cb45b295bd3c7999fb2c2ec39f9d62))
 
 ## [0.2.0](https://github.com/amplitude/developer-cli/compare/developer-cli-v0.1.0...developer-cli-v0.2.0) (2026-08-04)
 
 
 ### Features
 
+* import amp CLI distribution ([#1](https://github.com/amplitude/developer-cli/issues/1)) ([976f4f7](https://github.com/amplitude/developer-cli/commit/976f4f7f258865ac78f27a8bda3c36956d27fc97))
+* sync developer-cli from upstream ([#4](https://github.com/amplitude/developer-cli/issues/4)) ([ce7ed11](https://github.com/amplitude/developer-cli/commit/ce7ed11346b5ebd452d29f1a64a88c575628425e))
 
 
 ### Bug Fixes
 
+* align release-please with infra OIDC publish setup ([#5](https://github.com/amplitude/developer-cli/issues/5)) ([a0ef8af](https://github.com/amplitude/developer-cli/commit/a0ef8af39a498a336070a4fabaf5468dbd6d0238))
+* read GitHub App secrets from npm-release environment ([#6](https://github.com/amplitude/developer-cli/issues/6)) ([f44cb41](https://github.com/amplitude/developer-cli/commit/f44cb41ebb1c37370135ac5f341d178df6fc9fff))
