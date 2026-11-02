@@ -154,6 +154,37 @@ describe('formatProfileList', () => {
   it('guides login when empty', () => {
     expect(formatProfileList(emptyStore(), NOW)).toMatch(/amp auth login/);
   });
+
+  it('renders a stored profile name without terminal controls', () => {
+    const store = setProfile(
+      emptyStore(),
+      'dev\u001b[31m',
+      oauthProfile(
+        'https://developer-api.amplitude.com',
+        '2026-06-23T21:14:00.000Z',
+      ),
+    );
+
+    const out = formatProfileList(store, NOW);
+    expect(out).toContain('dev^[[31m');
+    expect(out.includes('\u001b')).toBe(false);
+  });
+
+  it('renders a custom host without terminal controls', () => {
+    const store = setProfile(
+      emptyStore(),
+      'custom',
+      oauthProfile(
+        'https://evil.example/\u001b]0;owned\u0007',
+        '2026-06-23T21:14:00.000Z',
+      ),
+    );
+
+    const out = formatProfileList(store, NOW);
+    expect(out).toContain('https://evil.example/^[]0;owned^G');
+    expect(out.includes('\u001b')).toBe(false);
+    expect(out.includes('\u0007')).toBe(false);
+  });
 });
 
 describe('runAuthList', () => {

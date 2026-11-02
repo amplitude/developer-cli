@@ -1,6 +1,11 @@
 import { type FlagValue, isFlagEnabled, stringFlag } from './args';
 import { oauthCredentialFromToken, targetProfileName } from './auth-commands';
-import { type AnonymousRequest, createAnonymousRequest } from './authToken';
+import {
+  type AnonymousRequest,
+  completeDeviceAuthorization,
+  createAnonymousRequest,
+  type DeviceAuthorizationOptions,
+} from './authToken';
 import {
   CliError,
   exitCodeForErrorCode,
@@ -16,6 +21,7 @@ import {
   setProfile,
   updateStore,
 } from './credential-store';
+import { type TokenResponse } from './oauthResponseSchemas';
 import {
   gcExpiredPending,
   getPending,
@@ -30,6 +36,7 @@ import {
   SIGNUP_DOCUMENT_URLS,
   type SignupOutput,
   signupErrorFromResponse,
+  signupLoginCommand,
   signupMissingInformationError,
   signupPollContinuation,
   signupRequestSchema,
@@ -37,13 +44,17 @@ import {
   signupSupportedFlags,
 } from './signup-response';
 
-export interface AuthSignupDeps {
+export interface AuthSignupDeps extends Pick<
+  DeviceAuthorizationOptions,
+  'stdin' | 'stderr' | 'openUrl' | 'sleep'
+> {
   path?: string;
   pendingPath?: string;
   now?: () => number;
   request?: AnonymousRequest;
   updateStore?: typeof updateStore;
   savePending?: typeof savePending;
+  isInteractive?: boolean;
 }
 export type AuthSignupResult =
   | { ok: true; exitCode: 0 | 2; output: SignupOutput }
@@ -84,14 +95,10 @@ export async function runAuthSignup(
   flags: Record<string, FlagValue>,
   deps: AuthSignupDeps = {},
 ): Promise<AuthSignupResult> {
-  if (!isFlagEnabled(flags['non-interactive'])) {
-    return {
-      ok: false,
-      error: usageError(
-        'Signup requires --non-interactive. Run `amp auth signup --help` for supported inputs.',
-      ),
-    };
-  }
+  const isInteractive =
+    !isFlagEnabled(flags['non-interactive']) &&
+    (deps.isInteractive ??
+      Boolean(process.stdin.isTTY && process.stdout.isTTY));
 
   let profileName: string;
   let baseUrl: string;
@@ -218,61 +225,73 @@ export async function runAuthSignup(
   const now = deps.now ?? Date.now;
   const pPath = deps.pendingPath ?? defaultPendingPath();
   const persistPending = deps.savePending ?? savePending;
+  const loginCommand = signupLoginCommand(
+    profileName,
+    baseUrl,
+    isFlagEnabled(flags.force),
+  );
+  const saveCredentials = async (
+    token: TokenResponse,
+  ): Promise<AuthSignupResult> => {
+    const savedAt = now();
+    const profile: Profile = {
+      base_url: baseUrl,
+      credential: oauthCredentialFromToken(token, savedAt),
+      saved_at: new Date(savedAt).toISOString(),
+      store: 'file',
+    };
+    try {
+      await (deps.updateStore ?? updateStore)(
+        deps.path,
+        (latest) =>
+          setDefault(setProfile(latest, profileName, profile), profileName),
+        { retryMode: 'rotation_recovery' },
+      );
+    } catch {
+      return persistenceError(
+        'credential_save_failed',
+        `Authentication completed, but credentials could not be saved. Run \`${loginCommand}\` to sign in again.`,
+      );
+    }
+    try {
+      const pending = loadPending(pPath);
+      if (getPending(pending, profileName))
+        persistPending(removePending(pending, profileName), pPath);
+    } catch {
+      return persistenceError(
+        'pending_cleanup_failed',
+        'Signup credentials were saved and the profile is active, but obsolete pending authorization could not be cleared. Check local file permissions before starting another login.',
+      );
+    }
+    return {
+      ok: true,
+      exitCode: 0,
+      output: {
+        status: 'authorized',
+        message:
+          'Authentication complete. You can now run authenticated CLI commands',
+        data: {
+          profile: profileName,
+          base_url: baseUrl,
+          ...(body.data.terms_acceptance
+            ? {
+                terms_acceptance: {
+                  terms_of_service:
+                    body.data.terms_acceptance.terms_of_service.url,
+                  privacy_policy: body.data.terms_acceptance.privacy_policy.url,
+                },
+              }
+            : {}),
+        },
+      },
+    };
+  };
+
   switch (response.type) {
     case 'needs_information':
       return needsInformation(response.needs_information.schema);
-    case 'credentials': {
-      const savedAt = now();
-      const profile: Profile = {
-        base_url: baseUrl,
-        credential: oauthCredentialFromToken(response.credentials, savedAt),
-        saved_at: new Date(savedAt).toISOString(),
-        store: 'file',
-      };
-      try {
-        await (deps.updateStore ?? updateStore)(deps.path, (latest) =>
-          setDefault(setProfile(latest, profileName, profile), profileName),
-        );
-      } catch {
-        return persistenceError(
-          'credential_save_failed',
-          'Signup completed, but credentials could not be saved. Authenticate with `amp auth login start` using the same --profile and target, then run `amp auth login poll`.',
-        );
-      }
-      try {
-        const pending = loadPending(pPath);
-        if (getPending(pending, profileName))
-          persistPending(removePending(pending, profileName), pPath);
-      } catch {
-        return persistenceError(
-          'pending_cleanup_failed',
-          'Signup credentials were saved and the profile is active, but obsolete pending authorization could not be cleared. Check local file permissions before starting another login.',
-        );
-      }
-      return {
-        ok: true,
-        exitCode: 0,
-        output: {
-          status: 'authorized',
-          message:
-            'Authentication complete. You can now run authenticated CLI commands',
-          data: {
-            profile: profileName,
-            base_url: baseUrl,
-            ...(body.data.terms_acceptance
-              ? {
-                  terms_acceptance: {
-                    terms_of_service:
-                      body.data.terms_acceptance.terms_of_service.url,
-                    privacy_policy:
-                      body.data.terms_acceptance.privacy_policy.url,
-                  },
-                }
-              : {}),
-          },
-        },
-      };
-    }
+    case 'credentials':
+      return saveCredentials(response.credentials);
 
     case 'requires_auth': {
       const device = response.requires_auth.device_authorization;
@@ -297,6 +316,54 @@ export async function runAuthSignup(
         );
       }
       const continuation = signupPollContinuation(profileName);
+      if (isInteractive) {
+        const authorization = await completeDeviceAuthorization(device, {
+          request,
+          now,
+          stdin: deps.stdin,
+          stderr: deps.stderr,
+          openUrl: deps.openUrl,
+          sleep: deps.sleep,
+        });
+        if (!authorization.ok) {
+          if (
+            authorization.error.code === 'access_denied' ||
+            authorization.error.code === 'expired_token'
+          ) {
+            try {
+              const current = loadPending(pPath);
+              // A concurrent login may have replaced the challenge we polled.
+              if (
+                getPending(current, profileName)?.device_code ===
+                device.device_code
+              ) {
+                persistPending(removePending(current, profileName), pPath);
+              }
+            } catch {
+              return persistenceError(
+                'pending_cleanup_failed',
+                `${authorization.error.message} Could not clear the saved authorization. Check local file permissions before running \`${loginCommand}\`.`,
+              );
+            }
+          }
+          const recovery = authorization.error.canResume
+            ? `Continue with \`${continuation.command}\`.`
+            : `Run \`${loginCommand}\` to authorize again.`;
+          const message = `${authorization.error.message} ${recovery}`;
+          return {
+            ok: false,
+            error:
+              authorization.error.code === 'transport_error'
+                ? transportError(message)
+                : new CliError({
+                    errorCode: 'authorization_failed',
+                    message,
+                    exitCode: exitCodeForErrorCode('authorization_failed'),
+                  }),
+          };
+        }
+        return saveCredentials(authorization.token);
+      }
       const verificationUrl =
         device.verification_uri_complete ?? device.verification_uri;
       return {

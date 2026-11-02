@@ -1,5 +1,5 @@
 import { asProblem, hintForErrorCode } from './errors';
-import { formatJsonOutput } from './output';
+import { formatJsonOutput, sanitizeTerminalText } from './output';
 
 export interface CliErrorFields {
   errorCode: string;
@@ -8,6 +8,7 @@ export interface CliErrorFields {
   detail?: string;
   validationErrors?: Array<{ field: string; message: string; code: string }>;
   hint?: string;
+  retryable?: boolean;
 }
 
 const AUTH_CODES = new Set([
@@ -51,6 +52,7 @@ export class CliError extends Error implements CliErrorFields {
   detail?: string;
   validationErrors?: Array<{ field: string; message: string; code: string }>;
   hint?: string;
+  retryable?: boolean;
 
   constructor(fields: CliErrorFields & { message: string }) {
     super(fields.message);
@@ -61,6 +63,7 @@ export class CliError extends Error implements CliErrorFields {
     this.detail = fields.detail;
     this.validationErrors = fields.validationErrors;
     this.hint = fields.hint;
+    this.retryable = fields.retryable;
   }
 }
 
@@ -94,6 +97,7 @@ export function cliErrorFromResponse(
     detail,
     validationErrors: problem?.validation_errors ?? undefined,
     hint: hintForErrorCode(errorCode),
+    retryable: problem?.retryable,
   });
 }
 
@@ -128,19 +132,28 @@ export function transportError(
 }
 
 export function formatErrorText(error: CliError): string {
-  const lines: string[] = [error.message];
+  const lines: string[] = [sanitizeTerminalText(error.message)];
 
   if (error.validationErrors && error.validationErrors.length > 0) {
     lines.push('');
     lines.push('Validation errors:');
     for (const validationError of error.validationErrors) {
-      lines.push(`  - ${validationError.field}: ${validationError.message}`);
+      lines.push(
+        `  - ${sanitizeTerminalText(validationError.field)}: ${sanitizeTerminalText(validationError.message)}`,
+      );
     }
   }
 
   if (error.hint) {
     lines.push('');
-    lines.push(error.hint);
+    // Hints are CLI-authored paragraphs. Keep the breaks between them, and
+    // sanitize each line so a control character still cannot act on the terminal.
+    lines.push(
+      error.hint
+        .split('\n')
+        .map((line) => sanitizeTerminalText(line))
+        .join('\n'),
+    );
   }
 
   return lines.join('\n');
@@ -157,6 +170,7 @@ export function formatErrorEnvelope(error: CliError, isTTY: boolean): string {
         detail: error.detail,
         validation_errors: error.validationErrors,
         hint: error.hint,
+        retryable: error.retryable,
       },
     },
     isTTY,

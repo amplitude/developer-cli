@@ -41,8 +41,35 @@ export function normalizeWhitespace(value: string): string {
   return value.replace(/\s+/g, ' ').trim();
 }
 
+// C0, DEL, and C1: ESC/CSI/OSC, carriage return, backspace, and the 8-bit CSI.
+// Built from codes so the pattern is not a control-character regex literal.
+const TERMINAL_CONTROL = new RegExp(
+  `[${String.fromCharCode(0)}-${String.fromCharCode(0x1f)}${String.fromCharCode(0x7f)}-${String.fromCharCode(0x9f)}]`,
+  'g',
+);
+
+/**
+ * Render control characters so a terminal displays them and does not act on
+ * them. C0 uses caret notation (`ESC` → `^[`). C1 uses a `\\u00XX` form.
+ */
+export function sanitizeTerminalText(value: string): string {
+  return value.replace(TERMINAL_CONTROL, (char) => {
+    const code = char.charCodeAt(0);
+    if (code === 0x7f) {
+      return '^?';
+    }
+    if (code <= 0x1f) {
+      return `^${String.fromCharCode(code + 0x40)}`;
+    }
+
+    return `\\u${code.toString(16).padStart(4, '0')}`;
+  });
+}
+
 function normalizeCell(value: string): string {
-  return normalizeWhitespace(value);
+  // Collapse whitespace first so descriptions still become one line, then
+  // neutralize the controls whitespace does not cover (ESC, BEL, C1).
+  return sanitizeTerminalText(normalizeWhitespace(value));
 }
 
 function maxWidth(column: string, overrides: ColumnWidths): number {
@@ -156,18 +183,20 @@ function formatContextSummary(body: Record<string, unknown>): string {
 
   const lines = ['Authenticated context:'];
   if (principal?.login_id) {
-    lines.push(`  User: ${principal.login_id}`);
+    lines.push(`  User: ${sanitizeTerminalText(String(principal.login_id))}`);
   }
   if (org?.name || org?.id) {
-    const orgLabel = org.name ?? org.id;
-    const orgId = org.id ? ` (${org.id})` : '';
+    const orgLabel = sanitizeTerminalText(String(org.name ?? org.id));
+    const orgId = org.id ? ` (${sanitizeTerminalText(String(org.id))})` : '';
     lines.push(`  Org:  ${orgLabel}${orgId}`);
   }
   if (principal?.auth_type) {
-    lines.push(`  Auth: ${principal.auth_type}`);
+    lines.push(`  Auth: ${sanitizeTerminalText(String(principal.auth_type))}`);
   }
   if (scopes.length > 0) {
-    lines.push(`  Scopes: ${scopes.join(', ')}`);
+    lines.push(
+      `  Scopes: ${scopes.map((scope) => sanitizeTerminalText(scope)).join(', ')}`,
+    );
   }
 
   return lines.join('\n');
@@ -202,7 +231,7 @@ function formatListTable(
     lines.push('');
     lines.push(
       cursor
-        ? `More results available. Use --cursor ${cursor}`
+        ? `More results available. Use --cursor ${sanitizeTerminalText(cursor)}`
         : 'More results available. Use --cursor to continue.',
     );
   }

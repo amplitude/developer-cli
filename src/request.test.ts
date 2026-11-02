@@ -26,6 +26,26 @@ function request(command: string[], argv: string[]) {
 }
 
 describe('manifest invariants', () => {
+  it.each(['project', 'project-id', 'project_id'])(
+    'retrieves a project key with --%s without changing the selector',
+    (alias) => {
+      expect(operation(['projects', 'api-keys', 'get'])).toMatchObject({
+        operationId: 'getProjectApiKey',
+        method: 'GET',
+        requiredScopes: ['projects:read'],
+      });
+      expect(
+        request(['projects', 'api-keys', 'get'], [`--${alias}`, '12345']).path,
+      ).toBe('/v1/projects/api-key?project_id=12345');
+    },
+  );
+
+  it('delegates omitted project-key selection to the API', () => {
+    expect(request(['projects', 'api-keys', 'get'], []).path).toBe(
+      '/v1/projects/api-key',
+    );
+  });
+
   it('rejects the skills-only --loginId on API commands', () => {
     expect(() =>
       request(['projects', 'list'], ['--loginId', 'Account-123']),
@@ -53,6 +73,11 @@ describe('manifest invariants', () => {
     expect(request(['projects', 'list'], ['--cursor', '']).path).toBe(
       '/v1/projects',
     );
+    for (const flag of ['--next-cursor', '--next_cursor']) {
+      expect(
+        request(['guides', 'list'], ['--project', '12345', flag, '51015']).path,
+      ).toBe('/v1/projects/12345/guides?cursor=51015');
+    }
     const id = 'a37cf684-96ca-48d8-86ca-9c6213b0ade5';
     expect(
       request(

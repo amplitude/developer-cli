@@ -11,8 +11,8 @@ import { deviceIdHeader } from './client-identity';
 import { DEFAULT_API_BASE_URL, resolveNamedBaseUrl } from './config';
 import { loadStore } from './credential-store';
 import { asProblem } from './errors';
-import { CLI_VERSION } from './help';
 import { loginIdHeader } from './login-id';
+import { cliUserAgent } from './user-agent';
 
 export interface SkillIndexEntry {
   name: string;
@@ -91,7 +91,7 @@ async function get(
     return await fetch(url, {
       headers: {
         Accept: '*/*',
-        'User-Agent': `amp-cli/${CLI_VERSION}`,
+        'User-Agent': cliUserAgent(),
         ...deviceIdHeader(),
         ...loginIdHeader(loginId),
       },

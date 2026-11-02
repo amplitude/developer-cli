@@ -11,6 +11,7 @@ import {
   runAuthLoginStart,
   targetProfileName,
 } from './auth-commands';
+import { transportError } from './cli-error';
 import {
   CURRENT_VERSION,
   type CredentialStore,
@@ -73,7 +74,38 @@ function paths() {
   };
 }
 
+const transportFailures = [
+  { kind: 'plain', error: new Error('Could not reach the API') },
+  { kind: 'structured', error: transportError('Could not reach the API') },
+];
+
 describe('runAuthLoginStart', () => {
+  it.each(transportFailures)(
+    'preserves start_failed/exit 1 for a $kind transport failure',
+    async ({ error }) => {
+      const { path, pendingPath } = paths();
+      const lines: string[] = [];
+      await runAuthLoginStart(
+        { region: 'us' },
+        {
+          path,
+          pendingPath,
+          stdout: (line) => lines.push(line),
+          request: async () => {
+            throw error;
+          },
+        },
+      );
+      const output = JSON.parse(lines.join('\n'));
+      expect(output.status).toBe('error');
+      expect(output.error.error_code).toBe('start_failed');
+      expect(output.message).toBe('Could not reach the API');
+      expect(process.exitCode).toBe(1);
+      process.exitCode = 0;
+      expect(loadPending(pendingPath)).toEqual(emptyPending());
+    },
+  );
+
   it('persists a pending entry and emits verification_required without secrets', async () => {
     const { path, pendingPath } = paths();
     const lines: string[] = [];
@@ -825,37 +857,40 @@ describe('runAuthLoginPoll', () => {
     process.exitCode = 0;
   });
 
-  it('notes the pending login is preserved and hints a retry on poll_failed', async () => {
-    const { path, pendingPath } = paths();
-    savePending(
-      setPending(
-        emptyPending(),
-        'default',
-        pendingEntry('2999-01-01T00:00:00Z'),
-      ),
-      pendingPath,
-    );
-    const lines: string[] = [];
-    await runAuthLoginPoll(
-      { profile: 'default' },
-      {
-        path,
+  it.each(transportFailures)(
+    'preserves poll_failed/exit 1 and retry guidance for a $kind transport failure',
+    async ({ error }) => {
+      const { path, pendingPath } = paths();
+      savePending(
+        setPending(
+          emptyPending(),
+          'default',
+          pendingEntry('2999-01-01T00:00:00Z'),
+        ),
         pendingPath,
-        now: () => 0,
-        stdout: (l) => lines.push(l),
-        request: async () => {
-          throw new Error('Could not reach the API');
+      );
+      const lines: string[] = [];
+      await runAuthLoginPoll(
+        { profile: 'default' },
+        {
+          path,
+          pendingPath,
+          now: () => 0,
+          stdout: (l) => lines.push(l),
+          request: async () => {
+            throw error;
+          },
         },
-      },
-    );
-    const out = JSON.parse(lines.join('\n'));
-    expect(out.status).toBe('error');
-    expect(out.error.error_code).toBe('poll_failed');
-    expect(out.message).toMatch(/re-run the poll command to retry/);
-    expect(process.exitCode).toBe(1);
-    process.exitCode = 0;
-    expect(getPending(loadPending(pendingPath), 'default')).toBeDefined();
-  });
+      );
+      const out = JSON.parse(lines.join('\n'));
+      expect(out.status).toBe('error');
+      expect(out.error.error_code).toBe('poll_failed');
+      expect(out.message).toMatch(/re-run the poll command to retry/);
+      expect(process.exitCode).toBe(1);
+      process.exitCode = 0;
+      expect(getPending(loadPending(pendingPath), 'default')).toBeDefined();
+    },
+  );
 
   it('does not apply a slow_down interval to a concurrently-started fresh code', async () => {
     const { path, pendingPath } = paths();

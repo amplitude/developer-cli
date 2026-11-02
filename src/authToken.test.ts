@@ -55,6 +55,9 @@ describe('requestDeviceToken open affordance', () => {
     // Enter" hint shows); restore it so the stub can't leak to other tests.
     const originalStderrIsTTY = process.stderr.isTTY;
     process.stderr.isTTY = true;
+    const stderrWrite = vi
+      .spyOn(process.stderr, 'write')
+      .mockImplementation(() => true);
     const opened: string[] = [];
 
     let tokenAttempts = 0;
@@ -101,6 +104,7 @@ describe('requestDeviceToken open affordance', () => {
       });
     } finally {
       process.stderr.isTTY = originalStderrIsTTY;
+      stderrWrite.mockRestore();
     }
 
     expect(opened).toEqual(['https://amp.example/device?user_code=WDJB-MJHT']);
@@ -449,10 +453,14 @@ describe('createAnonymousRequest', () => {
     );
 
     const request = createAnonymousRequest('https://api.test');
+    const failure = request('POST', '/v1/auth/token');
 
-    await expect(request('POST', '/v1/auth/token')).rejects.toThrow(
+    await expect(failure).rejects.toThrow(
       'Could not reach the API at https://api.test.',
     );
+    await expect(failure).rejects.toMatchObject({
+      errorCode: 'transport_error',
+    });
   });
 
   it('falls back to the raw text when the body is not JSON', async () => {

@@ -3,6 +3,24 @@ import { describe, expect, it } from 'vitest';
 import { buildCatalog } from './catalog';
 
 describe('buildCatalog — API operations', () => {
+  it('discovers key retrieval as a specific project read', () => {
+    const command = buildCatalog().find(
+      (entry) => entry.command.join(' ') === 'projects api-keys get',
+    );
+    expect(command).toMatchObject({
+      description: expect.stringContaining('primary ingestion API key'),
+      example: 'amp projects api-keys get --project <project_id>',
+      requiredScopes: ['projects:read'],
+    });
+    expect(command?.flags).toContainEqual(
+      expect.objectContaining({
+        name: 'project_id',
+        aliases: ['project', 'project-id', 'project_id'],
+        required: false,
+      }),
+    );
+  });
+
   it('exposes the curated ingestion check command instead of the raw operation name', () => {
     const commands = buildCatalog();
     const check = commands.find(
@@ -97,6 +115,23 @@ describe('buildCatalog — API operations', () => {
     expect(limit?.type).toBe('integer');
     expect(limit?.required).toBe(false);
     expect(limit?.description).toContain('max 200');
+  });
+
+  it('carries the OpenAPI operation description into command help', () => {
+    const update = buildCatalog().find(
+      (c) => c.command.join(' ') === 'guides update',
+    );
+    expect(update?.description).toContain('`latest_version` is');
+    expect(update?.description).toContain('must list every existing variant');
+  });
+
+  it('appends the DELETE note after the operation description', () => {
+    const archive = buildCatalog().find(
+      (c) => c.command.join(' ') === 'guides archive',
+    );
+    expect(archive?.description).toMatch(
+      /^Archives an unpublished guide\.[\s\S]*cannot_archive_published[\s\S]*\n\nRequires --yes to apply changes/,
+    );
   });
 
   it('carries an enum through from a body property to the catalog flag', () => {
@@ -208,7 +243,7 @@ describe('signup catalog', () => {
     expect(signup?.description).toContain('https://amplitude.com/privacy');
     expect(signup?.flags).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ name: 'non-interactive', required: true }),
+        expect.objectContaining({ name: 'non-interactive', required: false }),
         expect.objectContaining({ name: 'email', required: true }),
         expect.objectContaining({ name: 'accept-tos', required: false }),
       ]),

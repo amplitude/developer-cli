@@ -73,14 +73,14 @@ granular `read:`/`write:` scopes below plus the legacy `mcp:read`/`mcp:write`
 org scopes), so all commands work immediately after login. The per-command
 scopes below document what each command needs.
 
-| Command family                       | Scopes                            |
-| ------------------------------------ | --------------------------------- |
-| `context`, `projects list`           | `projects:read`                   |
-| `events *`                           | `taxonomy:read`, `taxonomy:write` |
-| `flags *`                            | `flags:read`, `flags:write`       |
-| `guides *`                           | `guides:read`, `guides:write`     |
-| `surveys *`                          | `surveys:read`, `surveys:write`   |
-| `charts *`, `heatmaps *`, `zoning *` | `analytics:read`                  |
+| Command family                                      | Scopes                            |
+| --------------------------------------------------- | --------------------------------- |
+| `context`, `projects list`, `projects api-keys get` | `projects:read`                   |
+| `events *`                                          | `taxonomy:read`, `taxonomy:write` |
+| `flags *`                                           | `flags:read`, `flags:write`       |
+| `guides *`                                          | `guides:read`, `guides:write`     |
+| `surveys *`                                         | `surveys:read`, `surveys:write`   |
+| `charts *`, `heatmaps *`, `zoning *`                | `analytics:read`                  |
 
 Route-level scopes are defined on each OpenAPI operation (`x-required-scopes`).
 
@@ -95,6 +95,10 @@ Authenticated requests to the Developer API (`amp projects list`, `amp flags
 create`, and other API commands) are measured and logged **server-side** as
 part of operating the service — route, HTTP status, your account/org, and client
 version (`User-Agent`).
+
+A program that runs `amp` on someone's behalf can set `AMP_CLIENT` (lowercase
+letters, digits and `-`) to name itself; the CLI then sends
+`User-Agent: amp-cli/<version> (<AMP_CLIENT>)`.
 
 ## Global flags
 
@@ -121,6 +125,56 @@ amp auth status
 In an interactive terminal, list and context commands print human-friendly tables
 and summaries. Pipe to a file or another command, or pass `--json`, for raw API
 JSON.
+
+## Project ingestion API key
+
+Use `amp projects api-keys --help` to explore the API-key commands, or
+`amp projects api-keys --help --json` for structured discovery.
+
+```bash
+amp projects api-keys get
+amp projects api-keys get --project 12345
+amp projects api-keys get --project 12345 --json
+AMPLITUDE_API_KEY="$(amp projects api-keys get --project 12345 --raw)"
+```
+
+The selector accepts a positive integer project ID, with `--project-id` and
+`--project_id` as aliases. Omit it only when the organization has exactly one
+non-deleted project. Selection follows the same rules in every environment.
+
+Terminal output identifies the project and shows the full key:
+
+```text
+Project: Example Project (12345)
+API key: example-project-api-key
+```
+
+When no project name is available, the project label contains only its ID.
+Piped output preserves the full API response as compact JSON, including
+`data.project_id`, `data.project_name`, and `data.api_key`. Pass `--json` to
+request JSON at a terminal. The command-specific `--raw` flag outputs only the
+full key followed by a newline; enabled `--raw` and `--json` together are a usage
+error. Output modes do not change which project is selected.
+
+The command requires `projects:read` and permission to view the project's API
+key. It returns the primary ingestion key without confirmation and
+does not create, rotate, or save a key. It does not change the active profile.
+
+Failures leave stdout empty. Machine-readable errors on stderr preserve the API's
+`error_code` and `retryable` when provided. Use the error code and guidance to
+decide the next action:
+
+| Error code                                             | Next action                                                                            |
+| ------------------------------------------------------ | -------------------------------------------------------------------------------------- |
+| `project_selection_required`                           | Run `amp projects list` and provide `--project <project_id>`.                          |
+| `project_not_found`                                    | Verify the project ID and your access to the project.                                  |
+| `project_key_access_denied`                            | Ask an organization administrator to review key-view permission.                       |
+| `project_api_key_not_available`                        | Choose a project that supports ingestion API keys.                                     |
+| `project_api_key_unavailable`                          | Ask an administrator to review the project's key settings. This `503` is nonretryable. |
+| `upstream_error`, `operation_availability_unavailable` | Retry later when the API marks the error retryable.                                    |
+
+The command does not automatically retry retrieval failures. Unexpected response
+bodies are reported without displaying their contents.
 
 ## Prod smoke checklist
 

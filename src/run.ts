@@ -7,6 +7,7 @@ import { type FlagValue, isFlagEnabled, stringFlag } from './args';
 import {
   CliError,
   cliErrorFromResponse,
+  exitCodeForErrorCode,
   transportError,
   usageError,
 } from './cli-error';
@@ -24,6 +25,13 @@ import {
   isNoContentSuccess,
   shouldUseJsonOutput,
 } from './output';
+import {
+  PROJECT_API_KEY_OPERATION_ID,
+  formatProjectApiKeyOutput,
+  parseProjectApiKeyProblem,
+  parseProjectApiKeyResponse,
+  resolveProjectApiKeyOptions,
+} from './project-api-key';
 import { confirm } from './prompt';
 import {
   buildRequest,
@@ -31,6 +39,7 @@ import {
   parseResponseBody,
 } from './request';
 import { refreshProfileTokenLocked } from './token-refresh';
+import { cliUserAgent } from './user-agent';
 
 export type DeleteGateDecision = 'block' | 'confirm' | 'proceed';
 
@@ -52,6 +61,25 @@ function errorForOperationResponse(options: {
   response: Response;
   responseBody: unknown;
 }): CliError {
+  if (options.operation.operationId === PROJECT_API_KEY_OPERATION_ID) {
+    const problem = parseProjectApiKeyProblem(options.responseBody);
+    if (!problem.success || problem.data.status !== options.response.status) {
+      return new CliError({
+        message: `Project API key request failed (HTTP ${options.response.status}).`,
+        errorCode: 'request_failed',
+        exitCode: exitCodeForErrorCode(
+          'request_failed',
+          options.response.status,
+        ),
+        httpStatus: options.response.status,
+      });
+    }
+    return cliErrorFromResponse(
+      options.response.status,
+      options.response.statusText,
+      problem.data,
+    );
+  }
   const error = cliErrorFromResponse(
     options.response.status,
     options.response.statusText,
@@ -232,8 +260,19 @@ export async function runOperation(
   operation: CliOperation,
   flags: Record<string, FlagValue>,
 ): Promise<void> {
+  const projectApiKeyOptions =
+    operation.operationId === PROJECT_API_KEY_OPERATION_ID
+      ? resolveProjectApiKeyOptions(flags)
+      : undefined;
+  if (projectApiKeyOptions?.ok === false) {
+    throw usageError(projectApiKeyOptions.issue.message);
+  }
   const request = buildRequest(operation, flags);
-  const headers = { ...request.headers, ...deviceIdHeader() };
+  const headers = {
+    'User-Agent': cliUserAgent(),
+    ...request.headers,
+    ...deviceIdHeader(),
+  };
   const requestPollingDurationSeconds = resolveRequestPollingDurationSeconds(
     operation,
     request.body,
@@ -373,6 +412,24 @@ export async function runOperation(
     jsonFlag: isFlagEnabled(flags.json),
     isTTY,
   });
+
+  if (projectApiKeyOptions?.ok) {
+    const result = parseProjectApiKeyResponse(responseBody);
+    if (!result.ok) {
+      throw new CliError({
+        message: result.issue.message,
+        errorCode: 'unexpected_response',
+        exitCode: 5,
+      });
+    }
+    const output = projectApiKeyOptions.options.raw
+      ? result.resource.api_key
+      : useJson
+        ? formatJsonOutput(responseBody, isTTY)
+        : formatProjectApiKeyOutput(result.resource);
+    console.log(output);
+    return;
+  }
 
   if (isNoContentSuccess(response.status, responseBody)) {
     const output = useJson

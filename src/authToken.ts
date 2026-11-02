@@ -4,9 +4,8 @@ import { setTimeout as delay } from 'node:timers/promises';
 import open from 'open';
 import { z } from 'zod';
 
-import { usageError } from './cli-error';
+import { CliError, transportError, usageError } from './cli-error';
 import { deviceIdHeader } from './client-identity';
-import { CLI_VERSION } from './help';
 import { toOAuthError } from './oauthError';
 import {
   type DeviceAuthorizationResponse,
@@ -15,6 +14,7 @@ import {
   tokenResponseSchema,
 } from './oauthResponseSchemas';
 import { DEVICE_CODE_GRANT_TYPE } from './schemas';
+import { cliUserAgent } from './user-agent';
 
 // Best readable message from an OAuth error body: prefer the human description,
 // then the server's hint, then the bare error code. Reuses toOAuthError so the
@@ -135,7 +135,7 @@ function listenForOpen(
 // stops echoing) with no on-screen prompt explaining why.
 function startOpenAffordance(
   device: DeviceAuthorizationResponse,
-  options: DeviceFlowOptions,
+  options: DeviceAuthorizationOptions,
   emitStderr: (line: string) => void,
 ): (() => void) | undefined {
   const stdin = options.stdin ?? process.stdin;
@@ -231,31 +231,87 @@ interface PollForTokenOptions {
   deadline?: PollDeadline;
 }
 
-export async function pollForToken({
+export type DeviceAuthorizationResult =
+  | { ok: true; token: TokenResponse }
+  | {
+      ok: false;
+      error: { code: string; message: string; canResume: boolean };
+    };
+
+// Retain the token-or-error contract used by existing login/token callers.
+function authorizationToken(result: DeviceAuthorizationResult): TokenResponse {
+  if (result.ok) return result.token;
+  throw new Error(result.error.message); // plain-error-ok: legacy login/token boundary; signup consumes the typed result directly.
+}
+
+export async function pollForToken(
+  options: PollForTokenOptions,
+): Promise<TokenResponse> {
+  return authorizationToken(await pollForTokenResult(options));
+}
+
+async function pollForTokenResult({
   exchange,
   sleep,
   intervalSeconds,
   deadline,
-}: PollForTokenOptions): Promise<TokenResponse> {
+}: PollForTokenOptions): Promise<DeviceAuthorizationResult> {
   let interval = intervalSeconds;
   const deadlineMs = deadline
     ? deadline.now() + deadline.expiresInSeconds * 1000
     : undefined;
 
   for (;;) {
-    const { status, body } = await exchange();
+    let response: ExchangeResult;
+    try {
+      response = await exchange();
+    } catch (error) {
+      const isTransportError =
+        error instanceof CliError && error.errorCode === 'transport_error';
+      return {
+        ok: false,
+        error: {
+          code: isTransportError ? 'transport_error' : 'authorization_failed',
+          message: isTransportError
+            ? error.message
+            : 'Browser authorization did not complete.',
+          canResume: isTransportError,
+        },
+      };
+    }
+    const { status, body } = response;
 
     if (isOk(status)) {
-      return parseResponse(tokenResponseSchema, body, 'token');
+      const token = tokenResponseSchema.safeParse(body);
+      return token.success
+        ? { ok: true, token: token.data }
+        : {
+            ok: false,
+            error: {
+              code: 'unexpected_response',
+              message:
+                'The authorization server returned an unexpected token response.',
+              canResume: false,
+            },
+          };
     }
 
-    const code = toOAuthError(body).error;
+    const oauthError = toOAuthError(body);
+    const code = oauthError.error;
 
     if (code === 'slow_down') {
       // RFC 8628 §3.5: slow_down permanently raises the interval by 5s.
       interval += 5;
     } else if (code !== 'authorization_pending') {
-      throw new Error(oauthErrorMessage(body)); // plain-error-ok: device-flow errors are caught and re-emitted as a JSON envelope by `auth login start`/`poll`; only the interactive TTY `auth login` surfaces them as prose.
+      return {
+        ok: false,
+        error: {
+          code,
+          message:
+            oauthError.error_description ?? oauthError.error_hint ?? code,
+          canResume: TRANSIENT_OAUTH_ERRORS.has(code),
+        },
+      };
     }
 
     // Give up only after a poll has just come back pending/slow_down and the
@@ -263,7 +319,14 @@ export async function pollForToken({
     // attempt that lands on the deadline still runs and can return a token the
     // user approved during the preceding sleep.
     if (deadline && deadlineMs !== undefined && deadline.now() >= deadlineMs) {
-      throw new Error('The device code has expired before approval.'); // plain-error-ok: device-flow errors are caught and re-emitted as a JSON envelope by `auth login start`/`poll`; only the interactive TTY `auth login` surfaces them as prose.
+      return {
+        ok: false,
+        error: {
+          code: 'expired_token',
+          message: 'The device code has expired before approval.',
+          canResume: false,
+        },
+      };
     }
 
     await sleep(interval);
@@ -384,7 +447,7 @@ export function createAnonymousRequest(
     identityHeader ??= deviceIdHeader();
     const headers: Record<string, string> = {
       Accept: 'application/json',
-      'User-Agent': `amp-cli/${CLI_VERSION}`,
+      'User-Agent': cliUserAgent(),
       ...identityHeader,
     };
     if (body !== undefined) {
@@ -400,13 +463,14 @@ export function createAnonymousRequest(
     }
 
     let response: Response;
+    let text: string;
     try {
       response = await fetch(`${baseUrl}${path}`, init);
+      text = await response.text();
     } catch {
-      throw new Error(`Could not reach the API at ${baseUrl}.`); // plain-error-ok: device-flow errors are caught and re-emitted as a JSON envelope by `auth login start`/`poll`; only the interactive TTY `auth login` surfaces them as prose.
+      throw transportError(`Could not reach the API at ${baseUrl}.`);
     }
 
-    const text = await response.text();
     let parsed: unknown;
     try {
       parsed = text ? JSON.parse(text) : null;
@@ -418,9 +482,7 @@ export function createAnonymousRequest(
   };
 }
 
-export interface DeviceFlowOptions {
-  flow: string | undefined;
-  scope?: string;
+export interface DeviceAuthorizationOptions {
   // Token-optional, non-throwing HTTP call against the Developer API endpoints.
   request: AnonymousRequest;
   sleep?: (seconds: number) => Promise<void>;
@@ -432,6 +494,11 @@ export interface DeviceFlowOptions {
   stdin?: InteractiveStdin;
   // Test seam for the browser-open side effect; defaults to the `open` package.
   openUrl?: (url: string) => Promise<unknown>;
+}
+
+export interface DeviceFlowOptions extends DeviceAuthorizationOptions {
+  flow: string | undefined;
+  scope?: string;
 }
 
 export interface RunAuthTokenOptions extends DeviceFlowOptions {
@@ -457,10 +524,6 @@ export async function requestDeviceToken(
   }
 
   const { request, scope } = options;
-  const sleep = options.sleep ?? ((seconds) => delay(seconds * 1000));
-  const now = options.now ?? (() => Date.now());
-  const emitStderr =
-    options.stderr ?? ((line) => process.stderr.write(`${line}\n`));
 
   const deviceResponse = await request(
     'POST',
@@ -480,6 +543,40 @@ export async function requestDeviceToken(
     'device-authorization',
   );
 
+  return authorizationToken(
+    await completeDeviceAuthorization(deviceAuthorization, options),
+  );
+}
+
+/** Complete an issued challenge using the shared browser prompt and polling UI. */
+export async function completeDeviceAuthorization(
+  deviceAuthorization: DeviceAuthorizationResponse,
+  options: DeviceAuthorizationOptions,
+): Promise<DeviceAuthorizationResult> {
+  try {
+    return await runDeviceAuthorization(deviceAuthorization, options);
+  } catch {
+    return {
+      ok: false,
+      error: {
+        code: 'authorization_failed',
+        message: 'Browser authorization did not complete.',
+        canResume: false,
+      },
+    };
+  }
+}
+
+async function runDeviceAuthorization(
+  deviceAuthorization: DeviceAuthorizationResponse,
+  options: DeviceAuthorizationOptions,
+): Promise<DeviceAuthorizationResult> {
+  const { request } = options;
+  const sleep = options.sleep ?? ((seconds) => delay(seconds * 1000));
+  const now = options.now ?? Date.now;
+  const emitStderr =
+    options.stderr ?? ((line) => process.stderr.write(`${line}\n`));
+
   emitStderr(formatVerificationPrompt(deviceAuthorization));
 
   const stopListening = startOpenAffordance(
@@ -495,7 +592,7 @@ export async function requestDeviceToken(
   );
 
   try {
-    return await pollForToken({
+    return await pollForTokenResult({
       exchange: () =>
         request('POST', '/v1/auth/token', {
           grant_type: DEVICE_CODE_GRANT_TYPE,

@@ -12,9 +12,11 @@ import {
 } from './auth-commands';
 import {
   CURRENT_VERSION,
+  emptyStore,
   getProfile,
   loadStore,
   saveStore,
+  setDefault,
   setProfile,
 } from './credential-store';
 import type { TokenResponse } from './oauthResponseSchemas';
@@ -242,6 +244,29 @@ describe('runAuthLogin', () => {
 
     expect(loadStore(path).default).toBe('staging');
     expect(out.join('\n')).toMatch(/set as default \(was "amplitude"\)/);
+  });
+
+  it('renders a stored previous default without terminal controls', async () => {
+    const path = tempPath();
+    const previous = 'old\u001b[31m';
+    saveStore(
+      setDefault(
+        setProfile(emptyStore(), previous, {
+          base_url: 'https://developer-api.amplitude.com',
+          credential: { type: 'pat', pat: 'amp_old' },
+          saved_at: '2026-06-23T00:00:00.000Z',
+          store: 'file',
+        }),
+        previous,
+      ),
+      path,
+    );
+    const out: string[] = [];
+    await runAuthLogin({ profile: 'amplitude', env: 'prod' }, deps(path, out));
+
+    const text = out.join('\n');
+    expect(text).toContain('was "old^[[31m"');
+    expect(text.includes('\u001b')).toBe(false);
   });
 
   it('re-auths the default in place when --profile is omitted', async () => {

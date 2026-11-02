@@ -11,6 +11,28 @@ import {
 } from './cli-error';
 
 describe('CliError', () => {
+  it.each([false, true])('preserves API retryability: %s', (retryable) => {
+    const error = cliErrorFromResponse(503, 'Service Unavailable', {
+      error_code: 'project_api_key_unavailable',
+      title: 'Project API key request failed',
+      retryable,
+    });
+    expect(error.exitCode).toBe(5);
+    expect(JSON.parse(formatErrorEnvelope(error, false)).error.retryable).toBe(
+      retryable,
+    );
+  });
+
+  it('does not invent retryability when it is absent', () => {
+    const error = cliErrorFromResponse(503, 'Service Unavailable', {
+      error_code: 'some_future_error',
+      title: 'Request failed',
+    });
+    expect(
+      JSON.parse(formatErrorEnvelope(error, false)).error,
+    ).not.toHaveProperty('retryable');
+  });
+
   it('maps error codes to exit codes', () => {
     expect(exitCodeForErrorCode('insufficient_scope', 403)).toBe(3);
     expect(exitCodeForErrorCode('validation_error', 422)).toBe(2);
@@ -147,6 +169,22 @@ describe('formatErrorText', () => {
     });
 
     expect(formatErrorText(err)).toBe('Something broke');
+  });
+
+  it('keeps paragraph breaks in a hint and still hides controls', () => {
+    const err = new CliError({
+      message: 'Could not save skill: disk full.',
+      errorCode: 'transport_error',
+      exitCode: 5,
+      hint: 'Check permissions for the skill cache.\n\nAlternatively, omit `--save`.\nline\u001b[31m',
+    });
+
+    const text = formatErrorText(err);
+    expect(text).toContain(
+      'Check permissions for the skill cache.\n\nAlternatively, omit `--save`.',
+    );
+    expect(text).toContain('line^[[31m');
+    expect(text.includes('\u001b')).toBe(false);
   });
 
   it('gives a transport failure an actionable hint', () => {

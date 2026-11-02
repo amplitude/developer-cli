@@ -6,11 +6,13 @@ import {
   exitCodeForErrorCode,
   usageError,
 } from './cli-error';
+import { REGION_BASE_URLS } from './config';
 import {
   type DeviceAuthorizationResponse,
   deviceAuthorizationResponseSchema,
   tokenResponseSchema,
 } from './oauthResponseSchemas';
+import { sanitizeTerminalText } from './output';
 import { jsonRecordSchema } from './schemas';
 
 // Stable references shipped with the client; the server validates them.
@@ -217,17 +219,34 @@ export function signupMissingInformationError(
   return usageError(`Signup requires ${missing}.${termsNotice}`);
 }
 
+function shellQuote(value: string): string {
+  return `'${value.replaceAll("'", "'\\''")}'`;
+}
+
+export function signupLoginCommand(
+  profile: string,
+  baseUrl: string,
+  force: boolean,
+): string {
+  const region = Object.entries(REGION_BASE_URLS).find(
+    ([, url]) => url === baseUrl,
+  )?.[0];
+  const target = region
+    ? `--region ${region}`
+    : `--base-url ${shellQuote(baseUrl)}`;
+  return `amp auth login --profile ${shellQuote(profile)} ${target}${force ? ' --force' : ''}`;
+}
+
 export function signupPollContinuation(profile: string): {
   command: string;
   argv: string[];
 } {
-  const quoted = `'${profile.replaceAll("'", "'\\''")}'`;
   return {
-    command: `amp auth login poll --profile ${quoted} --json`,
+    command: `amp auth login poll --profile ${shellQuote(profile)} --json`,
     argv: ['amp', 'auth', 'login', 'poll', '--profile', profile, '--json'],
   };
 }
 
 export function formatSignupText(output: SignupOutput): string {
-  return `${output.message}\n\n${JSON.stringify(output.data, null, 2)}`;
+  return `${sanitizeTerminalText(output.message)}\n\n${JSON.stringify(output.data, null, 2)}`;
 }
