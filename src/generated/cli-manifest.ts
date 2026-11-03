@@ -35,6 +35,7 @@ export interface CliOperation {
   path: string;
   requiredScopes: string[];
   summary?: string;
+  description?: string;
   successStatus?: number;
   parameters: CliParameter[];
   body: CliBodyProperty[];
@@ -48,6 +49,8 @@ export const CLI_OPERATIONS = [
     path: '/v1/projects/{project_id}/agent-analytics/insights',
     requiredScopes: ['analytics:read'],
     summary: 'List saved Agent Analytics insights',
+    description:
+      "Returns saved cost, efficiency, and quality findings, ranked by magnitude\ntimes confidence. These are periodically evaluated findings, not live\nqueries. Healthy and closed findings can remain visible. Thumbs-downed\nfindings are excluded. Use each finding's project_id for individual reads.\n",
     successStatus: 200,
     parameters: [
       {
@@ -71,7 +74,7 @@ export const CLI_OPERATIONS = [
         name: 'cursor',
         in: 'query',
         required: false,
-        aliases: ['cursor'],
+        aliases: ['cursor', 'next-cursor', 'next_cursor'],
         type: 'string',
         description:
           'Opaque cursor from `pagination.next_cursor` on the previous response.\nNumeric offsets are capped by the underlying search index (10,000 results\nper query). Well-formed pagination stops before that window; requests whose\ncursor would exceed it return 400 `pagination_not_supported`.\n',
@@ -96,6 +99,8 @@ export const CLI_OPERATIONS = [
     path: '/v1/projects/{project_id}/agent-analytics/insights/{insight_id}',
     requiredScopes: ['analytics:read'],
     summary: 'Get a saved Agent Analytics insight',
+    description:
+      'Returns one finding by its stable UUID and own project_id. Missing, cross-project, and thumbs-downed findings return 404.',
     successStatus: 200,
     parameters: [
       {
@@ -126,6 +131,8 @@ export const CLI_OPERATIONS = [
     path: '/v1/projects/{project_id}/agent-analytics/datasets',
     requiredScopes: ['analytics:write'],
     summary: 'Create an Agent Analytics dataset',
+    description:
+      'Creates an empty dataset. Add sessions with the dataset sessions endpoint.\n`name` is not an identity key, so repeating a create makes another dataset,\neven with the same `Idempotency-Key`.\n\nListing and reading datasets is served by the Agent Analytics MCP read\nsurface, not by this API.\n',
     successStatus: 201,
     parameters: [
       {
@@ -144,7 +151,7 @@ export const CLI_OPERATIONS = [
         aliases: ['idempotency-key'],
         type: 'string',
         description:
-          'Unique idempotency key used to safely retry write operations.',
+          "Required on write operations. Keys aren't stored yet, so retrying a write\nwith the same key performs it again; a retried create makes another\nresource. Check whether the first attempt succeeded before you retry.\n",
       },
     ],
     body: [
@@ -180,6 +187,8 @@ export const CLI_OPERATIONS = [
     path: '/v1/projects/{project_id}/agent-analytics/datasets/{dataset_id}',
     requiredScopes: ['analytics:write'],
     summary: 'Update an Agent Analytics dataset',
+    description:
+      'Updates dataset metadata. Absent fields are unchanged; an explicit `null`\nclears `description`. `id`, `agent_name`, and `source_type` are immutable —\ncreate a new dataset to change the agent scope.\n',
     successStatus: 200,
     parameters: [
       {
@@ -207,7 +216,7 @@ export const CLI_OPERATIONS = [
         aliases: ['idempotency-key'],
         type: 'string',
         description:
-          'Unique idempotency key used to safely retry write operations.',
+          "Required on write operations. Keys aren't stored yet, so retrying a write\nwith the same key performs it again; a retried create makes another\nresource. Check whether the first attempt succeeded before you retry.\n",
       },
     ],
     body: [
@@ -234,6 +243,8 @@ export const CLI_OPERATIONS = [
     path: '/v1/projects/{project_id}/agent-analytics/datasets/{dataset_id}/sessions',
     requiredScopes: ['analytics:write'],
     summary: 'Remove sessions from an Agent Analytics dataset',
+    description:
+      'Removes sessions from a dataset. The sessions themselves are untouched;\nonly their dataset membership is removed. Sessions that are not in the\ndataset are ignored, so the call is safe to repeat.\n\nTakes the same body as the add operation, so an add is undone in one call\nrather than one call per session. `dry_run=true` validates the dataset and\nthe session ids without mutating, returning `204` on a hit and `404` if the\ndataset does not exist.\n',
     successStatus: 204,
     parameters: [
       {
@@ -269,7 +280,7 @@ export const CLI_OPERATIONS = [
         aliases: ['idempotency-key'],
         type: 'string',
         description:
-          'Unique idempotency key used to safely retry write operations.',
+          "Required on write operations. Keys aren't stored yet, so retrying a write\nwith the same key performs it again; a retried create makes another\nresource. Check whether the first attempt succeeded before you retry.\n",
       },
     ],
     body: [
@@ -294,6 +305,8 @@ export const CLI_OPERATIONS = [
     path: '/v1/projects/{project_id}/agent-analytics/datasets/{dataset_id}/sessions',
     requiredScopes: ['analytics:write'],
     summary: 'Add sessions to an Agent Analytics dataset',
+    description:
+      'Adds sessions to a dataset. Sessions already in the dataset are ignored, so\nthe call is safe to repeat. Every session must belong to the path project;\na session from another project fails the whole request with `422`.\n',
     successStatus: 200,
     parameters: [
       {
@@ -321,7 +334,7 @@ export const CLI_OPERATIONS = [
         aliases: ['idempotency-key'],
         type: 'string',
         description:
-          'Unique idempotency key used to safely retry write operations.',
+          "Required on write operations. Keys aren't stored yet, so retrying a write\nwith the same key performs it again; a retried create makes another\nresource. Check whether the first attempt succeeded before you retry.\n",
       },
     ],
     body: [
@@ -346,6 +359,8 @@ export const CLI_OPERATIONS = [
     path: '/v1/projects/{project_id}/agent-analytics/evaluators',
     requiredScopes: ['analytics:write'],
     summary: 'Create an Agent Analytics evaluator',
+    description:
+      'Creates an evaluator in the inactive state. Activation is a separate\npermission and is not exposed by this API — activate in the Agent Analytics\nUI once the evaluator has been reviewed.\n\n`tags` constrains what a result may record. Supplying them for a `binary` or\n`categorical` evaluator is what keeps results to a known set of values\nrather than free-form model output.\n\nListing and reading evaluators is served by the Agent Analytics MCP read\nsurface, not by this API.\n',
     successStatus: 201,
     parameters: [
       {
@@ -364,7 +379,7 @@ export const CLI_OPERATIONS = [
         aliases: ['idempotency-key'],
         type: 'string',
         description:
-          'Unique idempotency key used to safely retry write operations.',
+          "Required on write operations. Keys aren't stored yet, so retrying a write\nwith the same key performs it again; a retried create makes another\nresource. Check whether the first attempt succeeded before you retry.\n",
       },
     ],
     body: [
@@ -433,6 +448,8 @@ export const CLI_OPERATIONS = [
     path: '/v1/projects/{project_id}/agent-analytics/evaluators/{evaluator_stable_id}',
     requiredScopes: ['analytics:write'],
     summary: 'Update an Agent Analytics evaluator',
+    description:
+      'Updates an evaluator addressed by its stable identifier. Absent fields are\nunchanged. Each update creates a new inactive version; the response `id` is\nthat new version, and `stable_id` is unchanged.\n\nUpdating does not activate. An evaluator already active in the UI keeps\nserving its current active version until the new one is promoted there.\n',
     successStatus: 200,
     parameters: [
       {
@@ -460,7 +477,7 @@ export const CLI_OPERATIONS = [
         aliases: ['idempotency-key'],
         type: 'string',
         description:
-          'Unique idempotency key used to safely retry write operations.',
+          "Required on write operations. Keys aren't stored yet, so retrying a write\nwith the same key performs it again; a retried create makes another\nresource. Check whether the first attempt succeeded before you retry.\n",
       },
     ],
     body: [
@@ -519,6 +536,8 @@ export const CLI_OPERATIONS = [
     path: '/v1/projects/{project_id}/agent-analytics/eval-runs',
     requiredScopes: ['analytics:read'],
     summary: 'List Agent Analytics eval runs',
+    description:
+      'Returns eval runs for the project, most recent first. A run is a batch\nevaluation of sessions by one or more evaluators; it is asynchronous, so a\nfreshly triggered run is returned with a pending status and no results.\n',
     successStatus: 200,
     parameters: [
       {
@@ -542,7 +561,7 @@ export const CLI_OPERATIONS = [
         name: 'cursor',
         in: 'query',
         required: false,
-        aliases: ['cursor'],
+        aliases: ['cursor', 'next-cursor', 'next_cursor'],
         type: 'string',
         description:
           'Opaque cursor from `pagination.next_cursor` on the previous response.\nNumeric offsets are capped by the underlying search index (10,000 results\nper query). Well-formed pagination stops before that window; requests whose\ncursor would exceed it return 400 `pagination_not_supported`.\n',
@@ -565,6 +584,8 @@ export const CLI_OPERATIONS = [
     path: '/v1/projects/{project_id}/agent-analytics/eval-runs',
     requiredScopes: ['analytics:write'],
     summary: 'Trigger an Agent Analytics eval run',
+    description:
+      'Starts an asynchronous eval run and returns it immediately with a pending\nstatus. Poll the run by id, or read results through the Agent Analytics read\nsurface once it completes.\n\nTarget the run either at a dataset or at a session list, not both. Caps are\nenforced server-side: 10 evaluators and 100 targeted sessions per run.\nFor larger datasets, only the first 100 members are targeted and the\nacceptance response includes a truncation warning. This selection warning\nis not persisted on the run returned by later get/list calls.\n',
     successStatus: 201,
     parameters: [
       {
@@ -583,7 +604,7 @@ export const CLI_OPERATIONS = [
         aliases: ['idempotency-key'],
         type: 'string',
         description:
-          'Unique idempotency key used to safely retry write operations.',
+          "Required on write operations. Keys aren't stored yet, so retrying a write\nwith the same key performs it again; a retried create makes another\nresource. Check whether the first attempt succeeded before you retry.\n",
       },
     ],
     body: [
@@ -638,6 +659,8 @@ export const CLI_OPERATIONS = [
     path: '/v1/projects/{project_id}/agent-analytics/eval-runs/{eval_run_id}',
     requiredScopes: ['analytics:read'],
     summary: 'Get an Agent Analytics eval run',
+    description:
+      'Returns one eval run by id, including progress counters and, once the run\nfinishes, cost and latency. Per-session results are read through the Agent\nAnalytics read surface, not here.\n',
     successStatus: 200,
     parameters: [
       {
@@ -667,6 +690,8 @@ export const CLI_OPERATIONS = [
     path: '/v1/projects/{project_id}/mcp-analytics/servers',
     requiredScopes: ['analytics:read'],
     summary: 'List MCP Analytics servers',
+    description:
+      'Returns the MCP servers configured for the project. A project with no MCP\nservers returns 200 and an empty `data` array.\n',
     successStatus: 200,
     parameters: [
       {
@@ -688,6 +713,8 @@ export const CLI_OPERATIONS = [
     path: '/v1/projects/{project_id}/mcp-analytics/servers/{server_id}/taxonomy',
     requiredScopes: ['analytics:read'],
     summary: 'Get the active MCP taxonomy',
+    description:
+      "Returns the server's active topic tree. The resource id is the server id.\nA visible server with no pinned taxonomy returns 200, null run fields, and\n`nodes: []`. An unknown server returns 404.\n",
     successStatus: 200,
     parameters: [
       {
@@ -726,6 +753,8 @@ export const CLI_OPERATIONS = [
     path: '/v1/projects/{project_id}/mcp-analytics/servers/{server_id}/topics/{topic_id}',
     requiredScopes: ['analytics:read'],
     summary: 'Get an MCP taxonomy topic',
+    description:
+      'Returns one topic and up to eight example episodes. Examples are not a\npage. Use the episode list to page through episodes.\n',
     successStatus: 200,
     parameters: [
       {
@@ -763,6 +792,8 @@ export const CLI_OPERATIONS = [
     path: '/v1/projects/{project_id}/mcp-analytics/servers/{server_id}/topics/{topic_id}/episodes',
     requiredScopes: ['analytics:read'],
     summary: 'List episodes for an MCP topic',
+    description:
+      'Returns a page of episode summaries for one topic. The default page size\nis 25 and the maximum is 100. Keep the same filters\nwhen following `next_cursor`.\n',
     successStatus: 200,
     parameters: [
       {
@@ -852,7 +883,7 @@ export const CLI_OPERATIONS = [
         name: 'cursor',
         in: 'query',
         required: false,
-        aliases: ['cursor'],
+        aliases: ['cursor', 'next-cursor', 'next_cursor'],
         type: 'string',
         description:
           'Opaque cursor from `pagination.next_cursor` on the previous response.',
@@ -876,6 +907,8 @@ export const CLI_OPERATIONS = [
     path: '/v1/projects/{project_id}/mcp-analytics/episodes/{episode_id}',
     requiredScopes: ['analytics:read'],
     summary: 'Get an MCP episode',
+    description:
+      'Returns one episode, including its project, server, auth type, and topic\nbreadcrumb. A missing or cross-project episode returns 404.\n',
     successStatus: 200,
     parameters: [
       {
@@ -905,6 +938,8 @@ export const CLI_OPERATIONS = [
     path: '/v1/context',
     requiredScopes: ['projects:read'],
     summary: 'Get authenticated context',
+    description:
+      'Returns the authenticated principal and organization context.',
     successStatus: 200,
     parameters: [],
     body: [],
@@ -916,13 +951,14 @@ export const CLI_OPERATIONS = [
     path: '/v1/projects',
     requiredScopes: ['projects:read'],
     summary: 'List projects',
+    description: 'Returns projects visible to the authenticated principal.',
     successStatus: 200,
     parameters: [
       {
         name: 'cursor',
         in: 'query',
         required: false,
-        aliases: ['cursor'],
+        aliases: ['cursor', 'next-cursor', 'next_cursor'],
         type: 'string',
         description:
           'Opaque cursor from `pagination.next_cursor` on the previous response.\nNumeric offsets are capped by the underlying search index (10,000 results\nper query). Well-formed pagination stops before that window; requests whose\ncursor would exceed it return 400 `pagination_not_supported`.\n',
@@ -956,6 +992,29 @@ export const CLI_OPERATIONS = [
     body: [],
   },
   {
+    command: ['projects', 'api-keys', 'get'],
+    method: 'GET',
+    operationId: 'getProjectApiKey',
+    path: '/v1/projects/api-key',
+    requiredScopes: ['projects:read'],
+    summary: 'Retrieve a project API key',
+    description:
+      'Provides the API key for a project. A project ID is required when the\norganization has more than one project.\n',
+    successStatus: 200,
+    parameters: [
+      {
+        name: 'project_id',
+        in: 'query',
+        required: false,
+        aliases: ['project', 'project-id', 'project_id'],
+        type: 'string',
+        description:
+          'The project ID. Required when the organization has more than one project.\n',
+      },
+    ],
+    body: [],
+  },
+  {
     authentication: 'none',
     command: ['events', 'check-ingestion-by-api-key'],
     method: 'POST',
@@ -963,6 +1022,8 @@ export const CLI_OPERATIONS = [
     path: '/v1/events/check-recent-ingestion',
     requiredScopes: [],
     summary: 'Check recent event ingestion with an ingestion API key',
+    description:
+      'Checks whether Amplitude received any events for the project associated\nwith the supplied ingestion API key during the preceding eight hours.\n\n`observed` means at least one event was received in the evaluated window.\n`not_observed` means no events were received. `inconclusive` means no events\nwere found, but the available data could not confirm their absence. Use the\nreturned window when reporting or comparing results.\n\nThe window uses server upload time: when Amplitude received each event,\nrather than the event time supplied by the sender.\n\nProvide `polling_timeout_seconds` to request server polling guidance.\nWhile another check is advised, successful responses include\n`poll_after_seconds`; its omission means clients should stop polling.\n',
     successStatus: 200,
     parameters: [],
     body: [
@@ -998,7 +1059,7 @@ export const CLI_OPERATIONS = [
         name: 'cursor',
         in: 'query',
         required: false,
-        aliases: ['cursor'],
+        aliases: ['cursor', 'next-cursor', 'next_cursor'],
         type: 'string',
         description:
           'Opaque cursor from `pagination.next_cursor` on the previous response.\nNumeric offsets are capped by the underlying search index (10,000 results\nper query). Well-formed pagination stops before that window; requests whose\ncursor would exceed it return 400 `pagination_not_supported`.\n',
@@ -1057,7 +1118,7 @@ export const CLI_OPERATIONS = [
         name: 'cursor',
         in: 'query',
         required: false,
-        aliases: ['cursor'],
+        aliases: ['cursor', 'next-cursor', 'next_cursor'],
         type: 'string',
         description:
           'Opaque cursor from `pagination.next_cursor` on the previous response.\nNumeric offsets are capped by the underlying search index (10,000 results\nper query). Well-formed pagination stops before that window; requests whose\ncursor would exceed it return 400 `pagination_not_supported`.\n',
@@ -1106,7 +1167,7 @@ export const CLI_OPERATIONS = [
         aliases: ['idempotency-key'],
         type: 'string',
         description:
-          'Unique idempotency key used to safely retry write operations.',
+          "Required on write operations. Keys aren't stored yet, so retrying a write\nwith the same key performs it again; a retried create makes another\nresource. Check whether the first attempt succeeded before you retry.\n",
       },
     ],
     body: [
@@ -1133,6 +1194,8 @@ export const CLI_OPERATIONS = [
     path: '/v1/projects/{project_id}/events/check-recent-ingestion',
     requiredScopes: ['analytics:read'],
     summary: 'Check recent event ingestion',
+    description:
+      'Checks whether events reached an Amplitude project during a recent time\nwindow. Provide `event_type` to check one exact event type, or omit it to\ncheck for any event. The default lookback is 10 minutes. The returned\nwindow can begin up to five minutes earlier so the evaluation covers the\ncomplete starting interval.\n\n`observed` means at least one matching event was found. `not_observed`\nmeans no matching event was found in the evaluated window. `inconclusive`\nmeans no matching event was found, but complete recent data was not\navailable to confirm its absence. Use the returned window when reporting\nor comparing results.\n\nThis POST computes a result and does not mutate state, so it does not\nrequire an `Idempotency-Key`.\n\nProvide `polling_timeout_seconds` to request server polling guidance.\nWhile another check is advised, successful responses include\n`poll_after_seconds`; its omission means clients should stop polling.\n',
     successStatus: 200,
     parameters: [
       {
@@ -1216,7 +1279,7 @@ export const CLI_OPERATIONS = [
         aliases: ['idempotency-key'],
         type: 'string',
         description:
-          'Unique idempotency key used to safely retry write operations.',
+          "Required on write operations. Keys aren't stored yet, so retrying a write\nwith the same key performs it again; a retried create makes another\nresource. Check whether the first attempt succeeded before you retry.\n",
       },
     ],
     body: [],
@@ -1285,7 +1348,7 @@ export const CLI_OPERATIONS = [
         aliases: ['idempotency-key'],
         type: 'string',
         description:
-          'Unique idempotency key used to safely retry write operations.',
+          "Required on write operations. Keys aren't stored yet, so retrying a write\nwith the same key performs it again; a retried create makes another\nresource. Check whether the first attempt succeeded before you retry.\n",
       },
     ],
     body: [
@@ -1312,6 +1375,8 @@ export const CLI_OPERATIONS = [
     path: '/v1/projects/{project_id}/events/{event_id}/event-properties',
     requiredScopes: ['taxonomy:read'],
     summary: 'List event properties for an event',
+    description:
+      'Returns properties bound to a specific event, including ingested-only\nproperties (those with `is_in_schema: false`). Use the `is_in_schema`\nflag to detect whether a `PATCH` will succeed before issuing it.\n',
     successStatus: 200,
     parameters: [
       {
@@ -1336,7 +1401,7 @@ export const CLI_OPERATIONS = [
         name: 'cursor',
         in: 'query',
         required: false,
-        aliases: ['cursor'],
+        aliases: ['cursor', 'next-cursor', 'next_cursor'],
         type: 'string',
         description:
           'Opaque cursor from `pagination.next_cursor` on the previous response.\nNumeric offsets are capped by the underlying search index (10,000 results\nper query). Well-formed pagination stops before that window; requests whose\ncursor would exceed it return 400 `pagination_not_supported`.\n',
@@ -1367,6 +1432,8 @@ export const CLI_OPERATIONS = [
     path: '/v1/projects/{project_id}/events/{event_id}/event-properties',
     requiredScopes: ['taxonomy:write'],
     summary: 'Create event property',
+    description:
+      "Creates an event property and adds it to the project's tracking plan\n(`is_in_schema: true` after success). If the property already exists in\nthe schema, the existing resource is returned without modification.\nIf the property exists ingested-only (`is_in_schema: false`), this call\npromotes it into the schema with the metadata supplied here.\n",
     successStatus: 201,
     parameters: [
       {
@@ -1394,7 +1461,7 @@ export const CLI_OPERATIONS = [
         aliases: ['idempotency-key'],
         type: 'string',
         description:
-          'Unique idempotency key used to safely retry write operations.',
+          "Required on write operations. Keys aren't stored yet, so retrying a write\nwith the same key performs it again; a retried create makes another\nresource. Check whether the first attempt succeeded before you retry.\n",
       },
     ],
     body: [
@@ -1516,7 +1583,7 @@ export const CLI_OPERATIONS = [
         aliases: ['idempotency-key'],
         type: 'string',
         description:
-          'Unique idempotency key used to safely retry write operations.',
+          "Required on write operations. Keys aren't stored yet, so retrying a write\nwith the same key performs it again; a retried create makes another\nresource. Check whether the first attempt succeeded before you retry.\n",
       },
     ],
     body: [],
@@ -1567,6 +1634,8 @@ export const CLI_OPERATIONS = [
     path: '/v1/projects/{project_id}/events/{event_id}/event-properties/{event_property_id}',
     requiredScopes: ['taxonomy:write'],
     summary: 'Update event property metadata',
+    description:
+      'Updates metadata on an event property. Returns `422 not_in_schema` if\nthe property is ingested-only (`is_in_schema: false`); promote it via\n`POST` first. Field absent means leave unchanged; field with `null`\nclears (where allowed). `enum_values` and `classifications` replace the\narray entirely — there is no per-item add/remove.\n',
     successStatus: 200,
     parameters: [
       {
@@ -1603,7 +1672,7 @@ export const CLI_OPERATIONS = [
         aliases: ['idempotency-key'],
         type: 'string',
         description:
-          'Unique idempotency key used to safely retry write operations.',
+          "Required on write operations. Keys aren't stored yet, so retrying a write\nwith the same key performs it again; a retried create makes another\nresource. Check whether the first attempt succeeded before you retry.\n",
       },
     ],
     body: [
@@ -1689,7 +1758,7 @@ export const CLI_OPERATIONS = [
         name: 'cursor',
         in: 'query',
         required: false,
-        aliases: ['cursor'],
+        aliases: ['cursor', 'next-cursor', 'next_cursor'],
         type: 'string',
         description:
           'Opaque cursor from `pagination.next_cursor` on the previous response.\nNumeric offsets are capped by the underlying search index (10,000 results\nper query). Well-formed pagination stops before that window; requests whose\ncursor would exceed it return 400 `pagination_not_supported`.\n',
@@ -1720,6 +1789,8 @@ export const CLI_OPERATIONS = [
     path: '/v1/projects/{project_id}/user-properties',
     requiredScopes: ['taxonomy:write'],
     summary: 'Create user property',
+    description:
+      "Creates a user property and adds it to the project's tracking plan.\nSame idempotency semantics as creating an event property.\n",
     successStatus: 201,
     parameters: [
       {
@@ -1738,7 +1809,7 @@ export const CLI_OPERATIONS = [
         aliases: ['idempotency-key'],
         type: 'string',
         description:
-          'Unique idempotency key used to safely retry write operations.',
+          "Required on write operations. Keys aren't stored yet, so retrying a write\nwith the same key performs it again; a retried create makes another\nresource. Check whether the first attempt succeeded before you retry.\n",
       },
     ],
     body: [
@@ -1858,7 +1929,7 @@ export const CLI_OPERATIONS = [
         aliases: ['idempotency-key'],
         type: 'string',
         description:
-          'Unique idempotency key used to safely retry write operations.',
+          "Required on write operations. Keys aren't stored yet, so retrying a write\nwith the same key performs it again; a retried create makes another\nresource. Check whether the first attempt succeeded before you retry.\n",
       },
     ],
     body: [],
@@ -1900,6 +1971,8 @@ export const CLI_OPERATIONS = [
     path: '/v1/projects/{project_id}/user-properties/{user_property_id}',
     requiredScopes: ['taxonomy:write'],
     summary: 'Update user property metadata',
+    description:
+      'Updates metadata on a user property. Returns `422 not_in_schema` if the\nproperty is ingested-only. Same patch semantics as updating an event property\n(field absent = unchanged, `null` = clear, arrays replace).\n\nOnly `display_name`, `description`, `is_hidden`, and `classifications`\nare mutable via PATCH today. Type/shape fields (`data_type`,\n`is_array_type`, `enum_values`, `regex`) are settable only at creation.\n`is_official` is read-only in this API version.\n',
     successStatus: 200,
     parameters: [
       {
@@ -1927,7 +2000,7 @@ export const CLI_OPERATIONS = [
         aliases: ['idempotency-key'],
         type: 'string',
         description:
-          'Unique idempotency key used to safely retry write operations.',
+          "Required on write operations. Keys aren't stored yet, so retrying a write\nwith the same key performs it again; a retried create makes another\nresource. Check whether the first attempt succeeded before you retry.\n",
       },
     ],
     body: [
@@ -1971,6 +2044,8 @@ export const CLI_OPERATIONS = [
     path: '/v1/projects/{project_id}/charts',
     requiredScopes: ['analytics:read'],
     summary: 'List charts',
+    description:
+      'Returns saved charts in the project. Results are paginated with cursor-based\npagination. Chart definitions are omitted; use GET chart with\n`include_definition=true` to retrieve a read-only definition.\n\nPagination uses an opaque numeric cursor (offset into the current sorted\nsearch result set). Each list query can access at most **10,000** matching\ncharts from the search index; pages beyond that window return fewer items\nand `next_cursor: null` even when more charts may exist in the project.\nUse filters (`q`, `chart_type`) to narrow large projects.\n\nSortable fields are `updated_at` and `name`; prefix with `-` for descending.\nDefaults to `-updated_at` (most recently updated first). `created_at` is not\nsupported in this API version.\n',
     successStatus: 200,
     parameters: [
       {
@@ -1986,7 +2061,7 @@ export const CLI_OPERATIONS = [
         name: 'cursor',
         in: 'query',
         required: false,
-        aliases: ['cursor'],
+        aliases: ['cursor', 'next-cursor', 'next_cursor'],
         type: 'string',
         description:
           'Opaque cursor from `pagination.next_cursor` on the previous response.\nNumeric offsets are capped by the underlying search index (10,000 results\nper query). Well-formed pagination stops before that window; requests whose\ncursor would exceed it return 400 `pagination_not_supported`.\n',
@@ -2035,6 +2110,8 @@ export const CLI_OPERATIONS = [
     path: '/v1/projects/{project_id}/charts/{chart_id}',
     requiredScopes: ['analytics:read'],
     summary: 'Get chart',
+    description:
+      'Returns chart metadata. The chart definition is omitted by default. Set\n`include_definition=true` to include a read-only definition object. The\ndefinition shape is unstable and not intended for authoring.\n',
     successStatus: 200,
     parameters: [
       {
@@ -2073,6 +2150,8 @@ export const CLI_OPERATIONS = [
     path: '/v1/projects/{project_id}/charts/{chart_id}/query',
     requiredScopes: ['analytics:read'],
     summary: 'Query chart',
+    description:
+      "Computes and returns normalized results for a saved chart. v1 supports\n`event_segmentation`, `sessions`, `funnels`, and `retention` chart types;\nother chart types return `422` with `error_code: unsupported_chart_type`.\nResults reflect the authenticated caller's project access and chart\npermissions.\n\nThis POST computes a result and does not mutate state. It is therefore a\nread operation and does not require an `Idempotency-Key`.\n\nOmitting `time_range` uses the chart's saved range; if the chart has no\nsaved range, the server defaults to the last 30 days.\n\nQuery is synchronous with bounded defaults. Expensive queries may return\n`504` when exceeding the server timeout; async query jobs are planned for\na follow-up slice. Retryable responses may include retry advice where\ntheir endpoint-specific error contract provides it.\n",
     successStatus: 200,
     parameters: [
       {
@@ -2147,6 +2226,8 @@ export const CLI_OPERATIONS = [
     path: '/v1/projects/{project_id}/metrics',
     requiredScopes: ['analytics:read'],
     summary: 'List metrics',
+    description:
+      'Returns saved metrics in the project. Results are paginated with cursor-based\npagination. Full metric definitions are included in list responses.\n\nSortable fields are `updated_at` and `name`; prefix with `-` for descending.\nDefaults to `-updated_at` (most recently updated first).\n',
     successStatus: 200,
     parameters: [
       {
@@ -2162,7 +2243,7 @@ export const CLI_OPERATIONS = [
         name: 'cursor',
         in: 'query',
         required: false,
-        aliases: ['cursor'],
+        aliases: ['cursor', 'next-cursor', 'next_cursor'],
         type: 'string',
         description:
           'Opaque cursor from `pagination.next_cursor` on the previous response.\nNumeric offsets are capped by the underlying search index (10,000 results\nper query). Well-formed pagination stops before that window; requests whose\ncursor would exceed it return 400 `pagination_not_supported`.\n',
@@ -2210,6 +2291,8 @@ export const CLI_OPERATIONS = [
     path: '/v1/projects/{project_id}/metrics/{metric_id}',
     requiredScopes: ['analytics:read'],
     summary: 'Get metric',
+    description:
+      'Returns the full saved metric definition including type-specific params,\nversion, and metadata.\n',
     successStatus: 200,
     parameters: [
       {
@@ -2239,6 +2322,8 @@ export const CLI_OPERATIONS = [
     path: '/v1/projects/{project_id}/heatmaps/click-map',
     requiredScopes: ['analytics:read'],
     summary: 'Query click map',
+    description:
+      "Returns click counts for one page URL, grouped by the CSS selector of the\nclicked element or by page coordinate, ranked by count. Filter by device\nviewport band and date range. Results reflect the authenticated caller's\nproject access and data access controls.\n\nThis POST computes a result and does not mutate state. It is therefore a\nread operation and does not require an `Idempotency-Key`.\n\nOmitting `time_range` uses the last 30 days in the project timezone. The\nspan of `time_range` cannot exceed 90 days.\n",
     successStatus: 200,
     parameters: [
       {
@@ -2335,6 +2420,8 @@ export const CLI_OPERATIONS = [
     path: '/v1/projects/{project_id}/heatmaps/scroll-map',
     requiredScopes: ['analytics:read'],
     summary: 'Query scroll map',
+    description:
+      "Returns the scroll-depth distribution for one page URL as a cumulative\nhistogram from the top of the page, plus the average fold and the deepest\nscroll observed. Filter by device viewport band and date range. Results\nreflect the authenticated caller's project access and data access\ncontrols.\n\nThis POST computes a result and does not mutate state. It is therefore a\nread operation and does not require an `Idempotency-Key`.\n\nOmitting `time_range` uses the last 30 days in the project timezone. The\nspan of `time_range` cannot exceed 90 days.\n",
     successStatus: 200,
     parameters: [
       {
@@ -2402,6 +2489,8 @@ export const CLI_OPERATIONS = [
     path: '/v1/projects/{project_id}/zoning/zone-metrics',
     requiredScopes: ['analytics:read'],
     summary: 'Query zone metrics',
+    description:
+      "Returns one metric for every zone on a page URL, ranked by value. A zone\nis identified by the CSS selector of its element. Results reflect the\nauthenticated caller's project access and data access controls.\n\nThis POST computes a result and does not mutate state. It is therefore a\nread operation and does not require an `Idempotency-Key`.\n\nOmitting `time_range` uses the last 30 days in the project timezone. The\nspan of `time_range` cannot exceed 90 days.\n",
     successStatus: 200,
     parameters: [
       {
@@ -2507,7 +2596,7 @@ export const CLI_OPERATIONS = [
         name: 'cursor',
         in: 'query',
         required: false,
-        aliases: ['cursor'],
+        aliases: ['cursor', 'next-cursor', 'next_cursor'],
         type: 'string',
         description:
           'Opaque cursor from `pagination.next_cursor` on the previous response.\nNumeric offsets are capped by the underlying search index (10,000 results\nper query). Well-formed pagination stops before that window; requests whose\ncursor would exceed it return 400 `pagination_not_supported`.\n',
@@ -2519,6 +2608,15 @@ export const CLI_OPERATIONS = [
         aliases: ['limit'],
         type: 'integer',
         description: 'Number of items to return. Defaults to 50, max 200.',
+      },
+      {
+        name: 'key',
+        in: 'query',
+        required: false,
+        aliases: ['key'],
+        type: 'string',
+        description:
+          'Filter this list by an exact flag key within the project. Returns the standard list response, or an empty list when no active flag matches. Get, update, and archive require the returned numeric id; those operations do not accept a flag key or resolve one automatically.',
       },
     ],
     body: [],
@@ -2548,7 +2646,7 @@ export const CLI_OPERATIONS = [
         aliases: ['idempotency-key'],
         type: 'string',
         description:
-          'Unique idempotency key used to safely retry write operations.',
+          "Required on write operations. Keys aren't stored yet, so retrying a write\nwith the same key performs it again; a retried create makes another\nresource. Check whether the first attempt succeeded before you retry.\n",
       },
     ],
     body: [
@@ -2778,7 +2876,8 @@ export const CLI_OPERATIONS = [
         required: true,
         aliases: ['flag', 'flag-id', 'key', 'flag_id'],
         type: 'string',
-        description: 'Feature flag identifier.',
+        description:
+          'Numeric feature flag ID required by get, update, and archive. A flag key is not accepted or resolved automatically. Find the ID with list flags filtered by the key query parameter.',
       },
       {
         name: 'dry_run',
@@ -2795,7 +2894,7 @@ export const CLI_OPERATIONS = [
         aliases: ['idempotency-key'],
         type: 'string',
         description:
-          'Unique idempotency key used to safely retry write operations.',
+          "Required on write operations. Keys aren't stored yet, so retrying a write\nwith the same key performs it again; a retried create makes another\nresource. Check whether the first attempt succeeded before you retry.\n",
       },
     ],
     body: [],
@@ -2824,7 +2923,8 @@ export const CLI_OPERATIONS = [
         required: true,
         aliases: ['flag', 'flag-id', 'key', 'flag_id'],
         type: 'string',
-        description: 'Feature flag identifier.',
+        description:
+          'Numeric feature flag ID required by get, update, and archive. A flag key is not accepted or resolved automatically. Find the ID with list flags filtered by the key query parameter.',
       },
     ],
     body: [],
@@ -2836,6 +2936,8 @@ export const CLI_OPERATIONS = [
     path: '/v1/projects/{project_id}/flags/{flag_id}',
     requiredScopes: ['flags:write'],
     summary: 'Update feature flag',
+    description:
+      'Updates feature flag metadata and rollout settings. Variant, tester, deployment, and link mutations will be exposed through dedicated subresources in a later slice.',
     successStatus: 200,
     parameters: [
       {
@@ -2853,7 +2955,8 @@ export const CLI_OPERATIONS = [
         required: true,
         aliases: ['flag', 'flag-id', 'key', 'flag_id'],
         type: 'string',
-        description: 'Feature flag identifier.',
+        description:
+          'Numeric feature flag ID required by get, update, and archive. A flag key is not accepted or resolved automatically. Find the ID with list flags filtered by the key query parameter.',
       },
       {
         name: 'Idempotency-Key',
@@ -2862,7 +2965,7 @@ export const CLI_OPERATIONS = [
         aliases: ['idempotency-key'],
         type: 'string',
         description:
-          'Unique idempotency key used to safely retry write operations.',
+          "Required on write operations. Keys aren't stored yet, so retrying a write\nwith the same key performs it again; a retried create makes another\nresource. Check whether the first attempt succeeded before you retry.\n",
       },
     ],
     body: [
@@ -2928,6 +3031,8 @@ export const CLI_OPERATIONS = [
     path: '/v1/projects/{project_id}/guides',
     requiredScopes: ['guides:read'],
     summary: 'List guides',
+    description:
+      'Returns guides in the project. Results use the standard\nDeveloper API list envelope with cursor pagination (`cursor`, `limit`).\n\nFull-text search (`q`) and custom sort orders are not supported yet.\n',
     successStatus: 200,
     parameters: [
       {
@@ -2943,7 +3048,7 @@ export const CLI_OPERATIONS = [
         name: 'cursor',
         in: 'query',
         required: false,
-        aliases: ['cursor'],
+        aliases: ['cursor', 'next-cursor', 'next_cursor'],
         type: 'string',
         description:
           'Opaque cursor from `pagination.next_cursor` on the previous response.\nNumeric offsets are capped by the underlying search index (10,000 results\nper query). Well-formed pagination stops before that window; requests whose\ncursor would exceed it return 400 `pagination_not_supported`.\n',
@@ -3002,6 +3107,8 @@ export const CLI_OPERATIONS = [
     path: '/v1/projects/{project_id}/guides',
     requiredScopes: ['guides:write'],
     summary: 'Create guide',
+    description:
+      'Creates an unpublished draft guide. Publish, schedule, and test\ninstrumentation are not available via API in v1. At most one content\nvariant is accepted on create; the `control` key is reserved.\n',
     successStatus: 201,
     parameters: [
       {
@@ -3020,7 +3127,7 @@ export const CLI_OPERATIONS = [
         aliases: ['idempotency-key'],
         type: 'string',
         description:
-          'Unique idempotency key used to safely retry write operations.',
+          "Required on write operations. Keys aren't stored yet, so retrying a write\nwith the same key performs it again; a retried create makes another\nresource. Check whether the first attempt succeeded before you retry.\n",
       },
     ],
     body: [
@@ -3122,8 +3229,419 @@ export const CLI_OPERATIONS = [
                     },
                   },
                   content: {
+                    type: 'array',
                     description:
-                      'Step body content (structure varies by form factor).',
+                      "The step body: content blocks rendered top to bottom, below the step\n`title`. `meta` keys are camelCase. Give each new block a unique `uuid`\n(a v4 UUID) and keep the existing `uuid` when you edit a block, because\nsurvey responses are keyed by it. To change one block, send the step's\nwhole `content` array back with that block edited.\n",
+                    items: {
+                      description:
+                        'One content block. `type` selects the block and the shape of `meta`.',
+                      oneOf: [
+                        {
+                          type: 'object',
+                          description: 'Body text.',
+                          required: ['uuid', 'type', 'meta'],
+                          properties: {
+                            uuid: {
+                              type: 'string',
+                            },
+                            type: {
+                              type: 'string',
+                              const: 'markdown',
+                            },
+                            meta: {
+                              type: 'object',
+                              required: ['value'],
+                              properties: {
+                                value: {
+                                  type: 'string',
+                                  description:
+                                    'Markdown text. Inline HTML is allowed and is sanitized on save.',
+                                },
+                                alignment: {
+                                  type: 'string',
+                                  enum: ['start', 'center', 'end'],
+                                },
+                              },
+                            },
+                          },
+                        },
+                        {
+                          type: 'object',
+                          required: ['uuid', 'type', 'meta'],
+                          properties: {
+                            uuid: {
+                              type: 'string',
+                            },
+                            type: {
+                              type: 'string',
+                              const: 'image',
+                            },
+                            meta: {
+                              type: 'object',
+                              required: ['src', 'filename', 'size'],
+                              properties: {
+                                src: {
+                                  type: 'string',
+                                  description: 'Image URL.',
+                                },
+                                filename: {
+                                  type: 'string',
+                                },
+                                size: {
+                                  type: 'string',
+                                },
+                                altText: {
+                                  type: 'string',
+                                },
+                                style: {
+                                  type: 'object',
+                                  properties: {
+                                    scale: {
+                                      type: 'string',
+                                    },
+                                    radius: {
+                                      type: 'string',
+                                    },
+                                    fit: {
+                                      type: 'string',
+                                      enum: ['cover', 'contain'],
+                                    },
+                                    height: {
+                                      type: 'string',
+                                    },
+                                  },
+                                },
+                                action: {
+                                  type: 'object',
+                                  description:
+                                    'Optional `link` action opened when the image is clicked.',
+                                },
+                              },
+                            },
+                          },
+                        },
+                        {
+                          type: 'object',
+                          required: ['uuid', 'type', 'meta'],
+                          properties: {
+                            uuid: {
+                              type: 'string',
+                            },
+                            type: {
+                              type: 'string',
+                              const: 'video',
+                            },
+                            meta: {
+                              type: 'object',
+                              required: ['type', 'src'],
+                              properties: {
+                                type: {
+                                  type: 'string',
+                                  const: 'url',
+                                },
+                                src: {
+                                  type: 'string',
+                                  description:
+                                    'Video URL, for example a YouTube, Vimeo or Loom link.',
+                                },
+                                style: {
+                                  type: 'object',
+                                  properties: {
+                                    radius: {
+                                      type: 'string',
+                                    },
+                                  },
+                                },
+                              },
+                            },
+                          },
+                        },
+                        {
+                          type: 'object',
+                          required: ['uuid', 'type', 'meta'],
+                          properties: {
+                            uuid: {
+                              type: 'string',
+                            },
+                            type: {
+                              type: 'string',
+                              const: 'button',
+                            },
+                            meta: {
+                              type: 'object',
+                              properties: {
+                                label: {
+                                  type: 'string',
+                                },
+                                buttonType: {
+                                  type: 'string',
+                                  enum: ['primary', 'secondary', 'snooze'],
+                                },
+                                action: {
+                                  type: 'object',
+                                  required: ['type'],
+                                  properties: {
+                                    type: {
+                                      type: 'string',
+                                      description:
+                                        'Common actions:\n- `step_forward`, `step_back`: go to the next or previous step.\n- `complete`: finish the guide or survey.\n- `dismiss`: close it.\n- `snooze`: hide it for a while, with optional `interval` (`hour`, `day`, `week`) and `value`.\n- `go_to_step`: jump to the step whose id is in `value`.\n- `link`: open the URL in `value`; `operation` is `self` (same tab), `blank` (new tab) or `router`.\n- `nudge`: start the guide or survey whose id is in `value`.\n- `no_action`: do nothing.\n\nButtons built in the dashboard can use other action types. Send those\nback unchanged.\n',
+                                    },
+                                  },
+                                },
+                                actions: {
+                                  type: 'object',
+                                  description:
+                                    'Optional action sequence the dashboard writes for buttons with side\neffects: `{type: "action_sequence", navigation: <action>, effects: [<action>]}`.\nWhen present, the SDK runs it instead of `action`, so update both or\nneither.\n',
+                                },
+                              },
+                            },
+                          },
+                        },
+                        {
+                          type: 'object',
+                          description:
+                            'Free-text survey question. Put the question itself in a `markdown` block or the step `title`.',
+                          required: ['uuid', 'type', 'meta'],
+                          properties: {
+                            uuid: {
+                              type: 'string',
+                            },
+                            type: {
+                              type: 'string',
+                              description:
+                                '`survey_text` is a multi-line answer; `survey_text_short` is a single line.',
+                              enum: ['survey_text', 'survey_text_short'],
+                            },
+                            meta: {
+                              type: 'object',
+                              required: ['prompt'],
+                              properties: {
+                                prompt: {
+                                  type: 'string',
+                                  description:
+                                    'Placeholder shown in the empty answer field.',
+                                },
+                                label: {
+                                  type: 'string',
+                                },
+                                validation: {
+                                  type: 'object',
+                                  properties: {
+                                    required: {
+                                      type: 'object',
+                                      required: ['value'],
+                                      properties: {
+                                        value: {
+                                          type: 'boolean',
+                                        },
+                                        message: {
+                                          type: ['string', 'null'],
+                                          description:
+                                            'Error shown when a required question is left empty. Required when `value` is `true`.',
+                                        },
+                                      },
+                                    },
+                                  },
+                                },
+                              },
+                            },
+                          },
+                        },
+                        {
+                          type: 'object',
+                          description: 'Multiple-choice survey question.',
+                          required: ['uuid', 'type', 'meta'],
+                          properties: {
+                            uuid: {
+                              type: 'string',
+                            },
+                            type: {
+                              type: 'string',
+                              const: 'survey_list',
+                            },
+                            meta: {
+                              type: 'object',
+                              required: ['options', 'listType', 'displayType'],
+                              properties: {
+                                options: {
+                                  type: 'array',
+                                  items: {
+                                    type: 'string',
+                                  },
+                                },
+                                listType: {
+                                  type: 'string',
+                                  enum: ['single', 'multiple'],
+                                },
+                                displayType: {
+                                  type: 'string',
+                                  enum: ['list', 'dropdown', 'grid'],
+                                },
+                                isOrderRandom: {
+                                  type: 'boolean',
+                                },
+                                otherOption: {
+                                  type: 'object',
+                                  required: [
+                                    'enabled',
+                                    'label',
+                                    'placeholderLabel',
+                                  ],
+                                  properties: {
+                                    enabled: {
+                                      type: 'boolean',
+                                    },
+                                    label: {
+                                      type: 'string',
+                                    },
+                                    placeholderLabel: {
+                                      type: 'string',
+                                    },
+                                  },
+                                },
+                                label: {
+                                  type: 'string',
+                                },
+                                validation: {
+                                  type: 'object',
+                                  properties: {
+                                    required: {
+                                      type: 'object',
+                                      required: ['value'],
+                                      properties: {
+                                        value: {
+                                          type: 'boolean',
+                                        },
+                                        message: {
+                                          type: ['string', 'null'],
+                                          description:
+                                            'Error shown when a required question is left empty. Required when `value` is `true`.',
+                                        },
+                                      },
+                                    },
+                                  },
+                                },
+                              },
+                            },
+                          },
+                        },
+                        {
+                          type: 'object',
+                          description: 'Rating survey question.',
+                          required: ['uuid', 'type', 'meta'],
+                          properties: {
+                            uuid: {
+                              type: 'string',
+                            },
+                            type: {
+                              type: 'string',
+                              const: 'survey_rating',
+                            },
+                            meta: {
+                              type: 'object',
+                              required: [
+                                'type',
+                                'options',
+                                'lowerLabel',
+                                'upperLabel',
+                              ],
+                              properties: {
+                                type: {
+                                  type: 'string',
+                                  description: '`nps` is a 0–10 scale.',
+                                  enum: ['stars', 'numbers', 'emojis', 'nps'],
+                                },
+                                options: {
+                                  type: 'integer',
+                                  description:
+                                    'Number of choices on the scale.',
+                                },
+                                emojis: {
+                                  type: 'array',
+                                  description:
+                                    'One emoji per option. Required when `type` is `emojis`.',
+                                  items: {
+                                    type: 'string',
+                                  },
+                                },
+                                lowerLabel: {
+                                  type: 'string',
+                                },
+                                upperLabel: {
+                                  type: 'string',
+                                },
+                                label: {
+                                  type: 'string',
+                                },
+                                validation: {
+                                  type: 'object',
+                                  properties: {
+                                    required: {
+                                      type: 'object',
+                                      required: ['value'],
+                                      properties: {
+                                        value: {
+                                          type: 'boolean',
+                                        },
+                                        message: {
+                                          type: ['string', 'null'],
+                                          description:
+                                            'Error shown when a required question is left empty. Required when `value` is `true`.',
+                                        },
+                                      },
+                                    },
+                                  },
+                                },
+                              },
+                            },
+                          },
+                        },
+                        {
+                          type: 'object',
+                          description:
+                            'Not shown to the user. Adds a value to each survey response.',
+                          required: ['uuid', 'type', 'meta'],
+                          properties: {
+                            uuid: {
+                              type: 'string',
+                            },
+                            type: {
+                              type: 'string',
+                              const: 'survey_hidden',
+                            },
+                            meta: {
+                              type: 'object',
+                              required: ['label', 'source'],
+                              properties: {
+                                label: {
+                                  type: 'string',
+                                },
+                                source: {
+                                  type: 'object',
+                                  required: ['type'],
+                                  properties: {
+                                    type: {
+                                      type: 'string',
+                                      enum: ['static', 'event_property'],
+                                    },
+                                    value: {
+                                      type: 'string',
+                                      description:
+                                        'The value to record. Used when `type` is `static`.',
+                                    },
+                                    property: {
+                                      type: 'string',
+                                      description:
+                                        'Property of the event that triggered the survey. Used when `type` is `event_property`.',
+                                    },
+                                  },
+                                },
+                              },
+                            },
+                          },
+                        },
+                      ],
+                    },
                   },
                   sort_key: {
                     type: ['integer', 'null'],
@@ -3143,6 +3661,8 @@ export const CLI_OPERATIONS = [
     path: '/v1/projects/{project_id}/guides/{guide_id}',
     requiredScopes: ['guides:write'],
     summary: 'Archive guide',
+    description:
+      "Archives an unpublished guide. A guide counts as published while its flag is\nenabled, unless it's only in test mode without a schedule; archiving a\npublished guide returns `409` with `error_code: cannot_archive_published`.\nUnpublish it in Amplitude first. Use `dry_run=true` to check whether a guide\ncan be archived. An already archived guide returns `404`, like `GET`.\n",
     successStatus: 204,
     parameters: [
       {
@@ -3177,7 +3697,7 @@ export const CLI_OPERATIONS = [
         aliases: ['idempotency-key'],
         type: 'string',
         description:
-          'Unique idempotency key used to safely retry write operations.',
+          "Required on write operations. Keys aren't stored yet, so retrying a write\nwith the same key performs it again; a retried create makes another\nresource. Check whether the first attempt succeeded before you retry.\n",
       },
     ],
     body: [],
@@ -3227,6 +3747,8 @@ export const CLI_OPERATIONS = [
     path: '/v1/projects/{project_id}/guides/{guide_id}',
     requiredScopes: ['guides:write'],
     summary: 'Update guide',
+    description:
+      'Updates metadata, targeting, and content variants. For published guides,\nchanges apply to a draft until publish in the UI. `latest_version` is\nrequired and must match the current draft, otherwise the update returns\n`409`. The check runs before the write rather than atomically with it, so it\nreduces but does not fully prevent lost updates from concurrent writers.\nPublish, schedule, and test instrumentation are not\navailable via API in v1. Status fields on the response are derived read-only.\nWhen `variants` is sent, it must list every existing variant by `id` with\nits unchanged `variant` key; steps within a variant can be added, edited,\nreordered, or removed. `tags` is not writable in v1 and returns `400`.\n',
     successStatus: 200,
     parameters: [
       {
@@ -3253,7 +3775,7 @@ export const CLI_OPERATIONS = [
         aliases: ['idempotency-key'],
         type: 'string',
         description:
-          'Unique idempotency key used to safely retry write operations.',
+          "Required on write operations. Keys aren't stored yet, so retrying a write\nwith the same key performs it again; a retried create makes another\nresource. Check whether the first attempt succeeded before you retry.\n",
       },
     ],
     body: [
@@ -3467,8 +3989,419 @@ export const CLI_OPERATIONS = [
                     },
                   },
                   content: {
+                    type: 'array',
                     description:
-                      'Step body content (structure varies by form factor).',
+                      "The step body: content blocks rendered top to bottom, below the step\n`title`. `meta` keys are camelCase. Give each new block a unique `uuid`\n(a v4 UUID) and keep the existing `uuid` when you edit a block, because\nsurvey responses are keyed by it. To change one block, send the step's\nwhole `content` array back with that block edited.\n",
+                    items: {
+                      description:
+                        'One content block. `type` selects the block and the shape of `meta`.',
+                      oneOf: [
+                        {
+                          type: 'object',
+                          description: 'Body text.',
+                          required: ['uuid', 'type', 'meta'],
+                          properties: {
+                            uuid: {
+                              type: 'string',
+                            },
+                            type: {
+                              type: 'string',
+                              const: 'markdown',
+                            },
+                            meta: {
+                              type: 'object',
+                              required: ['value'],
+                              properties: {
+                                value: {
+                                  type: 'string',
+                                  description:
+                                    'Markdown text. Inline HTML is allowed and is sanitized on save.',
+                                },
+                                alignment: {
+                                  type: 'string',
+                                  enum: ['start', 'center', 'end'],
+                                },
+                              },
+                            },
+                          },
+                        },
+                        {
+                          type: 'object',
+                          required: ['uuid', 'type', 'meta'],
+                          properties: {
+                            uuid: {
+                              type: 'string',
+                            },
+                            type: {
+                              type: 'string',
+                              const: 'image',
+                            },
+                            meta: {
+                              type: 'object',
+                              required: ['src', 'filename', 'size'],
+                              properties: {
+                                src: {
+                                  type: 'string',
+                                  description: 'Image URL.',
+                                },
+                                filename: {
+                                  type: 'string',
+                                },
+                                size: {
+                                  type: 'string',
+                                },
+                                altText: {
+                                  type: 'string',
+                                },
+                                style: {
+                                  type: 'object',
+                                  properties: {
+                                    scale: {
+                                      type: 'string',
+                                    },
+                                    radius: {
+                                      type: 'string',
+                                    },
+                                    fit: {
+                                      type: 'string',
+                                      enum: ['cover', 'contain'],
+                                    },
+                                    height: {
+                                      type: 'string',
+                                    },
+                                  },
+                                },
+                                action: {
+                                  type: 'object',
+                                  description:
+                                    'Optional `link` action opened when the image is clicked.',
+                                },
+                              },
+                            },
+                          },
+                        },
+                        {
+                          type: 'object',
+                          required: ['uuid', 'type', 'meta'],
+                          properties: {
+                            uuid: {
+                              type: 'string',
+                            },
+                            type: {
+                              type: 'string',
+                              const: 'video',
+                            },
+                            meta: {
+                              type: 'object',
+                              required: ['type', 'src'],
+                              properties: {
+                                type: {
+                                  type: 'string',
+                                  const: 'url',
+                                },
+                                src: {
+                                  type: 'string',
+                                  description:
+                                    'Video URL, for example a YouTube, Vimeo or Loom link.',
+                                },
+                                style: {
+                                  type: 'object',
+                                  properties: {
+                                    radius: {
+                                      type: 'string',
+                                    },
+                                  },
+                                },
+                              },
+                            },
+                          },
+                        },
+                        {
+                          type: 'object',
+                          required: ['uuid', 'type', 'meta'],
+                          properties: {
+                            uuid: {
+                              type: 'string',
+                            },
+                            type: {
+                              type: 'string',
+                              const: 'button',
+                            },
+                            meta: {
+                              type: 'object',
+                              properties: {
+                                label: {
+                                  type: 'string',
+                                },
+                                buttonType: {
+                                  type: 'string',
+                                  enum: ['primary', 'secondary', 'snooze'],
+                                },
+                                action: {
+                                  type: 'object',
+                                  required: ['type'],
+                                  properties: {
+                                    type: {
+                                      type: 'string',
+                                      description:
+                                        'Common actions:\n- `step_forward`, `step_back`: go to the next or previous step.\n- `complete`: finish the guide or survey.\n- `dismiss`: close it.\n- `snooze`: hide it for a while, with optional `interval` (`hour`, `day`, `week`) and `value`.\n- `go_to_step`: jump to the step whose id is in `value`.\n- `link`: open the URL in `value`; `operation` is `self` (same tab), `blank` (new tab) or `router`.\n- `nudge`: start the guide or survey whose id is in `value`.\n- `no_action`: do nothing.\n\nButtons built in the dashboard can use other action types. Send those\nback unchanged.\n',
+                                    },
+                                  },
+                                },
+                                actions: {
+                                  type: 'object',
+                                  description:
+                                    'Optional action sequence the dashboard writes for buttons with side\neffects: `{type: "action_sequence", navigation: <action>, effects: [<action>]}`.\nWhen present, the SDK runs it instead of `action`, so update both or\nneither.\n',
+                                },
+                              },
+                            },
+                          },
+                        },
+                        {
+                          type: 'object',
+                          description:
+                            'Free-text survey question. Put the question itself in a `markdown` block or the step `title`.',
+                          required: ['uuid', 'type', 'meta'],
+                          properties: {
+                            uuid: {
+                              type: 'string',
+                            },
+                            type: {
+                              type: 'string',
+                              description:
+                                '`survey_text` is a multi-line answer; `survey_text_short` is a single line.',
+                              enum: ['survey_text', 'survey_text_short'],
+                            },
+                            meta: {
+                              type: 'object',
+                              required: ['prompt'],
+                              properties: {
+                                prompt: {
+                                  type: 'string',
+                                  description:
+                                    'Placeholder shown in the empty answer field.',
+                                },
+                                label: {
+                                  type: 'string',
+                                },
+                                validation: {
+                                  type: 'object',
+                                  properties: {
+                                    required: {
+                                      type: 'object',
+                                      required: ['value'],
+                                      properties: {
+                                        value: {
+                                          type: 'boolean',
+                                        },
+                                        message: {
+                                          type: ['string', 'null'],
+                                          description:
+                                            'Error shown when a required question is left empty. Required when `value` is `true`.',
+                                        },
+                                      },
+                                    },
+                                  },
+                                },
+                              },
+                            },
+                          },
+                        },
+                        {
+                          type: 'object',
+                          description: 'Multiple-choice survey question.',
+                          required: ['uuid', 'type', 'meta'],
+                          properties: {
+                            uuid: {
+                              type: 'string',
+                            },
+                            type: {
+                              type: 'string',
+                              const: 'survey_list',
+                            },
+                            meta: {
+                              type: 'object',
+                              required: ['options', 'listType', 'displayType'],
+                              properties: {
+                                options: {
+                                  type: 'array',
+                                  items: {
+                                    type: 'string',
+                                  },
+                                },
+                                listType: {
+                                  type: 'string',
+                                  enum: ['single', 'multiple'],
+                                },
+                                displayType: {
+                                  type: 'string',
+                                  enum: ['list', 'dropdown', 'grid'],
+                                },
+                                isOrderRandom: {
+                                  type: 'boolean',
+                                },
+                                otherOption: {
+                                  type: 'object',
+                                  required: [
+                                    'enabled',
+                                    'label',
+                                    'placeholderLabel',
+                                  ],
+                                  properties: {
+                                    enabled: {
+                                      type: 'boolean',
+                                    },
+                                    label: {
+                                      type: 'string',
+                                    },
+                                    placeholderLabel: {
+                                      type: 'string',
+                                    },
+                                  },
+                                },
+                                label: {
+                                  type: 'string',
+                                },
+                                validation: {
+                                  type: 'object',
+                                  properties: {
+                                    required: {
+                                      type: 'object',
+                                      required: ['value'],
+                                      properties: {
+                                        value: {
+                                          type: 'boolean',
+                                        },
+                                        message: {
+                                          type: ['string', 'null'],
+                                          description:
+                                            'Error shown when a required question is left empty. Required when `value` is `true`.',
+                                        },
+                                      },
+                                    },
+                                  },
+                                },
+                              },
+                            },
+                          },
+                        },
+                        {
+                          type: 'object',
+                          description: 'Rating survey question.',
+                          required: ['uuid', 'type', 'meta'],
+                          properties: {
+                            uuid: {
+                              type: 'string',
+                            },
+                            type: {
+                              type: 'string',
+                              const: 'survey_rating',
+                            },
+                            meta: {
+                              type: 'object',
+                              required: [
+                                'type',
+                                'options',
+                                'lowerLabel',
+                                'upperLabel',
+                              ],
+                              properties: {
+                                type: {
+                                  type: 'string',
+                                  description: '`nps` is a 0–10 scale.',
+                                  enum: ['stars', 'numbers', 'emojis', 'nps'],
+                                },
+                                options: {
+                                  type: 'integer',
+                                  description:
+                                    'Number of choices on the scale.',
+                                },
+                                emojis: {
+                                  type: 'array',
+                                  description:
+                                    'One emoji per option. Required when `type` is `emojis`.',
+                                  items: {
+                                    type: 'string',
+                                  },
+                                },
+                                lowerLabel: {
+                                  type: 'string',
+                                },
+                                upperLabel: {
+                                  type: 'string',
+                                },
+                                label: {
+                                  type: 'string',
+                                },
+                                validation: {
+                                  type: 'object',
+                                  properties: {
+                                    required: {
+                                      type: 'object',
+                                      required: ['value'],
+                                      properties: {
+                                        value: {
+                                          type: 'boolean',
+                                        },
+                                        message: {
+                                          type: ['string', 'null'],
+                                          description:
+                                            'Error shown when a required question is left empty. Required when `value` is `true`.',
+                                        },
+                                      },
+                                    },
+                                  },
+                                },
+                              },
+                            },
+                          },
+                        },
+                        {
+                          type: 'object',
+                          description:
+                            'Not shown to the user. Adds a value to each survey response.',
+                          required: ['uuid', 'type', 'meta'],
+                          properties: {
+                            uuid: {
+                              type: 'string',
+                            },
+                            type: {
+                              type: 'string',
+                              const: 'survey_hidden',
+                            },
+                            meta: {
+                              type: 'object',
+                              required: ['label', 'source'],
+                              properties: {
+                                label: {
+                                  type: 'string',
+                                },
+                                source: {
+                                  type: 'object',
+                                  required: ['type'],
+                                  properties: {
+                                    type: {
+                                      type: 'string',
+                                      enum: ['static', 'event_property'],
+                                    },
+                                    value: {
+                                      type: 'string',
+                                      description:
+                                        'The value to record. Used when `type` is `static`.',
+                                    },
+                                    property: {
+                                      type: 'string',
+                                      description:
+                                        'Property of the event that triggered the survey. Used when `type` is `event_property`.',
+                                    },
+                                  },
+                                },
+                              },
+                            },
+                          },
+                        },
+                      ],
+                    },
                   },
                   sort_key: {
                     type: ['integer', 'null'],
@@ -3497,6 +4430,8 @@ export const CLI_OPERATIONS = [
     path: '/v1/projects/{project_id}/surveys',
     requiredScopes: ['surveys:read'],
     summary: 'List surveys',
+    description:
+      'Returns surveys in the project. Results use the standard Developer API list\nenvelope with cursor pagination (`cursor`, `limit`).\n\nFull-text search (`q`) and custom sort orders are not supported yet.\n',
     successStatus: 200,
     parameters: [
       {
@@ -3512,7 +4447,7 @@ export const CLI_OPERATIONS = [
         name: 'cursor',
         in: 'query',
         required: false,
-        aliases: ['cursor'],
+        aliases: ['cursor', 'next-cursor', 'next_cursor'],
         type: 'string',
         description:
           'Opaque cursor from `pagination.next_cursor` on the previous response.\nNumeric offsets are capped by the underlying search index (10,000 results\nper query). Well-formed pagination stops before that window; requests whose\ncursor would exceed it return 400 `pagination_not_supported`.\n',
@@ -3571,6 +4506,8 @@ export const CLI_OPERATIONS = [
     path: '/v1/projects/{project_id}/surveys',
     requiredScopes: ['surveys:write'],
     summary: 'Create survey',
+    description:
+      'Creates an unpublished draft survey. Publish, schedule, and test\ninstrumentation are not available via API in v1. At most one content\nvariant is accepted on create; the `control` key is reserved.\n',
     successStatus: 201,
     parameters: [
       {
@@ -3589,7 +4526,7 @@ export const CLI_OPERATIONS = [
         aliases: ['idempotency-key'],
         type: 'string',
         description:
-          'Unique idempotency key used to safely retry write operations.',
+          "Required on write operations. Keys aren't stored yet, so retrying a write\nwith the same key performs it again; a retried create makes another\nresource. Check whether the first attempt succeeded before you retry.\n",
       },
     ],
     body: [
@@ -3691,8 +4628,419 @@ export const CLI_OPERATIONS = [
                     },
                   },
                   content: {
+                    type: 'array',
                     description:
-                      'Step body content (structure varies by form factor).',
+                      "The step body: content blocks rendered top to bottom, below the step\n`title`. `meta` keys are camelCase. Give each new block a unique `uuid`\n(a v4 UUID) and keep the existing `uuid` when you edit a block, because\nsurvey responses are keyed by it. To change one block, send the step's\nwhole `content` array back with that block edited.\n",
+                    items: {
+                      description:
+                        'One content block. `type` selects the block and the shape of `meta`.',
+                      oneOf: [
+                        {
+                          type: 'object',
+                          description: 'Body text.',
+                          required: ['uuid', 'type', 'meta'],
+                          properties: {
+                            uuid: {
+                              type: 'string',
+                            },
+                            type: {
+                              type: 'string',
+                              const: 'markdown',
+                            },
+                            meta: {
+                              type: 'object',
+                              required: ['value'],
+                              properties: {
+                                value: {
+                                  type: 'string',
+                                  description:
+                                    'Markdown text. Inline HTML is allowed and is sanitized on save.',
+                                },
+                                alignment: {
+                                  type: 'string',
+                                  enum: ['start', 'center', 'end'],
+                                },
+                              },
+                            },
+                          },
+                        },
+                        {
+                          type: 'object',
+                          required: ['uuid', 'type', 'meta'],
+                          properties: {
+                            uuid: {
+                              type: 'string',
+                            },
+                            type: {
+                              type: 'string',
+                              const: 'image',
+                            },
+                            meta: {
+                              type: 'object',
+                              required: ['src', 'filename', 'size'],
+                              properties: {
+                                src: {
+                                  type: 'string',
+                                  description: 'Image URL.',
+                                },
+                                filename: {
+                                  type: 'string',
+                                },
+                                size: {
+                                  type: 'string',
+                                },
+                                altText: {
+                                  type: 'string',
+                                },
+                                style: {
+                                  type: 'object',
+                                  properties: {
+                                    scale: {
+                                      type: 'string',
+                                    },
+                                    radius: {
+                                      type: 'string',
+                                    },
+                                    fit: {
+                                      type: 'string',
+                                      enum: ['cover', 'contain'],
+                                    },
+                                    height: {
+                                      type: 'string',
+                                    },
+                                  },
+                                },
+                                action: {
+                                  type: 'object',
+                                  description:
+                                    'Optional `link` action opened when the image is clicked.',
+                                },
+                              },
+                            },
+                          },
+                        },
+                        {
+                          type: 'object',
+                          required: ['uuid', 'type', 'meta'],
+                          properties: {
+                            uuid: {
+                              type: 'string',
+                            },
+                            type: {
+                              type: 'string',
+                              const: 'video',
+                            },
+                            meta: {
+                              type: 'object',
+                              required: ['type', 'src'],
+                              properties: {
+                                type: {
+                                  type: 'string',
+                                  const: 'url',
+                                },
+                                src: {
+                                  type: 'string',
+                                  description:
+                                    'Video URL, for example a YouTube, Vimeo or Loom link.',
+                                },
+                                style: {
+                                  type: 'object',
+                                  properties: {
+                                    radius: {
+                                      type: 'string',
+                                    },
+                                  },
+                                },
+                              },
+                            },
+                          },
+                        },
+                        {
+                          type: 'object',
+                          required: ['uuid', 'type', 'meta'],
+                          properties: {
+                            uuid: {
+                              type: 'string',
+                            },
+                            type: {
+                              type: 'string',
+                              const: 'button',
+                            },
+                            meta: {
+                              type: 'object',
+                              properties: {
+                                label: {
+                                  type: 'string',
+                                },
+                                buttonType: {
+                                  type: 'string',
+                                  enum: ['primary', 'secondary', 'snooze'],
+                                },
+                                action: {
+                                  type: 'object',
+                                  required: ['type'],
+                                  properties: {
+                                    type: {
+                                      type: 'string',
+                                      description:
+                                        'Common actions:\n- `step_forward`, `step_back`: go to the next or previous step.\n- `complete`: finish the guide or survey.\n- `dismiss`: close it.\n- `snooze`: hide it for a while, with optional `interval` (`hour`, `day`, `week`) and `value`.\n- `go_to_step`: jump to the step whose id is in `value`.\n- `link`: open the URL in `value`; `operation` is `self` (same tab), `blank` (new tab) or `router`.\n- `nudge`: start the guide or survey whose id is in `value`.\n- `no_action`: do nothing.\n\nButtons built in the dashboard can use other action types. Send those\nback unchanged.\n',
+                                    },
+                                  },
+                                },
+                                actions: {
+                                  type: 'object',
+                                  description:
+                                    'Optional action sequence the dashboard writes for buttons with side\neffects: `{type: "action_sequence", navigation: <action>, effects: [<action>]}`.\nWhen present, the SDK runs it instead of `action`, so update both or\nneither.\n',
+                                },
+                              },
+                            },
+                          },
+                        },
+                        {
+                          type: 'object',
+                          description:
+                            'Free-text survey question. Put the question itself in a `markdown` block or the step `title`.',
+                          required: ['uuid', 'type', 'meta'],
+                          properties: {
+                            uuid: {
+                              type: 'string',
+                            },
+                            type: {
+                              type: 'string',
+                              description:
+                                '`survey_text` is a multi-line answer; `survey_text_short` is a single line.',
+                              enum: ['survey_text', 'survey_text_short'],
+                            },
+                            meta: {
+                              type: 'object',
+                              required: ['prompt'],
+                              properties: {
+                                prompt: {
+                                  type: 'string',
+                                  description:
+                                    'Placeholder shown in the empty answer field.',
+                                },
+                                label: {
+                                  type: 'string',
+                                },
+                                validation: {
+                                  type: 'object',
+                                  properties: {
+                                    required: {
+                                      type: 'object',
+                                      required: ['value'],
+                                      properties: {
+                                        value: {
+                                          type: 'boolean',
+                                        },
+                                        message: {
+                                          type: ['string', 'null'],
+                                          description:
+                                            'Error shown when a required question is left empty. Required when `value` is `true`.',
+                                        },
+                                      },
+                                    },
+                                  },
+                                },
+                              },
+                            },
+                          },
+                        },
+                        {
+                          type: 'object',
+                          description: 'Multiple-choice survey question.',
+                          required: ['uuid', 'type', 'meta'],
+                          properties: {
+                            uuid: {
+                              type: 'string',
+                            },
+                            type: {
+                              type: 'string',
+                              const: 'survey_list',
+                            },
+                            meta: {
+                              type: 'object',
+                              required: ['options', 'listType', 'displayType'],
+                              properties: {
+                                options: {
+                                  type: 'array',
+                                  items: {
+                                    type: 'string',
+                                  },
+                                },
+                                listType: {
+                                  type: 'string',
+                                  enum: ['single', 'multiple'],
+                                },
+                                displayType: {
+                                  type: 'string',
+                                  enum: ['list', 'dropdown', 'grid'],
+                                },
+                                isOrderRandom: {
+                                  type: 'boolean',
+                                },
+                                otherOption: {
+                                  type: 'object',
+                                  required: [
+                                    'enabled',
+                                    'label',
+                                    'placeholderLabel',
+                                  ],
+                                  properties: {
+                                    enabled: {
+                                      type: 'boolean',
+                                    },
+                                    label: {
+                                      type: 'string',
+                                    },
+                                    placeholderLabel: {
+                                      type: 'string',
+                                    },
+                                  },
+                                },
+                                label: {
+                                  type: 'string',
+                                },
+                                validation: {
+                                  type: 'object',
+                                  properties: {
+                                    required: {
+                                      type: 'object',
+                                      required: ['value'],
+                                      properties: {
+                                        value: {
+                                          type: 'boolean',
+                                        },
+                                        message: {
+                                          type: ['string', 'null'],
+                                          description:
+                                            'Error shown when a required question is left empty. Required when `value` is `true`.',
+                                        },
+                                      },
+                                    },
+                                  },
+                                },
+                              },
+                            },
+                          },
+                        },
+                        {
+                          type: 'object',
+                          description: 'Rating survey question.',
+                          required: ['uuid', 'type', 'meta'],
+                          properties: {
+                            uuid: {
+                              type: 'string',
+                            },
+                            type: {
+                              type: 'string',
+                              const: 'survey_rating',
+                            },
+                            meta: {
+                              type: 'object',
+                              required: [
+                                'type',
+                                'options',
+                                'lowerLabel',
+                                'upperLabel',
+                              ],
+                              properties: {
+                                type: {
+                                  type: 'string',
+                                  description: '`nps` is a 0–10 scale.',
+                                  enum: ['stars', 'numbers', 'emojis', 'nps'],
+                                },
+                                options: {
+                                  type: 'integer',
+                                  description:
+                                    'Number of choices on the scale.',
+                                },
+                                emojis: {
+                                  type: 'array',
+                                  description:
+                                    'One emoji per option. Required when `type` is `emojis`.',
+                                  items: {
+                                    type: 'string',
+                                  },
+                                },
+                                lowerLabel: {
+                                  type: 'string',
+                                },
+                                upperLabel: {
+                                  type: 'string',
+                                },
+                                label: {
+                                  type: 'string',
+                                },
+                                validation: {
+                                  type: 'object',
+                                  properties: {
+                                    required: {
+                                      type: 'object',
+                                      required: ['value'],
+                                      properties: {
+                                        value: {
+                                          type: 'boolean',
+                                        },
+                                        message: {
+                                          type: ['string', 'null'],
+                                          description:
+                                            'Error shown when a required question is left empty. Required when `value` is `true`.',
+                                        },
+                                      },
+                                    },
+                                  },
+                                },
+                              },
+                            },
+                          },
+                        },
+                        {
+                          type: 'object',
+                          description:
+                            'Not shown to the user. Adds a value to each survey response.',
+                          required: ['uuid', 'type', 'meta'],
+                          properties: {
+                            uuid: {
+                              type: 'string',
+                            },
+                            type: {
+                              type: 'string',
+                              const: 'survey_hidden',
+                            },
+                            meta: {
+                              type: 'object',
+                              required: ['label', 'source'],
+                              properties: {
+                                label: {
+                                  type: 'string',
+                                },
+                                source: {
+                                  type: 'object',
+                                  required: ['type'],
+                                  properties: {
+                                    type: {
+                                      type: 'string',
+                                      enum: ['static', 'event_property'],
+                                    },
+                                    value: {
+                                      type: 'string',
+                                      description:
+                                        'The value to record. Used when `type` is `static`.',
+                                    },
+                                    property: {
+                                      type: 'string',
+                                      description:
+                                        'Property of the event that triggered the survey. Used when `type` is `event_property`.',
+                                    },
+                                  },
+                                },
+                              },
+                            },
+                          },
+                        },
+                      ],
+                    },
                   },
                   sort_key: {
                     type: ['integer', 'null'],
@@ -3712,6 +5060,8 @@ export const CLI_OPERATIONS = [
     path: '/v1/projects/{project_id}/surveys/{survey_id}',
     requiredScopes: ['surveys:write'],
     summary: 'Archive survey',
+    description:
+      "Archives an unpublished survey. A survey counts as published while its flag\nis enabled, unless it's only in test mode without a schedule; archiving a\npublished survey returns `409` with `error_code: cannot_archive_published`.\nUnpublish it in Amplitude first. Use `dry_run=true` to check whether a\nsurvey can be archived. An already archived survey returns `404`, like `GET`.\n",
     successStatus: 204,
     parameters: [
       {
@@ -3746,7 +5096,7 @@ export const CLI_OPERATIONS = [
         aliases: ['idempotency-key'],
         type: 'string',
         description:
-          'Unique idempotency key used to safely retry write operations.',
+          "Required on write operations. Keys aren't stored yet, so retrying a write\nwith the same key performs it again; a retried create makes another\nresource. Check whether the first attempt succeeded before you retry.\n",
       },
     ],
     body: [],
@@ -3796,6 +5146,8 @@ export const CLI_OPERATIONS = [
     path: '/v1/projects/{project_id}/surveys/{survey_id}',
     requiredScopes: ['surveys:write'],
     summary: 'Update survey',
+    description:
+      'Updates metadata, targeting, and content variants. For published surveys,\nchanges apply to a draft until publish in the UI. `latest_version` is\nrequired and must match the current draft, otherwise the update returns\n`409`. The check runs before the write rather than atomically with it, so it\nreduces but does not fully prevent lost updates from concurrent writers.\nPublish, schedule, and test instrumentation are not\navailable via API in v1. Status fields on the response are derived read-only.\nWhen `variants` is sent, it must list every existing variant by `id` with\nits unchanged `variant` key; steps within a variant can be added, edited,\nreordered, or removed. `tags` is not writable in v1 and returns `400`.\n',
     successStatus: 200,
     parameters: [
       {
@@ -3822,7 +5174,7 @@ export const CLI_OPERATIONS = [
         aliases: ['idempotency-key'],
         type: 'string',
         description:
-          'Unique idempotency key used to safely retry write operations.',
+          "Required on write operations. Keys aren't stored yet, so retrying a write\nwith the same key performs it again; a retried create makes another\nresource. Check whether the first attempt succeeded before you retry.\n",
       },
     ],
     body: [
@@ -4036,8 +5388,419 @@ export const CLI_OPERATIONS = [
                     },
                   },
                   content: {
+                    type: 'array',
                     description:
-                      'Step body content (structure varies by form factor).',
+                      "The step body: content blocks rendered top to bottom, below the step\n`title`. `meta` keys are camelCase. Give each new block a unique `uuid`\n(a v4 UUID) and keep the existing `uuid` when you edit a block, because\nsurvey responses are keyed by it. To change one block, send the step's\nwhole `content` array back with that block edited.\n",
+                    items: {
+                      description:
+                        'One content block. `type` selects the block and the shape of `meta`.',
+                      oneOf: [
+                        {
+                          type: 'object',
+                          description: 'Body text.',
+                          required: ['uuid', 'type', 'meta'],
+                          properties: {
+                            uuid: {
+                              type: 'string',
+                            },
+                            type: {
+                              type: 'string',
+                              const: 'markdown',
+                            },
+                            meta: {
+                              type: 'object',
+                              required: ['value'],
+                              properties: {
+                                value: {
+                                  type: 'string',
+                                  description:
+                                    'Markdown text. Inline HTML is allowed and is sanitized on save.',
+                                },
+                                alignment: {
+                                  type: 'string',
+                                  enum: ['start', 'center', 'end'],
+                                },
+                              },
+                            },
+                          },
+                        },
+                        {
+                          type: 'object',
+                          required: ['uuid', 'type', 'meta'],
+                          properties: {
+                            uuid: {
+                              type: 'string',
+                            },
+                            type: {
+                              type: 'string',
+                              const: 'image',
+                            },
+                            meta: {
+                              type: 'object',
+                              required: ['src', 'filename', 'size'],
+                              properties: {
+                                src: {
+                                  type: 'string',
+                                  description: 'Image URL.',
+                                },
+                                filename: {
+                                  type: 'string',
+                                },
+                                size: {
+                                  type: 'string',
+                                },
+                                altText: {
+                                  type: 'string',
+                                },
+                                style: {
+                                  type: 'object',
+                                  properties: {
+                                    scale: {
+                                      type: 'string',
+                                    },
+                                    radius: {
+                                      type: 'string',
+                                    },
+                                    fit: {
+                                      type: 'string',
+                                      enum: ['cover', 'contain'],
+                                    },
+                                    height: {
+                                      type: 'string',
+                                    },
+                                  },
+                                },
+                                action: {
+                                  type: 'object',
+                                  description:
+                                    'Optional `link` action opened when the image is clicked.',
+                                },
+                              },
+                            },
+                          },
+                        },
+                        {
+                          type: 'object',
+                          required: ['uuid', 'type', 'meta'],
+                          properties: {
+                            uuid: {
+                              type: 'string',
+                            },
+                            type: {
+                              type: 'string',
+                              const: 'video',
+                            },
+                            meta: {
+                              type: 'object',
+                              required: ['type', 'src'],
+                              properties: {
+                                type: {
+                                  type: 'string',
+                                  const: 'url',
+                                },
+                                src: {
+                                  type: 'string',
+                                  description:
+                                    'Video URL, for example a YouTube, Vimeo or Loom link.',
+                                },
+                                style: {
+                                  type: 'object',
+                                  properties: {
+                                    radius: {
+                                      type: 'string',
+                                    },
+                                  },
+                                },
+                              },
+                            },
+                          },
+                        },
+                        {
+                          type: 'object',
+                          required: ['uuid', 'type', 'meta'],
+                          properties: {
+                            uuid: {
+                              type: 'string',
+                            },
+                            type: {
+                              type: 'string',
+                              const: 'button',
+                            },
+                            meta: {
+                              type: 'object',
+                              properties: {
+                                label: {
+                                  type: 'string',
+                                },
+                                buttonType: {
+                                  type: 'string',
+                                  enum: ['primary', 'secondary', 'snooze'],
+                                },
+                                action: {
+                                  type: 'object',
+                                  required: ['type'],
+                                  properties: {
+                                    type: {
+                                      type: 'string',
+                                      description:
+                                        'Common actions:\n- `step_forward`, `step_back`: go to the next or previous step.\n- `complete`: finish the guide or survey.\n- `dismiss`: close it.\n- `snooze`: hide it for a while, with optional `interval` (`hour`, `day`, `week`) and `value`.\n- `go_to_step`: jump to the step whose id is in `value`.\n- `link`: open the URL in `value`; `operation` is `self` (same tab), `blank` (new tab) or `router`.\n- `nudge`: start the guide or survey whose id is in `value`.\n- `no_action`: do nothing.\n\nButtons built in the dashboard can use other action types. Send those\nback unchanged.\n',
+                                    },
+                                  },
+                                },
+                                actions: {
+                                  type: 'object',
+                                  description:
+                                    'Optional action sequence the dashboard writes for buttons with side\neffects: `{type: "action_sequence", navigation: <action>, effects: [<action>]}`.\nWhen present, the SDK runs it instead of `action`, so update both or\nneither.\n',
+                                },
+                              },
+                            },
+                          },
+                        },
+                        {
+                          type: 'object',
+                          description:
+                            'Free-text survey question. Put the question itself in a `markdown` block or the step `title`.',
+                          required: ['uuid', 'type', 'meta'],
+                          properties: {
+                            uuid: {
+                              type: 'string',
+                            },
+                            type: {
+                              type: 'string',
+                              description:
+                                '`survey_text` is a multi-line answer; `survey_text_short` is a single line.',
+                              enum: ['survey_text', 'survey_text_short'],
+                            },
+                            meta: {
+                              type: 'object',
+                              required: ['prompt'],
+                              properties: {
+                                prompt: {
+                                  type: 'string',
+                                  description:
+                                    'Placeholder shown in the empty answer field.',
+                                },
+                                label: {
+                                  type: 'string',
+                                },
+                                validation: {
+                                  type: 'object',
+                                  properties: {
+                                    required: {
+                                      type: 'object',
+                                      required: ['value'],
+                                      properties: {
+                                        value: {
+                                          type: 'boolean',
+                                        },
+                                        message: {
+                                          type: ['string', 'null'],
+                                          description:
+                                            'Error shown when a required question is left empty. Required when `value` is `true`.',
+                                        },
+                                      },
+                                    },
+                                  },
+                                },
+                              },
+                            },
+                          },
+                        },
+                        {
+                          type: 'object',
+                          description: 'Multiple-choice survey question.',
+                          required: ['uuid', 'type', 'meta'],
+                          properties: {
+                            uuid: {
+                              type: 'string',
+                            },
+                            type: {
+                              type: 'string',
+                              const: 'survey_list',
+                            },
+                            meta: {
+                              type: 'object',
+                              required: ['options', 'listType', 'displayType'],
+                              properties: {
+                                options: {
+                                  type: 'array',
+                                  items: {
+                                    type: 'string',
+                                  },
+                                },
+                                listType: {
+                                  type: 'string',
+                                  enum: ['single', 'multiple'],
+                                },
+                                displayType: {
+                                  type: 'string',
+                                  enum: ['list', 'dropdown', 'grid'],
+                                },
+                                isOrderRandom: {
+                                  type: 'boolean',
+                                },
+                                otherOption: {
+                                  type: 'object',
+                                  required: [
+                                    'enabled',
+                                    'label',
+                                    'placeholderLabel',
+                                  ],
+                                  properties: {
+                                    enabled: {
+                                      type: 'boolean',
+                                    },
+                                    label: {
+                                      type: 'string',
+                                    },
+                                    placeholderLabel: {
+                                      type: 'string',
+                                    },
+                                  },
+                                },
+                                label: {
+                                  type: 'string',
+                                },
+                                validation: {
+                                  type: 'object',
+                                  properties: {
+                                    required: {
+                                      type: 'object',
+                                      required: ['value'],
+                                      properties: {
+                                        value: {
+                                          type: 'boolean',
+                                        },
+                                        message: {
+                                          type: ['string', 'null'],
+                                          description:
+                                            'Error shown when a required question is left empty. Required when `value` is `true`.',
+                                        },
+                                      },
+                                    },
+                                  },
+                                },
+                              },
+                            },
+                          },
+                        },
+                        {
+                          type: 'object',
+                          description: 'Rating survey question.',
+                          required: ['uuid', 'type', 'meta'],
+                          properties: {
+                            uuid: {
+                              type: 'string',
+                            },
+                            type: {
+                              type: 'string',
+                              const: 'survey_rating',
+                            },
+                            meta: {
+                              type: 'object',
+                              required: [
+                                'type',
+                                'options',
+                                'lowerLabel',
+                                'upperLabel',
+                              ],
+                              properties: {
+                                type: {
+                                  type: 'string',
+                                  description: '`nps` is a 0–10 scale.',
+                                  enum: ['stars', 'numbers', 'emojis', 'nps'],
+                                },
+                                options: {
+                                  type: 'integer',
+                                  description:
+                                    'Number of choices on the scale.',
+                                },
+                                emojis: {
+                                  type: 'array',
+                                  description:
+                                    'One emoji per option. Required when `type` is `emojis`.',
+                                  items: {
+                                    type: 'string',
+                                  },
+                                },
+                                lowerLabel: {
+                                  type: 'string',
+                                },
+                                upperLabel: {
+                                  type: 'string',
+                                },
+                                label: {
+                                  type: 'string',
+                                },
+                                validation: {
+                                  type: 'object',
+                                  properties: {
+                                    required: {
+                                      type: 'object',
+                                      required: ['value'],
+                                      properties: {
+                                        value: {
+                                          type: 'boolean',
+                                        },
+                                        message: {
+                                          type: ['string', 'null'],
+                                          description:
+                                            'Error shown when a required question is left empty. Required when `value` is `true`.',
+                                        },
+                                      },
+                                    },
+                                  },
+                                },
+                              },
+                            },
+                          },
+                        },
+                        {
+                          type: 'object',
+                          description:
+                            'Not shown to the user. Adds a value to each survey response.',
+                          required: ['uuid', 'type', 'meta'],
+                          properties: {
+                            uuid: {
+                              type: 'string',
+                            },
+                            type: {
+                              type: 'string',
+                              const: 'survey_hidden',
+                            },
+                            meta: {
+                              type: 'object',
+                              required: ['label', 'source'],
+                              properties: {
+                                label: {
+                                  type: 'string',
+                                },
+                                source: {
+                                  type: 'object',
+                                  required: ['type'],
+                                  properties: {
+                                    type: {
+                                      type: 'string',
+                                      enum: ['static', 'event_property'],
+                                    },
+                                    value: {
+                                      type: 'string',
+                                      description:
+                                        'The value to record. Used when `type` is `static`.',
+                                    },
+                                    property: {
+                                      type: 'string',
+                                      description:
+                                        'Property of the event that triggered the survey. Used when `type` is `event_property`.',
+                                    },
+                                  },
+                                },
+                              },
+                            },
+                          },
+                        },
+                      ],
+                    },
                   },
                   sort_key: {
                     type: ['integer', 'null'],
@@ -4056,6 +5819,225 @@ export const CLI_OPERATIONS = [
         nullable: false,
         description:
           'Expected `latest_version` from the last GET with\n`include_unpublished_changes=true`.\n',
+      },
+    ],
+  },
+  {
+    command: ['themes', 'list'],
+    method: 'GET',
+    operationId: 'listThemes',
+    path: '/v1/projects/{project_id}/themes',
+    requiredScopes: ['guides:read', 'surveys:read'],
+    summary: 'List themes',
+    description:
+      "Returns the guides and surveys themes in the project, newest first.\nResults use the standard Developer API list envelope with cursor\npagination (`cursor`, `limit`). List items omit `config`; get a theme\nby id to read it.\n\nInternal themes (per-guide or per-survey overrides) are not listed. Read\nthem by id through a guide or survey's `theme_id`. Assistant themes are\nnot part of this API.\n",
+    successStatus: 200,
+    parameters: [
+      {
+        name: 'project_id',
+        in: 'path',
+        required: true,
+        aliases: ['project', 'project-id', 'project_id'],
+        type: 'string',
+        description:
+          'Amplitude project identifier, backed by the canonical app ID.',
+      },
+      {
+        name: 'cursor',
+        in: 'query',
+        required: false,
+        aliases: ['cursor', 'next-cursor', 'next_cursor'],
+        type: 'string',
+        description:
+          'Opaque cursor from `pagination.next_cursor` on the previous response.\nNumeric offsets are capped by the underlying search index (10,000 results\nper query). Well-formed pagination stops before that window; requests whose\ncursor would exceed it return 400 `pagination_not_supported`.\n',
+      },
+      {
+        name: 'limit',
+        in: 'query',
+        required: false,
+        aliases: ['limit'],
+        type: 'integer',
+        description: 'Number of items to return. Defaults to 50, max 200.',
+      },
+      {
+        name: 'platform',
+        in: 'query',
+        required: false,
+        aliases: ['platform'],
+        type: 'string',
+      },
+      {
+        name: 'include_archived',
+        in: 'query',
+        required: false,
+        aliases: ['include-archived', 'include_archived'],
+        type: 'boolean',
+      },
+    ],
+    body: [],
+  },
+  {
+    command: ['themes', 'create'],
+    method: 'POST',
+    operationId: 'createTheme',
+    path: '/v1/projects/{project_id}/themes',
+    requiredScopes: ['guides:write', 'surveys:write'],
+    summary: 'Create theme',
+    description:
+      "Creates a guides and surveys theme. Both the live theme and the draft\nstart as Amplitude's built-in default theme, and `config` is merged into\nthe draft (see `ThemeConfigPatch`), so you only send the values you want\nto change. Nothing changes for users until the draft is published in\nAmplitude. The response carries the draft `config`.\n\nThe new theme isn't the default unless the platform has no default theme\nand you can publish theme changes, in which case Amplitude makes it the\ndefault, as it does in the theme editor. A `platform` that isn't enabled\nfor the project returns `400`. Publishing, archiving, and changing the\ndefault theme are not available via API.\n",
+    successStatus: 201,
+    parameters: [
+      {
+        name: 'project_id',
+        in: 'path',
+        required: true,
+        aliases: ['project', 'project-id', 'project_id'],
+        type: 'string',
+        description:
+          'Amplitude project identifier, backed by the canonical app ID.',
+      },
+      {
+        name: 'Idempotency-Key',
+        in: 'header',
+        required: true,
+        aliases: ['idempotency-key'],
+        type: 'string',
+        description:
+          "Required on write operations. Keys aren't stored yet, so retrying a write\nwith the same key performs it again; a retried create makes another\nresource. Check whether the first attempt succeeded before you retry.\n",
+      },
+    ],
+    body: [
+      {
+        name: 'name',
+        required: true,
+        aliases: ['name'],
+        type: 'string',
+        nullable: false,
+      },
+      {
+        name: 'platform',
+        required: false,
+        aliases: ['platform'],
+        type: 'string',
+        nullable: false,
+        enum: ['web', 'ios', 'android', 'react-native', 'desktop', 'flutter'],
+        description:
+          'Target platform. Guides and surveys without an explicit platform are\nreturned as `web`.\n',
+      },
+      {
+        name: 'config',
+        required: false,
+        aliases: ['config'],
+        type: 'object',
+        nullable: false,
+        description:
+          "Partial `ThemeConfig`, merged like a JSON merge patch (RFC 7396): objects\nmerge key by key, and any other value replaces what's there. Unlike RFC\n7396, `null` resets a value to Amplitude's built-in default theme, or\nremoves it where the default has none (for example a component override\nor `customCss`). That works at any level, from one variable up to a whole\nmode.\n",
+      },
+    ],
+  },
+  {
+    command: ['themes', 'get'],
+    method: 'GET',
+    operationId: 'getTheme',
+    path: '/v1/projects/{project_id}/themes/{theme_id}',
+    requiredScopes: ['guides:read', 'surveys:read'],
+    summary: 'Get theme',
+    description:
+      'Returns a guides and surveys theme. `config` is the live theme by default.\nArchived themes return `404`.\n',
+    successStatus: 200,
+    parameters: [
+      {
+        name: 'project_id',
+        in: 'path',
+        required: true,
+        aliases: ['project', 'project-id', 'project_id'],
+        type: 'string',
+        description:
+          'Amplitude project identifier, backed by the canonical app ID.',
+      },
+      {
+        name: 'theme_id',
+        in: 'path',
+        required: true,
+        aliases: ['theme', 'theme-id', 'theme_id'],
+        type: 'string',
+        description: 'Guides and surveys theme identifier.',
+      },
+      {
+        name: 'include_unpublished_changes',
+        in: 'query',
+        required: false,
+        aliases: ['include-unpublished-changes', 'include_unpublished_changes'],
+        type: 'boolean',
+        description:
+          'When true, `config` is the unpublished draft instead of the live\ntheme. Use `has_unpublished_changes` to check whether a draft differs.\n',
+      },
+    ],
+    body: [],
+  },
+  {
+    command: ['themes', 'update'],
+    method: 'PATCH',
+    operationId: 'updateTheme',
+    path: '/v1/projects/{project_id}/themes/{theme_id}',
+    requiredScopes: ['guides:write', 'surveys:write'],
+    summary: 'Update theme',
+    description:
+      "Renames a theme or changes its draft. `config` is merged into the current\ndraft (see `ThemeConfigPatch`): send only the values you want to change,\nand `null` to reset a value to Amplitude's built-in default. The live theme\nis not changed; publish the draft in Amplitude. The response carries the\nfull draft `config`.\n\nTo make sure nobody changed the theme since you read it, send the\n`updated_at` from your last read; if the theme has changed since, the\nupdate returns `409` and nothing is written. Omit `updated_at` to skip the\ncheck: concurrent patches then both apply, and a later one wins for any\nvalue both set. The check runs before the write rather than atomically\nwith it, so it narrows but does not close that window. Internal themes\nreturn `409` with\n`error_code: theme_is_internal`; edit them on their guide or survey in\nAmplitude.\n",
+    successStatus: 200,
+    parameters: [
+      {
+        name: 'project_id',
+        in: 'path',
+        required: true,
+        aliases: ['project', 'project-id', 'project_id'],
+        type: 'string',
+        description:
+          'Amplitude project identifier, backed by the canonical app ID.',
+      },
+      {
+        name: 'theme_id',
+        in: 'path',
+        required: true,
+        aliases: ['theme', 'theme-id', 'theme_id'],
+        type: 'string',
+        description: 'Guides and surveys theme identifier.',
+      },
+      {
+        name: 'Idempotency-Key',
+        in: 'header',
+        required: true,
+        aliases: ['idempotency-key'],
+        type: 'string',
+        description:
+          "Required on write operations. Keys aren't stored yet, so retrying a write\nwith the same key performs it again; a retried create makes another\nresource. Check whether the first attempt succeeded before you retry.\n",
+      },
+    ],
+    body: [
+      {
+        name: 'name',
+        required: false,
+        aliases: ['name'],
+        type: 'string',
+        nullable: false,
+      },
+      {
+        name: 'config',
+        required: false,
+        aliases: ['config'],
+        type: 'object',
+        nullable: false,
+        description:
+          "Partial `ThemeConfig`, merged like a JSON merge patch (RFC 7396): objects\nmerge key by key, and any other value replaces what's there. Unlike RFC\n7396, `null` resets a value to Amplitude's built-in default theme, or\nremoves it where the default has none (for example a component override\nor `customCss`). That works at any level, from one variable up to a whole\nmode.\n",
+      },
+      {
+        name: 'updated_at',
+        required: false,
+        aliases: ['updated-at', 'updated_at'],
+        type: 'string',
+        nullable: false,
+        description:
+          'Optional. The `updated_at` from your last read of this theme;\nthe update returns `409` if the theme has changed since.\n',
       },
     ],
   },
@@ -4081,7 +6063,7 @@ export const CLI_OPERATIONS = [
         name: 'cursor',
         in: 'query',
         required: false,
-        aliases: ['cursor'],
+        aliases: ['cursor', 'next-cursor', 'next_cursor'],
         type: 'string',
         description:
           'Opaque cursor from `pagination.next_cursor` on the previous response.\nNumeric offsets are capped by the underlying search index (10,000 results\nper query). Well-formed pagination stops before that window; requests whose\ncursor would exceed it return 400 `pagination_not_supported`.\n',
@@ -4137,6 +6119,8 @@ export const CLI_OPERATIONS = [
     path: '/v1/projects/{project_id}/destinations',
     requiredScopes: ['destinations:write'],
     summary: 'Create a destination',
+    description:
+      'Always creates a new destination; the server assigns the `id` used for\nevery subsequent lookup. `display_name` is not an identity key, so\nrepeating a create makes another destination. When `dry_run=true`, returns\na plan envelope without mutating. SECRET/OAUTH config values are\nwrite-only.\n',
     successStatus: 200,
     parameters: [
       {
@@ -4415,6 +6399,8 @@ export const CLI_OPERATIONS = [
     path: '/v1/projects/{project_id}/snowflake-keys',
     requiredScopes: ['destinations:write'],
     summary: 'Generate an RSA key pair for Snowflake authentication',
+    description:
+      'Generates a Snowflake-compatible RSA key pair. The private key is stored\nserver-side in an ephemeral cache; you receive the public key (paste into\nyour Snowflake user via `ALTER USER <user> SET RSA_PUBLIC_KEY = \'...\'`) and\nan ephemeral ID to pass as `snowflake_private_key_ephemeral_id` in the\ndestination `config` on a subsequent `POST /destinations` for a Snowflake\ndirect-load destination.\n\nThis is the CLI equivalent of the "Generate RSA Key" step in the Amplitude\nUI wizard, so customers do not have to run `openssl genrsa` and manage\nprivate keys locally.\n',
     successStatus: 201,
     parameters: [
       {
@@ -4433,7 +6419,7 @@ export const CLI_OPERATIONS = [
         aliases: ['idempotency-key'],
         type: 'string',
         description:
-          'Unique idempotency key used to safely retry write operations.',
+          "Required on write operations. Keys aren't stored yet, so retrying a write\nwith the same key performs it again; a retried create makes another\nresource. Check whether the first attempt succeeded before you retry.\n",
       },
     ],
     body: [],

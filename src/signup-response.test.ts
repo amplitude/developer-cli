@@ -3,10 +3,12 @@ import { join } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
+import { formatErrorEnvelope, formatErrorText } from './cli-error';
 import {
   formatSignupText,
   SIGNUP_DOCUMENT_URLS,
   signupErrorFromResponse,
+  signupLoginCommand,
   signupMissingInformationError,
   signupPollContinuation,
   signupRequestSchema,
@@ -130,6 +132,27 @@ describe('signup response contract', () => {
     expect(error.hint).toBeUndefined();
   });
 
+  it('renders a server signup error without terminal controls', () => {
+    const message = 'Update\u001b[31m this client\u0007';
+    const error = signupErrorFromResponse(400, 'Bad Request', {
+      type: 'error',
+      error: {
+        code: 'terms_documents_outdated',
+        message,
+      },
+    });
+
+    expect(error.message).toBe(message);
+    const text = formatErrorText(error);
+    expect(text).toBe('Update^[[31m this client^G');
+    expect(text.includes('\u001b')).toBe(false);
+    expect(text.includes('\u0007')).toBe(false);
+
+    expect(JSON.parse(formatErrorEnvelope(error, false))).toMatchObject({
+      message,
+    });
+  });
+
   it.each([
     'secret-access',
     { access_token: 'secret-access' },
@@ -167,6 +190,30 @@ describe('signup response contract', () => {
     ]);
     expect(continuation.command).toBe(
       "amp auth login poll --profile 'team $(command) '\\''quoted'\\''' --json",
+    );
+  });
+
+  it('preserves a custom login target and safely quotes the profile', () => {
+    expect(
+      signupLoginCommand(
+        "team $(command) 'quoted'",
+        'http://localhost:3036',
+        false,
+      ),
+    ).toBe(
+      "amp auth login --profile 'team $(command) '\\''quoted'\\''' --base-url 'http://localhost:3036'",
+    );
+  });
+
+  it('safely quotes a custom target and retains an authorized retarget', () => {
+    expect(
+      signupLoginCommand(
+        'default',
+        "https://api.example.test?value='quoted'",
+        true,
+      ),
+    ).toBe(
+      "amp auth login --profile 'default' --base-url 'https://api.example.test?value='\\''quoted'\\''' --force",
     );
   });
 

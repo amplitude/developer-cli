@@ -3,6 +3,21 @@ import { describe, expect, it } from 'vitest';
 import { asProblem, hintForErrorCode } from './errors';
 
 describe('asProblem', () => {
+  it('rejects invalid retryability instead of interpreting a string as a boolean', () => {
+    expect(
+      asProblem({ error_code: 'upstream_error', retryable: 'false' }),
+    ).toBeUndefined();
+  });
+
+  it('accepts future error codes while validating documented fields', () => {
+    expect(
+      asProblem({ error_code: 'future_error', retryable: false }),
+    ).toMatchObject({
+      error_code: 'future_error',
+      retryable: false,
+    });
+  });
+
   it('recognizes an RFC 7807 problem body', () => {
     const problem = asProblem({
       title: 'Insufficient scope',

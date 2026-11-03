@@ -186,7 +186,7 @@ export function printGlobalHelp(): void {
   console.log(`amp ${CLI_VERSION} — Amplitude Developer API CLI
 
 Usage:
-  amp auth signup --non-interactive   Sign up for an Amplitude account
+  amp auth signup                     Sign up for an Amplitude account
   amp auth login --region <us|eu>      Authenticate and save a profile
   amp auth <status|list|use|token>     Inspect, switch, or print credentials
   amp logout [--profile <name>|--all]  Remove a profile (or all)
@@ -228,7 +228,7 @@ export function authHelpText(): string {
     'Authenticate and manage saved credential profiles.',
     '',
     'Usage:',
-    '  amp auth signup --non-interactive          Sign up for an Amplitude account',
+    '  amp auth signup                            Sign up for an Amplitude account',
     '  amp auth login --region <us|eu>             Device flow → save + activate a profile',
     '  amp auth login                              Re-authenticate the active profile',
     '  amp auth pat --with-token --region <us|eu>  Save a supplied PAT (stdin/prompt)',

@@ -1,13 +1,15 @@
 import { mkdtempSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { PassThrough } from 'node:stream';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { type FlagValue } from './args';
 import { runAuthLoginPoll } from './auth-commands';
 import { type AuthSignupDeps, runAuthSignup } from './auth-signup';
-import { type AnonymousRequest } from './authToken';
+import { type AnonymousRequest, createAnonymousRequest } from './authToken';
+import { transportError } from './cli-error';
 import { ENV_BASE_URLS } from './config';
 import {
   emptyStore,
@@ -26,6 +28,10 @@ import {
   setPending,
 } from './pending-store';
 import { SIGNUP_DOCUMENT_URLS } from './signup-response';
+
+vi.mock('./client-identity', () => ({
+  deviceIdHeader: () => ({ 'Amp-Device-Id': 'test-device' }),
+}));
 
 const NOW = Date.parse('2026-09-30T12:00:00.000Z');
 const token = {
@@ -76,8 +82,11 @@ describe('auth signup', () => {
       body: { type: 'credentials', credentials: token },
     }));
     process.exitCode = 0;
+    vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
   });
   afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
     rmSync(dir, { recursive: true, force: true });
     process.exitCode = originalExit;
   });
@@ -155,18 +164,715 @@ describe('auth signup', () => {
   });
 
   it.each([undefined, false, 'false'])(
-    'requires explicit noninteractive mode: %s',
+    'allows signup without an explicit mode: %s',
     async (mode) => {
       const input: Record<string, FlagValue> = { ...flags, json: true };
       if (mode === undefined) delete input['non-interactive'];
       else input['non-interactive'] = mode;
       const result = await runAuthSignup(input, deps());
-      expect(result.ok).toBe(false);
-      if (!result.ok) expect(result.error.exitCode).toBe(2);
-      expect(request).not.toHaveBeenCalled();
-      expect(loadStore(path)).toEqual(emptyStore());
+      expect(result.ok && result.output.status).toBe('authorized');
+      expect(loadStore(path).profiles.default.credential).toMatchObject({
+        access_token: 'secret-access',
+      });
     },
   );
+
+  it.each([false, true])(
+    'completes the original challenge with login browser UI at a terminal (json=%s)',
+    async (json) => {
+      const before = seedProfile();
+      const stdin = Object.assign(new PassThrough(), { isTTY: true });
+      const stderr: string[] = [];
+      const spinnerFrames: string[] = [];
+      const opened: string[] = [];
+      const stderrIsTTY = process.stderr.isTTY;
+      process.stderr.isTTY = true;
+      const spinner = vi
+        .spyOn(process.stderr, 'write')
+        .mockImplementation((chunk) => {
+          spinnerFrames.push(chunk.toString());
+          return true;
+        });
+      let polls = 0;
+      request.mockImplementation(async (_method, endpoint) => {
+        if (endpoint === '/v1/auth/signup') {
+          return { status: 200, body: deviceResponse(5) };
+        }
+        expect(endpoint).toBe('/v1/auth/token');
+        expect(loadStore(path)).toEqual(before);
+        expect(
+          getPending(loadPending(pendingPath), 'active')?.device_code,
+        ).toBe('secret-device');
+        polls += 1;
+        return polls === 1
+          ? { status: 400, body: { error: 'authorization_pending' } }
+          : { status: 200, body: token };
+      });
+      try {
+        const result = await runAuthSignup(
+          { ...flags, 'non-interactive': false, json },
+          deps({
+            isInteractive: true,
+            stdin,
+            stderr: (line) => stderr.push(line),
+            openUrl: async (url) => {
+              opened.push(url);
+            },
+            sleep: async () => {
+              stdin.write('\n');
+              await new Promise<void>((resolve) => setImmediate(resolve));
+            },
+          }),
+        );
+        expect(result.ok && result.output.status).toBe('authorized');
+        expect(JSON.stringify(result)).not.toContain('secret-');
+      } finally {
+        process.stderr.isTTY = stderrIsTTY;
+        spinner.mockRestore();
+        stdin.destroy();
+      }
+      expect(request).toHaveBeenCalledTimes(3);
+      expect(request).toHaveBeenLastCalledWith('POST', '/v1/auth/token', {
+        grant_type: 'urn:ietf:params:oauth:grant-type:device_code',
+        device_code: 'secret-device',
+      });
+      expect(stderr.join('\n')).toContain('To authorize, confirm this code:');
+      expect(stderr.join('\n')).toContain('ABCD-EFGH');
+      expect(stderr.join('\n')).toContain('Press Enter to open');
+      expect(spinnerFrames.join('')).toContain('Waiting for confirmation');
+      expect(stderr.join('\n')).not.toContain('secret-');
+      expect(opened).toEqual([
+        'https://auth.example.com/device?user_code=ABCD-EFGH',
+      ]);
+      expect(loadStore(path).profiles.active.credential).toMatchObject({
+        access_token: 'secret-access',
+      });
+      expect(getPending(loadPending(pendingPath), 'active')).toBeUndefined();
+      expect(stdin.listenerCount('data')).toBe(0);
+    },
+  );
+
+  it.each([
+    { isInteractive: true, nonInteractive: true },
+    { isInteractive: false, nonInteractive: false },
+  ])('returns the challenge without waiting: %j', async (mode) => {
+    request.mockResolvedValue({ status: 200, body: deviceResponse() });
+    const stderr = vi.fn<(line: string) => void>();
+    const result = await runAuthSignup(
+      { ...flags, 'non-interactive': mode.nonInteractive },
+      deps({ isInteractive: mode.isInteractive, stderr }),
+    );
+    expect(result.ok && result.output.status).toBe('requires_auth');
+    expect(request).toHaveBeenCalledTimes(1);
+    expect(stderr).not.toHaveBeenCalled();
+    expect(getPending(loadPending(pendingPath), 'default')?.device_code).toBe(
+      'secret-device',
+    );
+  });
+
+  it.each([
+    { stdinIsTTY: true, stdoutIsTTY: true, status: 'authorized' },
+    { stdinIsTTY: false, stdoutIsTTY: true, status: 'requires_auth' },
+    { stdinIsTTY: true, stdoutIsTTY: false, status: 'requires_auth' },
+    { stdinIsTTY: false, stdoutIsTTY: false, status: 'requires_auth' },
+  ])('detects whether browser authorization can wait: %j', async (terminal) => {
+    const stdinDescriptor = Object.getOwnPropertyDescriptor(
+      process.stdin,
+      'isTTY',
+    );
+    const stdoutDescriptor = Object.getOwnPropertyDescriptor(
+      process.stdout,
+      'isTTY',
+    );
+    Object.defineProperty(process.stdin, 'isTTY', {
+      value: terminal.stdinIsTTY,
+      configurable: true,
+    });
+    Object.defineProperty(process.stdout, 'isTTY', {
+      value: terminal.stdoutIsTTY,
+      configurable: true,
+    });
+    const stdin = Object.assign(new PassThrough(), { isTTY: false });
+    request.mockImplementation(async (_method, endpoint) => ({
+      status: 200,
+      body: endpoint === '/v1/auth/signup' ? deviceResponse() : token,
+    }));
+    try {
+      const result = await runAuthSignup(
+        { ...flags, 'non-interactive': false },
+        deps({ stdin, stderr: () => {} }),
+      );
+      expect(result.ok && result.output.status).toBe(terminal.status);
+    } finally {
+      if (stdinDescriptor)
+        Object.defineProperty(process.stdin, 'isTTY', stdinDescriptor);
+      else Reflect.deleteProperty(process.stdin, 'isTTY');
+      if (stdoutDescriptor)
+        Object.defineProperty(process.stdout, 'isTTY', stdoutDescriptor);
+      else Reflect.deleteProperty(process.stdout, 'isTTY');
+      stdin.destroy();
+    }
+  });
+
+  it('reports missing arguments at a terminal without collecting signup inputs', async () => {
+    const result = await runAuthSignup(
+      { region: 'us' },
+      deps({ isInteractive: true }),
+    );
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.exitCode).toBe(2);
+      expect(result.error.message).toContain('--email');
+    }
+    expect(request).not.toHaveBeenCalled();
+  });
+
+  it('returns server-required fields at a terminal without prompting or retrying', async () => {
+    request.mockResolvedValue({
+      status: 200,
+      body: {
+        type: 'needs_information',
+        needs_information: {
+          schema: { required: ['full_name', 'terms_acceptance'] },
+        },
+      },
+    });
+    const result = await runAuthSignup(
+      { email: 'new@example.com', region: 'us' },
+      deps({ isInteractive: true }),
+    );
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.exitCode).toBe(2);
+      expect(result.error.message).toContain('--full-name');
+      expect(result.error.message).toContain('--accept-tos');
+    }
+    expect(request).toHaveBeenCalledTimes(1);
+    expect(loadStore(path)).toEqual(emptyStore());
+  });
+
+  it('preserves the transport error contract and saved continuation during polling', async () => {
+    const before = seedProfile();
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn<typeof fetch>()
+        .mockResolvedValueOnce(
+          new Response(JSON.stringify(deviceResponse()), { status: 200 }),
+        )
+        .mockRejectedValue(new Error('ECONNRESET')),
+    );
+    const result = await runAuthSignup(
+      { ...flags, 'non-interactive': false },
+      deps({
+        request: createAnonymousRequest(ENV_BASE_URLS.prod),
+        isInteractive: true,
+        stderr: () => {},
+        sleep: async () => {},
+      }),
+    );
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toMatchObject({
+        errorCode: 'transport_error',
+        exitCode: 5,
+        hint: 'Check network connectivity and retry.',
+      });
+      expect(result.error.message).toContain('Could not reach the API');
+      expect(result.error.message).toContain(
+        "Continue with `amp auth login poll --profile 'active' --json`.",
+      );
+    }
+    expect(JSON.stringify(result)).not.toContain('secret-device');
+    expect(loadStore(path)).toEqual(before);
+    expect(getPending(loadPending(pendingPath), 'active')?.device_code).toBe(
+      'secret-device',
+    );
+  });
+
+  it.each([
+    {
+      slowDowns: 1,
+      failure: 'transport_error',
+      interval: 10,
+      sleeps: [10, 10, 10],
+    },
+    {
+      slowDowns: 2,
+      failure: 'transport_error',
+      interval: 15,
+      sleeps: [10, 15, 15, 15],
+    },
+    {
+      slowDowns: 1,
+      failure: 'server_error',
+      interval: 10,
+      sleeps: [10, 10, 10],
+    },
+    {
+      slowDowns: 2,
+      failure: 'temporarily_unavailable',
+      interval: 15,
+      sleeps: [10, 15, 15, 15],
+    },
+  ])(
+    'resumes with the raised interval after $slowDowns slow_down responses and $failure',
+    async (scenario) => {
+      const before = seedProfile();
+      request.mockResolvedValueOnce({ status: 200, body: deviceResponse(5) });
+      for (let i = 0; i < scenario.slowDowns; i += 1) {
+        request.mockResolvedValueOnce({
+          status: 400,
+          body: { error: 'slow_down' },
+        });
+      }
+      if (scenario.failure === 'transport_error') {
+        request.mockRejectedValue(transportError('Could not reach the API.'));
+      } else {
+        request.mockResolvedValue({
+          status: 503,
+          body: { error: scenario.failure },
+        });
+      }
+      const sleeps: number[] = [];
+      const result = await runAuthSignup(
+        { ...flags, 'non-interactive': false },
+        deps({
+          isInteractive: true,
+          stderr: () => {},
+          sleep: async (seconds) => {
+            sleeps.push(seconds);
+          },
+        }),
+      );
+      expect(result.ok).toBe(false);
+      if (!result.ok)
+        expect(result.error.message).toContain('amp auth login poll');
+      expect(sleeps).toEqual(scenario.sleeps);
+      expect(getPending(loadPending(pendingPath), 'active')).toMatchObject({
+        device_code: 'secret-device',
+        interval: scenario.interval,
+      });
+      expect(loadStore(path)).toEqual(before);
+
+      request.mockResolvedValueOnce({
+        status: 400,
+        body: { error: 'authorization_pending' },
+      });
+      request.mockResolvedValueOnce({ status: 200, body: token });
+      let clock = NOW;
+      const resumedSleeps: number[] = [];
+      await runAuthLoginPoll(
+        { profile: 'active', timeout: '60' },
+        {
+          path,
+          pendingPath,
+          request,
+          stdout: () => {},
+          now: () => clock,
+          sleep: async (seconds) => {
+            resumedSleeps.push(seconds);
+            clock += seconds * 1000;
+          },
+        },
+      );
+      expect(resumedSleeps).toEqual([scenario.interval]);
+      expect(loadStore(path).profiles.active.credential).toMatchObject({
+        access_token: 'secret-access',
+      });
+      expect(getPending(loadPending(pendingPath), 'active')).toBeUndefined();
+    },
+  );
+
+  it.each(['transport_error', 'server_error', 'temporarily_unavailable'])(
+    'completes the same signup after a temporary %s without restarting',
+    async (failure) => {
+      seedProfile();
+      request.mockResolvedValueOnce({ status: 200, body: deviceResponse(5) });
+      request.mockResolvedValueOnce({
+        status: 400,
+        body: { error: 'slow_down' },
+      });
+      if (failure === 'transport_error') {
+        request.mockRejectedValueOnce(
+          transportError('Could not reach the API.'),
+        );
+      } else {
+        request.mockResolvedValueOnce({
+          status: 503,
+          body: { error: failure },
+        });
+      }
+      request.mockResolvedValueOnce({ status: 200, body: token });
+      const sleeps: number[] = [];
+      const result = await runAuthSignup(
+        { ...flags, 'non-interactive': false },
+        deps({
+          isInteractive: true,
+          stderr: () => {},
+          sleep: async (seconds) => {
+            sleeps.push(seconds);
+          },
+        }),
+      );
+      expect(result.ok && result.output.status).toBe('authorized');
+      expect(sleeps).toEqual([10, 10]);
+      expect(loadStore(path).profiles.active.credential).toMatchObject({
+        access_token: 'secret-access',
+      });
+      expect(getPending(loadPending(pendingPath), 'active')).toBeUndefined();
+      expect(request).toHaveBeenCalledTimes(4);
+      expect(request).toHaveBeenLastCalledWith(
+        'POST',
+        '/v1/auth/token',
+        expect.objectContaining({ device_code: 'secret-device' }),
+      );
+    },
+  );
+
+  it('retries saving an increased interval before returning the saved continuation', async () => {
+    seedProfile();
+    request.mockResolvedValueOnce({ status: 200, body: deviceResponse(5) });
+    request.mockResolvedValueOnce({
+      status: 400,
+      body: { error: 'slow_down' },
+    });
+    request.mockRejectedValue(transportError('Could not reach the API.'));
+    const persist = vi
+      .fn<typeof savePending>()
+      .mockImplementationOnce(savePending)
+      .mockImplementationOnce(() => {
+        throw new Error('busy');
+      })
+      .mockImplementationOnce(() => {
+        throw new Error('busy');
+      })
+      .mockImplementation(savePending);
+    const sleeps: number[] = [];
+    const result = await runAuthSignup(
+      { ...flags, 'non-interactive': false },
+      deps({
+        isInteractive: true,
+        stderr: () => {},
+        savePending: persist,
+        sleep: async (seconds) => {
+          sleeps.push(seconds);
+        },
+      }),
+    );
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.errorCode).toBe('transport_error');
+      expect(result.error.message).toContain('amp auth login poll');
+    }
+    expect(getPending(loadPending(pendingPath), 'active')).toMatchObject({
+      device_code: 'secret-device',
+      interval: 10,
+    });
+    expect(sleeps).toEqual([10, 10, 10, 0.1, 0.2]);
+  });
+
+  it('preserves a replacement challenge written between interval save retries', async () => {
+    seedProfile();
+    request.mockResolvedValueOnce({ status: 200, body: deviceResponse(5) });
+    request.mockResolvedValueOnce({
+      status: 400,
+      body: { error: 'slow_down' },
+    });
+    request.mockRejectedValue(transportError('Could not reach the API.'));
+    const replacement = {
+      device_code: 'replacement-device',
+      base_url: ENV_BASE_URLS.prod,
+      expires_at: new Date(NOW + 600000).toISOString(),
+      interval: 7,
+      started_at: new Date(NOW).toISOString(),
+    };
+    const persist = vi
+      .fn<typeof savePending>()
+      .mockImplementationOnce(savePending)
+      .mockImplementation(() => {
+        throw new Error('busy');
+      });
+    const result = await runAuthSignup(
+      { ...flags, 'non-interactive': false },
+      deps({
+        isInteractive: true,
+        stderr: () => {},
+        savePending: persist,
+        sleep: async (seconds) => {
+          if (seconds < 1) {
+            savePending(
+              setPending(loadPending(pendingPath), 'active', replacement),
+              pendingPath,
+            );
+          }
+        },
+      }),
+    );
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.errorCode).toBe('transport_error');
+    expect(getPending(loadPending(pendingPath), 'active')).toEqual(replacement);
+  });
+
+  it('preserves a challenge replaced while signup is polling', async () => {
+    seedProfile();
+    request.mockResolvedValueOnce({ status: 200, body: deviceResponse(5) });
+    request.mockResolvedValueOnce({
+      status: 400,
+      body: { error: 'slow_down' },
+    });
+    request.mockRejectedValue(transportError('Could not reach the API.'));
+    const replacement = {
+      device_code: 'replacement-device',
+      base_url: ENV_BASE_URLS.prod,
+      expires_at: new Date(NOW + 600000).toISOString(),
+      interval: 7,
+      started_at: new Date(NOW).toISOString(),
+    };
+    await runAuthSignup(
+      { ...flags, 'non-interactive': false },
+      deps({
+        isInteractive: true,
+        stderr: () => {},
+        sleep: async () => {
+          savePending(
+            setPending(loadPending(pendingPath), 'active', replacement),
+            pendingPath,
+          );
+        },
+      }),
+    );
+    expect(getPending(loadPending(pendingPath), 'active')).toEqual(replacement);
+  });
+
+  it('reports interval persistence failure without recommending an unsafe resume', async () => {
+    const before = seedProfile();
+    request.mockResolvedValueOnce({ status: 200, body: deviceResponse(5) });
+    request.mockResolvedValueOnce({
+      status: 400,
+      body: { error: 'slow_down' },
+    });
+    request.mockRejectedValue(transportError('Could not reach the API.'));
+    const persist = vi
+      .fn<typeof savePending>()
+      .mockImplementationOnce(savePending)
+      .mockImplementation(() => {
+        throw new Error('secret-device');
+      });
+    const result = await runAuthSignup(
+      { ...flags, 'non-interactive': false },
+      deps({
+        isInteractive: true,
+        stderr: () => {},
+        sleep: async () => {},
+        savePending: persist,
+      }),
+    );
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.errorCode).toBe('pending_save_failed');
+      expect(result.error.message).toContain('polling interval');
+      expect(result.error.message).toContain(
+        "amp auth login --profile 'active' --region us",
+      );
+      expect(result.error.message).not.toContain('auth login poll');
+    }
+    expect(JSON.stringify(result)).not.toContain('secret-device');
+    expect(getPending(loadPending(pendingPath), 'active')?.interval).toBe(5);
+    expect(loadStore(path)).toEqual(before);
+  });
+
+  it.each([
+    {
+      code: 'access_denied',
+      reason: 'You denied this authorization.',
+      resume: false,
+    },
+    { code: 'expired_token', reason: 'This code has expired.', resume: false },
+    {
+      code: 'server_error',
+      reason: 'The authorization server is unavailable.',
+      resume: true,
+    },
+    {
+      code: 'temporarily_unavailable',
+      reason: 'Try again shortly.',
+      resume: true,
+    },
+  ])(
+    'preserves $code and gives appropriate recovery guidance',
+    async (failure) => {
+      const before = seedProfile();
+      request.mockResolvedValueOnce({ status: 200, body: deviceResponse() });
+      request.mockResolvedValue({
+        status: 400,
+        body: { error: failure.code, error_description: failure.reason },
+      });
+      const result = await runAuthSignup(
+        { ...flags, 'non-interactive': false },
+        deps({ isInteractive: true, stderr: () => {}, sleep: async () => {} }),
+      );
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.message).toContain(failure.reason);
+        expect(result.error.message.includes('amp auth login poll')).toBe(
+          failure.resume,
+        );
+        if (!failure.resume)
+          expect(result.error.message).toContain(
+            "amp auth login --profile 'active' --region us",
+          );
+      }
+      expect(loadStore(path)).toEqual(before);
+      const pending = getPending(loadPending(pendingPath), 'active');
+      if (failure.resume) expect(pending?.device_code).toBe('secret-device');
+      else expect(pending).toBeUndefined();
+      expect(request).toHaveBeenCalledTimes(failure.resume ? 4 : 2);
+    },
+  );
+
+  it('gives an exact restart command for a forced retarget', async () => {
+    seedProfile();
+    request.mockResolvedValueOnce({ status: 200, body: deviceResponse() });
+    request.mockResolvedValueOnce({
+      status: 400,
+      body: {
+        error: 'expired_token',
+        error_description: 'This code has expired.',
+      },
+    });
+    const result = await runAuthSignup(
+      { ...flags, region: 'eu', force: true, 'non-interactive': false },
+      deps({ isInteractive: true, stderr: () => {} }),
+    );
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.message).toContain(
+        "amp auth login --profile 'active' --region eu --force",
+      );
+      expect(result.error.message).not.toContain('same --profile');
+    }
+  });
+
+  it('reports local expiry without suggesting polling the expired code', async () => {
+    request.mockResolvedValueOnce({ status: 200, body: deviceResponse() });
+    request.mockResolvedValue({
+      status: 400,
+      body: { error: 'authorization_pending' },
+    });
+    let clock = NOW;
+    const result = await runAuthSignup(
+      { ...flags, 'non-interactive': false },
+      deps({
+        isInteractive: true,
+        stderr: () => {},
+        now: () => clock,
+        sleep: async () => {
+          clock += 600000;
+        },
+      }),
+    );
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.message).toContain('expired');
+      expect(result.error.message).not.toContain('amp auth login poll');
+    }
+    expect(getPending(loadPending(pendingPath), 'default')).toBeUndefined();
+  });
+
+  it.each(['access_denied', 'expired_token'])(
+    'preserves a newer challenge when the original returns %s',
+    async (code) => {
+      request.mockResolvedValueOnce({ status: 200, body: deviceResponse() });
+      request.mockImplementationOnce(async () => {
+        const pending = loadPending(pendingPath);
+        const previous = getPending(pending, 'default');
+        if (previous)
+          savePending(
+            setPending(pending, 'default', {
+              ...previous,
+              device_code: 'newer-device',
+            }),
+            pendingPath,
+          );
+        return { status: 400, body: { error: code } };
+      });
+      const result = await runAuthSignup(
+        { ...flags, 'non-interactive': false },
+        deps({ isInteractive: true, stderr: () => {} }),
+      );
+      expect(result.ok).toBe(false);
+      expect(getPending(loadPending(pendingPath), 'default')?.device_code).toBe(
+        'newer-device',
+      );
+    },
+  );
+
+  it('reports cleanup failure without hiding the terminal authorization reason', async () => {
+    const before = seedProfile();
+    request.mockResolvedValueOnce({ status: 200, body: deviceResponse() });
+    request.mockResolvedValueOnce({
+      status: 400,
+      body: {
+        error: 'access_denied',
+        error_description: 'You denied this authorization.',
+      },
+    });
+    const persist = vi
+      .fn<typeof savePending>()
+      .mockImplementationOnce(savePending)
+      .mockImplementationOnce(() => {
+        throw new Error('secret-device');
+      });
+    const result = await runAuthSignup(
+      { ...flags, 'non-interactive': false },
+      deps({ isInteractive: true, stderr: () => {}, savePending: persist }),
+    );
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.errorCode).toBe('pending_cleanup_failed');
+      expect(result.error.message).toContain('You denied this authorization.');
+    }
+    expect(JSON.stringify(result)).not.toContain('secret-device');
+    expect(loadStore(path)).toEqual(before);
+  });
+
+  it('does not expose unexpected exception messages as authorization reasons', async () => {
+    request.mockResolvedValueOnce({ status: 200, body: deviceResponse() });
+    request.mockRejectedValueOnce(new Error('unexpected-private-state'));
+    const result = await runAuthSignup(
+      { ...flags, 'non-interactive': false },
+      deps({ isInteractive: true, stderr: () => {} }),
+    );
+    expect(result.ok).toBe(false);
+    expect(JSON.stringify(result)).not.toContain('unexpected-private-state');
+    expect(getPending(loadPending(pendingPath), 'default')?.device_code).toBe(
+      'secret-device',
+    );
+  });
+
+  it('keeps unexpected wait failures inside the safe authorization result', async () => {
+    request.mockResolvedValueOnce({ status: 200, body: deviceResponse() });
+    request.mockResolvedValue({
+      status: 400,
+      body: { error: 'authorization_pending' },
+    });
+    const result = runAuthSignup(
+      { ...flags, 'non-interactive': false },
+      deps({
+        isInteractive: true,
+        stderr: () => {},
+        sleep: async () => {
+          throw new Error('private-wait-state');
+        },
+      }),
+    );
+    await expect(result).resolves.toMatchObject({
+      ok: false,
+      error: { errorCode: 'authorization_failed' },
+    });
+    expect(JSON.stringify(await result)).not.toContain('private-wait-state');
+  });
 
   it('requires email locally without inventing a terms requirement', async () => {
     const result = await runAuthSignup(
@@ -486,6 +1192,28 @@ describe('auth signup', () => {
     expect(loadStore(path).profiles.concurrent).toBeDefined();
   });
 
+  it.each([false, true])(
+    'uses recovery retries when saving credentials (browser=%s)',
+    async (browser) => {
+      if (browser) {
+        request.mockResolvedValueOnce({ status: 200, body: deviceResponse() });
+        request.mockResolvedValueOnce({ status: 200, body: token });
+      }
+      const persist = vi.fn<typeof updateStore>(updateStore);
+      const result = await runAuthSignup(
+        { ...flags, 'non-interactive': !browser },
+        deps({ updateStore: persist, isInteractive: true, stderr: () => {} }),
+      );
+      expect(result.ok && result.output.status).toBe('authorized');
+      expect(persist).toHaveBeenCalledWith(path, expect.any(Function), {
+        retryMode: 'rotation_recovery',
+      });
+      expect(loadStore(path).profiles.default.credential).toMatchObject({
+        access_token: 'secret-access',
+      });
+    },
+  );
+
   it('returns recovery after real credential persistence fails, preserving prior state', async () => {
     const before = seedProfile();
     const pending = seedPending();
@@ -496,7 +1224,10 @@ describe('auth signup', () => {
       updateStore(file, mutate, { save });
     const result = await runAuthSignup(flags, deps({ updateStore: persist }));
     expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.error.message).toContain('amp auth login');
+    if (!result.ok)
+      expect(result.error.message).toContain(
+        "amp auth login --profile 'active' --region us",
+      );
     expect(JSON.stringify(result)).not.toContain('secret-access');
     expect(loadStore(path)).toEqual(before);
     expect(loadPending(pendingPath)).toEqual(pending);

@@ -76,6 +76,10 @@
       "description": "Survey nudge configuration operations."
     },
     {
+      "name": "Themes",
+      "description": "Guide and survey theme operations."
+    },
+    {
       "name": "Destinations",
       "description": "Destination (connection) catalog and CRUD operations."
     },
@@ -225,7 +229,7 @@
         "tags": ["Agent Analytics"],
         "operationId": "createAgentAnalyticsDataset",
         "summary": "Create an Agent Analytics dataset",
-        "description": "Creates an empty dataset. Add sessions with the dataset sessions endpoint.\n`name` is not an identity key, so repeating a create makes another dataset —\nretry safely with the same `Idempotency-Key` instead.\n\nListing and reading datasets is served by the Agent Analytics MCP read\nsurface, not by this API.\n",
+        "description": "Creates an empty dataset. Add sessions with the dataset sessions endpoint.\n`name` is not an identity key, so repeating a create makes another dataset,\neven with the same `Idempotency-Key`.\n\nListing and reading datasets is served by the Agent Analytics MCP read\nsurface, not by this API.\n",
         "x-required-scopes": ["analytics:write"],
         "parameters": [
           {
@@ -1725,6 +1729,197 @@
           },
           "500": {
             "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
+    },
+    "/v1/projects/api-key": {
+      "get": {
+        "tags": ["Projects"],
+        "operationId": "getProjectApiKey",
+        "summary": "Retrieve a project API key",
+        "description": "Provides the API key for a project. A project ID is required when the\norganization has more than one project.\n",
+        "x-required-scopes": ["projects:read"],
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "query",
+            "required": false,
+            "description": "The project ID. Required when the organization has more than one project.\n",
+            "schema": {
+              "type": "string",
+              "pattern": "^[1-9][0-9]*$",
+              "example": "12345"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The project API key alongside the project name and ID.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["data"],
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/ProjectApiKey"
+                    }
+                  }
+                },
+                "example": {
+                  "data": {
+                    "object": "project_api_key",
+                    "project_id": "12345",
+                    "project_name": "Example Project",
+                    "api_key": "example-project-api-key"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The query is invalid, or a project ID is required because the organization\nhas more than one project.\n",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                },
+                "examples": {
+                  "projectSelectionRequired": {
+                    "summary": "A project must be selected",
+                    "value": {
+                      "type": "https://developer-api.amplitude.com/problems/project-selection-required",
+                      "title": "Project API key request failed",
+                      "status": 400,
+                      "detail": "Supply project_id to select a project.",
+                      "error_code": "project_selection_required",
+                      "retryable": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "description": "Permission to retrieve the project API key is denied, or the endpoint is\nunavailable.\n",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                },
+                "examples": {
+                  "projectKeyAccessDenied": {
+                    "summary": "Permission to view the API key is required",
+                    "value": {
+                      "type": "https://developer-api.amplitude.com/problems/project-key-access-denied",
+                      "title": "Project API key request failed",
+                      "status": 403,
+                      "detail": "Access to the project API key is denied.",
+                      "error_code": "project_key_access_denied",
+                      "retryable": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The project does not exist in the authenticated organization or is not\naccessible to the caller (`project_not_found`).\n",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                },
+                "example": {
+                  "type": "https://developer-api.amplitude.com/problems/project-not-found",
+                  "title": "Project API key request failed",
+                  "status": 404,
+                  "detail": "Project not found.",
+                  "error_code": "project_not_found",
+                  "retryable": false
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "API key retrieval is not supported for this project. For example,\nportfolio views and warehouse-native projects do not support this\noperation.\n",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                },
+                "example": {
+                  "type": "https://developer-api.amplitude.com/problems/project-api-key-not-available",
+                  "title": "Project API key request failed",
+                  "status": 422,
+                  "detail": "API key retrieval is not available for this project.",
+                  "error_code": "project_api_key_not_available",
+                  "retryable": false
+                }
+              }
+            }
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimitProblem"
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "502": {
+            "description": "The project API key could not be retrieved (`upstream_error`). Retry later.\n",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                },
+                "example": {
+                  "type": "https://developer-api.amplitude.com/problems/upstream-error",
+                  "title": "Project API key request failed",
+                  "status": 502,
+                  "detail": "Unable to retrieve the project API key. Retry later.",
+                  "error_code": "upstream_error",
+                  "retryable": true
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The project API key is missing or unusable. Ask an administrator of your\norganization to review the project's API key settings.\n\nIf the endpoint is temporarily unavailable, retry later.\n",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                },
+                "examples": {
+                  "projectApiKeyUnavailable": {
+                    "summary": "The API key configuration needs attention",
+                    "value": {
+                      "type": "https://developer-api.amplitude.com/problems/project-api-key-unavailable",
+                      "title": "Project API key request failed",
+                      "status": 503,
+                      "detail": "The project API key is missing or unusable. Ask an administrator of your organization to review the project's API key settings.",
+                      "error_code": "project_api_key_unavailable",
+                      "retryable": false
+                    }
+                  },
+                  "endpointNotAvailable": {
+                    "summary": "The endpoint is temporarily unavailable",
+                    "value": {
+                      "type": "https://developer-api.amplitude.com/problems/operation-availability-unavailable",
+                      "title": "Operation availability unavailable",
+                      "status": 503,
+                      "detail": "Operation availability could not be determined. Retry the request.",
+                      "error_code": "operation_availability_unavailable",
+                      "retryable": true
+                    }
+                  }
+                }
+              }
+            }
           }
         }
       }
@@ -3767,6 +3962,16 @@
           },
           {
             "$ref": "#/components/parameters/Limit"
+          },
+          {
+            "name": "key",
+            "in": "query",
+            "required": false,
+            "description": "Filter this list by an exact flag key within the project. Returns the standard list response, or an empty list when no active flag matches. Get, update, and archive require the returned numeric id; those operations do not accept a flag key or resolve one automatically.",
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
           }
         ],
         "responses": {
@@ -4970,6 +5175,416 @@
         }
       }
     },
+    "/v1/projects/{project_id}/themes": {
+      "get": {
+        "tags": ["Themes"],
+        "operationId": "listThemes",
+        "summary": "List themes",
+        "description": "Returns the guides and surveys themes in the project, newest first.\nResults use the standard Developer API list envelope with cursor\npagination (`cursor`, `limit`). List items omit `config`; get a theme\nby id to read it.\n\nInternal themes (per-guide or per-survey overrides) are not listed. Read\nthem by id through a guide or survey's `theme_id`. Assistant themes are\nnot part of this API.\n",
+        "x-required-scopes": ["guides:read", "surveys:read"],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ProjectId"
+          },
+          {
+            "$ref": "#/components/parameters/Cursor"
+          },
+          {
+            "$ref": "#/components/parameters/Limit"
+          },
+          {
+            "name": "platform",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/NudgePlatform"
+            }
+          },
+          {
+            "name": "include_archived",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["data", "pagination"],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/ThemeSummary"
+                      }
+                    },
+                    "pagination": {
+                      "$ref": "#/components/schemas/Pagination"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationProblem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimitProblem"
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      },
+      "post": {
+        "tags": ["Themes"],
+        "operationId": "createTheme",
+        "summary": "Create theme",
+        "description": "Creates a guides and surveys theme. Both the live theme and the draft\nstart as Amplitude's built-in default theme, and `config` is merged into\nthe draft (see `ThemeConfigPatch`), so you only send the values you want\nto change. Nothing changes for users until the draft is published in\nAmplitude. The response carries the draft `config`.\n\nThe new theme isn't the default unless the platform has no default theme\nand you can publish theme changes, in which case Amplitude makes it the\ndefault, as it does in the theme editor. A `platform` that isn't enabled\nfor the project returns `400`. Publishing, archiving, and changing the\ndefault theme are not available via API.\n",
+        "x-required-scopes": ["guides:write", "surveys:write"],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ProjectId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 255
+                  },
+                  "platform": {
+                    "$ref": "#/components/schemas/NudgePlatform"
+                  },
+                  "config": {
+                    "$ref": "#/components/schemas/ThemeConfigPatch"
+                  }
+                },
+                "required": ["name"],
+                "additionalProperties": false
+              },
+              "examples": {
+                "minimal": {
+                  "summary": "Start from the built-in default",
+                  "value": {
+                    "name": "Holiday"
+                  }
+                },
+                "brandColors": {
+                  "summary": "Set brand colors",
+                  "description": "Only the sent values change; everything else keeps the built-in\ndefault.\n",
+                  "value": {
+                    "name": "Brand",
+                    "platform": "web",
+                    "config": {
+                      "lightMode": {
+                        "varDefaults": {
+                          "--base-accent": "rgb(37, 99, 235)",
+                          "--font-font-family": "Inter, system-ui, sans-serif"
+                        }
+                      },
+                      "darkMode": {
+                        "varDefaults": {
+                          "--base-accent": "rgb(96, 165, 250)",
+                          "--font-font-family": "Inter, system-ui, sans-serif"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Theme created.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["data"],
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/Theme"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationProblem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimitProblem"
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
+    },
+    "/v1/projects/{project_id}/themes/{theme_id}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ProjectId"
+        },
+        {
+          "$ref": "#/components/parameters/ThemeId"
+        }
+      ],
+      "get": {
+        "tags": ["Themes"],
+        "operationId": "getTheme",
+        "summary": "Get theme",
+        "description": "Returns a guides and surveys theme. `config` is the live theme by default.\nArchived themes return `404`.\n",
+        "x-required-scopes": ["guides:read", "surveys:read"],
+        "parameters": [
+          {
+            "name": "include_unpublished_changes",
+            "in": "query",
+            "required": false,
+            "description": "When true, `config` is the unpublished draft instead of the live\ntheme. Use `has_unpublished_changes` to check whether a draft differs.\n",
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["data"],
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/Theme"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationProblem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimitProblem"
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      },
+      "patch": {
+        "tags": ["Themes"],
+        "operationId": "updateTheme",
+        "summary": "Update theme",
+        "description": "Renames a theme or changes its draft. `config` is merged into the current\ndraft (see `ThemeConfigPatch`): send only the values you want to change,\nand `null` to reset a value to Amplitude's built-in default. The live theme\nis not changed; publish the draft in Amplitude. The response carries the\nfull draft `config`.\n\nTo make sure nobody changed the theme since you read it, send the\n`updated_at` from your last read; if the theme has changed since, the\nupdate returns `409` and nothing is written. Omit `updated_at` to skip the\ncheck: concurrent patches then both apply, and a later one wins for any\nvalue both set. The check runs before the write rather than atomically\nwith it, so it narrows but does not close that window. Internal themes\nreturn `409` with\n`error_code: theme_is_internal`; edit them on their guide or survey in\nAmplitude.\n",
+        "x-required-scopes": ["guides:write", "surveys:write"],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 255
+                  },
+                  "config": {
+                    "$ref": "#/components/schemas/ThemeConfigPatch"
+                  },
+                  "updated_at": {
+                    "type": "string",
+                    "description": "Optional. The `updated_at` from your last read of this theme;\nthe update returns `409` if the theme has changed since.\n"
+                  }
+                },
+                "additionalProperties": false
+              },
+              "examples": {
+                "changeColors": {
+                  "summary": "Change a few values",
+                  "value": {
+                    "config": {
+                      "lightMode": {
+                        "varDefaults": {
+                          "--base-accent": "rgb(37, 99, 235)"
+                        },
+                        "componentOverrides": {
+                          "tooltip": {
+                            "--background-color": "#ffffff"
+                          }
+                        }
+                      },
+                      "darkMode": {
+                        "varDefaults": {
+                          "--base-accent": "rgb(96, 165, 250)"
+                        }
+                      }
+                    }
+                  }
+                },
+                "resetToDefault": {
+                  "summary": "Reset values to the built-in default",
+                  "description": "`null` resets a variable to its built-in default value and\nremoves values the default doesn't have, like `customCss`.\n",
+                  "value": {
+                    "config": {
+                      "lightMode": {
+                        "varDefaults": {
+                          "--base-accent": null
+                        },
+                        "customCss": null
+                      }
+                    }
+                  }
+                },
+                "resetMode": {
+                  "summary": "Reset a whole mode",
+                  "value": {
+                    "config": {
+                      "darkMode": null
+                    }
+                  }
+                },
+                "renameIfUnchanged": {
+                  "summary": "Rename only if nobody changed the theme",
+                  "value": {
+                    "name": "Brand 2027",
+                    "updated_at": "2026-10-27T10:00:00.123456Z"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Theme updated.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["data"],
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/Theme"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationProblem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "409": {
+            "description": "The write conflicts with the theme's current state. `error_code` is\n`conflict` when `updated_at` is stale and `theme_is_internal` for\ninternal themes.\n",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                },
+                "examples": {
+                  "staleUpdatedAt": {
+                    "summary": "updated_at is stale",
+                    "value": {
+                      "type": "https://developer-api.amplitude.com/problems/conflict",
+                      "title": "Conflict",
+                      "status": 409,
+                      "detail": "updated_at 2026-10-27T10:00:00.123456Z is stale; the theme was last updated at 2026-10-27T11:42:08.004211Z. Fetch the theme again and retry, or omit updated_at to skip this check.",
+                      "error_code": "conflict",
+                      "retryable": false
+                    }
+                  },
+                  "internalTheme": {
+                    "summary": "Internal theme",
+                    "value": {
+                      "type": "https://developer-api.amplitude.com/problems/conflict",
+                      "title": "Conflict",
+                      "status": 409,
+                      "detail": "This theme belongs to a single guide or survey. Edit it on that guide or survey in Amplitude.",
+                      "error_code": "theme_is_internal",
+                      "retryable": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimitProblem"
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
+    },
     "/v1/projects/{project_id}/destinations": {
       "get": {
         "tags": ["Destinations"],
@@ -5538,7 +6153,7 @@
         "name": "Idempotency-Key",
         "in": "header",
         "required": true,
-        "description": "Unique idempotency key used to safely retry write operations.",
+        "description": "Required on write operations. Keys aren't stored yet, so retrying a write\nwith the same key performs it again; a retried create makes another\nresource. Check whether the first attempt succeeded before you retry.\n",
         "schema": {
           "type": "string",
           "minLength": 8,
@@ -5579,10 +6194,10 @@
         "name": "flag_id",
         "in": "path",
         "required": true,
-        "description": "Feature flag identifier.",
+        "description": "Numeric feature flag ID required by get, update, and archive. A flag key is not accepted or resolved automatically. Find the ID with list flags filtered by the key query parameter.",
         "schema": {
           "type": "string",
-          "minLength": 1
+          "pattern": "^[0-9]+$"
         }
       },
       "ChartId": {
@@ -5734,6 +6349,16 @@
         "in": "path",
         "required": true,
         "description": "Survey nudge identifier.",
+        "schema": {
+          "type": "string",
+          "pattern": "^[0-9]+$"
+        }
+      },
+      "ThemeId": {
+        "name": "theme_id",
+        "in": "path",
+        "required": true,
+        "description": "Guides and surveys theme identifier.",
         "schema": {
           "type": "string",
           "pattern": "^[0-9]+$"
@@ -6107,6 +6732,35 @@
             }
           }
         ]
+      },
+      "ProjectApiKey": {
+        "type": "object",
+        "description": "A project API key and the project it belongs to.",
+        "required": ["object", "project_id", "project_name", "api_key"],
+        "properties": {
+          "object": {
+            "type": "string",
+            "const": "project_api_key",
+            "description": "Resource type."
+          },
+          "project_id": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]*$",
+            "description": "Amplitude project identifier.",
+            "example": "12345"
+          },
+          "project_name": {
+            "type": ["string", "null"],
+            "description": "Project name, or null when no name is available.",
+            "example": "Example Project"
+          },
+          "api_key": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The project API key.",
+            "example": "example-project-api-key"
+          }
+        }
       },
       "Event": {
         "type": "object",
@@ -7189,6 +7843,202 @@
             }
           }
         ]
+      },
+      "Theme": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ThemeSummary"
+          },
+          {
+            "type": "object",
+            "required": ["config"],
+            "properties": {
+              "config": {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/ThemeConfig"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "Theme configuration. Live by default; the unpublished draft with\n`include_unpublished_changes=true`. `null` when the theme has no\nsaved configuration.\n"
+              }
+            }
+          }
+        ]
+      },
+      "ThemeConfig": {
+        "type": "object",
+        "required": ["lightMode", "darkMode"],
+        "properties": {
+          "lightMode": {
+            "$ref": "#/components/schemas/ThemeMode"
+          },
+          "darkMode": {
+            "$ref": "#/components/schemas/ThemeMode"
+          }
+        },
+        "description": "Theme editor configuration, one `ThemeMode` per color scheme. Keys are\npassed through unchanged from the theme editor, so they are camelCase and\nCSS variable names keep their `--` prefix.\n"
+      },
+      "ThemeConfigPatch": {
+        "type": "object",
+        "properties": {
+          "lightMode": {
+            "$ref": "#/components/schemas/ThemeModePatch"
+          },
+          "darkMode": {
+            "$ref": "#/components/schemas/ThemeModePatch"
+          }
+        },
+        "additionalProperties": false,
+        "description": "Partial `ThemeConfig`, merged like a JSON merge patch (RFC 7396): objects\nmerge key by key, and any other value replaces what's there. Unlike RFC\n7396, `null` resets a value to Amplitude's built-in default theme, or\nremoves it where the default has none (for example a component override\nor `customCss`). That works at any level, from one variable up to a whole\nmode.\n",
+        "example": {
+          "lightMode": {
+            "varDefaults": {
+              "--base-accent": "rgb(120, 86, 255)"
+            }
+          },
+          "darkMode": {
+            "varDefaults": {
+              "--base-accent": null
+            }
+          }
+        }
+      },
+      "ThemeMode": {
+        "type": "object",
+        "required": [
+          "varDefaults",
+          "varOverrides",
+          "componentOverrides",
+          "mobileOverrides"
+        ],
+        "properties": {
+          "varDefaults": {
+            "$ref": "#/components/schemas/ThemeVariables"
+          },
+          "varOverrides": {
+            "$ref": "#/components/schemas/ThemeVariables"
+          },
+          "componentOverrides": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "Per-component overrides keyed by component slug (for example\n`tooltip` or `modal`). Each entry maps a key to a CSS variable value or\nto a map of CSS variables.\n",
+            "example": {
+              "tooltip": {
+                "--background-color": "#ffffff"
+              }
+            }
+          },
+          "mobileOverrides": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "Overrides applied by the mobile SDKs."
+          },
+          "customCss": {
+            "type": "string",
+            "description": "Custom CSS appended to the theme."
+          }
+        },
+        "additionalProperties": true
+      },
+      "ThemeModePatch": {
+        "type": ["object", "null"],
+        "properties": {
+          "varDefaults": {
+            "$ref": "#/components/schemas/ThemeVariablesPatch"
+          },
+          "varOverrides": {
+            "$ref": "#/components/schemas/ThemeVariablesPatch"
+          },
+          "componentOverrides": {
+            "type": ["object", "null"],
+            "additionalProperties": true
+          },
+          "mobileOverrides": {
+            "type": ["object", "null"],
+            "additionalProperties": true
+          },
+          "customCss": {
+            "type": ["string", "null"]
+          }
+        },
+        "additionalProperties": true
+      },
+      "ThemeSummary": {
+        "type": "object",
+        "required": [
+          "id",
+          "object",
+          "project_id",
+          "name",
+          "platform",
+          "is_default",
+          "is_internal",
+          "is_archived",
+          "has_unpublished_changes",
+          "url",
+          "created_by",
+          "last_modified_by",
+          "created_at",
+          "updated_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[0-9]+$",
+            "description": "Numeric theme identifier."
+          },
+          "object": {
+            "type": "string",
+            "const": "theme"
+          },
+          "project_id": {
+            "type": "string",
+            "pattern": "^[0-9]+$"
+          },
+          "name": {
+            "type": "string"
+          },
+          "platform": {
+            "$ref": "#/components/schemas/NudgePlatform"
+          },
+          "is_default": {
+            "type": "boolean",
+            "description": "Whether this is the project's default theme for its platform. Guides\nand surveys with no `theme_id` use it.\n"
+          },
+          "is_internal": {
+            "type": "boolean",
+            "description": "Internal themes are per-guide or per-survey overrides created in the\nguide or survey editor. Lists omit them; get them by id through a\nguide or survey's `theme_id`.\n"
+          },
+          "is_archived": {
+            "type": "boolean"
+          },
+          "has_unpublished_changes": {
+            "type": "boolean",
+            "description": "Whether the unpublished draft differs from the live theme."
+          },
+          "url": {
+            "type": ["string", "null"],
+            "format": "uri",
+            "description": "Admin URL for the theme. `null` for internal themes."
+          },
+          "created_by": {
+            "type": ["string", "null"]
+          },
+          "last_modified_by": {
+            "type": ["string", "null"]
+          },
+          "created_at": {
+            "type": ["string", "null"],
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": ["string", "null"],
+            "format": "date-time"
+          }
+        }
       },
       "Variant": {
         "type": "object",
@@ -9456,6 +10306,439 @@
         "additionalProperties": true,
         "description": "Layout object for a step. `type` selects the form factor; additional keys\nare layout-specific.\n"
       },
+      "GuideSurveyMarkdownBlock": {
+        "type": "object",
+        "required": ["uuid", "type", "meta"],
+        "properties": {
+          "uuid": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "const": "markdown"
+          },
+          "meta": {
+            "type": "object",
+            "required": ["value"],
+            "properties": {
+              "value": {
+                "type": "string",
+                "description": "Markdown text. Inline HTML is allowed and is sanitized on save."
+              },
+              "alignment": {
+                "type": "string",
+                "enum": ["start", "center", "end"]
+              }
+            },
+            "additionalProperties": true
+          }
+        },
+        "description": "Body text."
+      },
+      "GuideSurveyImageBlock": {
+        "type": "object",
+        "required": ["uuid", "type", "meta"],
+        "properties": {
+          "uuid": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "const": "image"
+          },
+          "meta": {
+            "type": "object",
+            "required": ["src", "filename", "size"],
+            "properties": {
+              "src": {
+                "type": "string",
+                "description": "Image URL."
+              },
+              "filename": {
+                "type": "string"
+              },
+              "size": {
+                "type": "string"
+              },
+              "altText": {
+                "type": "string"
+              },
+              "style": {
+                "type": "object",
+                "properties": {
+                  "scale": {
+                    "type": "string"
+                  },
+                  "radius": {
+                    "type": "string"
+                  },
+                  "fit": {
+                    "type": "string",
+                    "enum": ["cover", "contain"]
+                  },
+                  "height": {
+                    "type": "string"
+                  }
+                },
+                "additionalProperties": true
+              },
+              "action": {
+                "type": "object",
+                "additionalProperties": true,
+                "description": "Optional `link` action opened when the image is clicked."
+              }
+            },
+            "additionalProperties": true
+          }
+        }
+      },
+      "GuideSurveyVideoBlock": {
+        "type": "object",
+        "required": ["uuid", "type", "meta"],
+        "properties": {
+          "uuid": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "const": "video"
+          },
+          "meta": {
+            "type": "object",
+            "required": ["type", "src"],
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "url"
+              },
+              "src": {
+                "type": "string",
+                "description": "Video URL, for example a YouTube, Vimeo or Loom link."
+              },
+              "style": {
+                "type": "object",
+                "properties": {
+                  "radius": {
+                    "type": "string"
+                  }
+                },
+                "additionalProperties": true
+              }
+            },
+            "additionalProperties": true
+          }
+        }
+      },
+      "GuideSurveyButtonAction": {
+        "type": "object",
+        "required": ["type"],
+        "properties": {
+          "type": {
+            "type": "string",
+            "description": "Common actions:\n- `step_forward`, `step_back`: go to the next or previous step.\n- `complete`: finish the guide or survey.\n- `dismiss`: close it.\n- `snooze`: hide it for a while, with optional `interval` (`hour`, `day`, `week`) and `value`.\n- `go_to_step`: jump to the step whose id is in `value`.\n- `link`: open the URL in `value`; `operation` is `self` (same tab), `blank` (new tab) or `router`.\n- `nudge`: start the guide or survey whose id is in `value`.\n- `no_action`: do nothing.\n\nButtons built in the dashboard can use other action types. Send those\nback unchanged.\n"
+          }
+        },
+        "additionalProperties": true,
+        "example": {
+          "type": "link",
+          "value": "https://example.com/pricing",
+          "operation": "blank"
+        }
+      },
+      "GuideSurveyButtonBlock": {
+        "type": "object",
+        "required": ["uuid", "type", "meta"],
+        "properties": {
+          "uuid": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "const": "button"
+          },
+          "meta": {
+            "type": "object",
+            "properties": {
+              "label": {
+                "type": "string"
+              },
+              "buttonType": {
+                "type": "string",
+                "enum": ["primary", "secondary", "snooze"]
+              },
+              "action": {
+                "$ref": "#/components/schemas/GuideSurveyButtonAction"
+              },
+              "actions": {
+                "type": "object",
+                "additionalProperties": true,
+                "description": "Optional action sequence the dashboard writes for buttons with side\neffects: `{type: \"action_sequence\", navigation: <action>, effects: [<action>]}`.\nWhen present, the SDK runs it instead of `action`, so update both or\nneither.\n"
+              }
+            },
+            "additionalProperties": true
+          }
+        }
+      },
+      "GuideSurveyQuestionValidation": {
+        "type": "object",
+        "properties": {
+          "required": {
+            "type": "object",
+            "required": ["value"],
+            "properties": {
+              "value": {
+                "type": "boolean"
+              },
+              "message": {
+                "type": ["string", "null"],
+                "description": "Error shown when a required question is left empty. Required when `value` is `true`."
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": true
+      },
+      "GuideSurveyTextQuestionBlock": {
+        "type": "object",
+        "required": ["uuid", "type", "meta"],
+        "properties": {
+          "uuid": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["survey_text", "survey_text_short"],
+            "description": "`survey_text` is a multi-line answer; `survey_text_short` is a single line."
+          },
+          "meta": {
+            "type": "object",
+            "required": ["prompt"],
+            "properties": {
+              "prompt": {
+                "type": "string",
+                "description": "Placeholder shown in the empty answer field."
+              },
+              "label": {
+                "type": "string"
+              },
+              "validation": {
+                "$ref": "#/components/schemas/GuideSurveyQuestionValidation"
+              }
+            },
+            "additionalProperties": true
+          }
+        },
+        "description": "Free-text survey question. Put the question itself in a `markdown` block or the step `title`."
+      },
+      "GuideSurveyListQuestionBlock": {
+        "type": "object",
+        "required": ["uuid", "type", "meta"],
+        "properties": {
+          "uuid": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "const": "survey_list"
+          },
+          "meta": {
+            "type": "object",
+            "required": ["options", "listType", "displayType"],
+            "properties": {
+              "options": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "listType": {
+                "type": "string",
+                "enum": ["single", "multiple"]
+              },
+              "displayType": {
+                "type": "string",
+                "enum": ["list", "dropdown", "grid"]
+              },
+              "isOrderRandom": {
+                "type": "boolean"
+              },
+              "otherOption": {
+                "type": "object",
+                "required": ["enabled", "label", "placeholderLabel"],
+                "properties": {
+                  "enabled": {
+                    "type": "boolean"
+                  },
+                  "label": {
+                    "type": "string"
+                  },
+                  "placeholderLabel": {
+                    "type": "string"
+                  }
+                },
+                "additionalProperties": false
+              },
+              "label": {
+                "type": "string"
+              },
+              "validation": {
+                "$ref": "#/components/schemas/GuideSurveyQuestionValidation"
+              }
+            },
+            "additionalProperties": true
+          }
+        },
+        "description": "Multiple-choice survey question."
+      },
+      "GuideSurveyRatingQuestionBlock": {
+        "type": "object",
+        "required": ["uuid", "type", "meta"],
+        "properties": {
+          "uuid": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "const": "survey_rating"
+          },
+          "meta": {
+            "type": "object",
+            "required": ["type", "options", "lowerLabel", "upperLabel"],
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": ["stars", "numbers", "emojis", "nps"],
+                "description": "`nps` is a 0–10 scale."
+              },
+              "options": {
+                "type": "integer",
+                "description": "Number of choices on the scale."
+              },
+              "emojis": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "One emoji per option. Required when `type` is `emojis`."
+              },
+              "lowerLabel": {
+                "type": "string"
+              },
+              "upperLabel": {
+                "type": "string"
+              },
+              "label": {
+                "type": "string"
+              },
+              "validation": {
+                "$ref": "#/components/schemas/GuideSurveyQuestionValidation"
+              }
+            },
+            "additionalProperties": true
+          }
+        },
+        "description": "Rating survey question."
+      },
+      "GuideSurveyHiddenFieldBlock": {
+        "type": "object",
+        "required": ["uuid", "type", "meta"],
+        "properties": {
+          "uuid": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "const": "survey_hidden"
+          },
+          "meta": {
+            "type": "object",
+            "required": ["label", "source"],
+            "properties": {
+              "label": {
+                "type": "string"
+              },
+              "source": {
+                "type": "object",
+                "required": ["type"],
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": ["static", "event_property"]
+                  },
+                  "value": {
+                    "type": "string",
+                    "description": "The value to record. Used when `type` is `static`."
+                  },
+                  "property": {
+                    "type": "string",
+                    "description": "Property of the event that triggered the survey. Used when `type` is `event_property`."
+                  }
+                },
+                "additionalProperties": false
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "description": "Not shown to the user. Adds a value to each survey response."
+      },
+      "GuideSurveyContentBlock": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/GuideSurveyMarkdownBlock"
+          },
+          {
+            "$ref": "#/components/schemas/GuideSurveyImageBlock"
+          },
+          {
+            "$ref": "#/components/schemas/GuideSurveyVideoBlock"
+          },
+          {
+            "$ref": "#/components/schemas/GuideSurveyButtonBlock"
+          },
+          {
+            "$ref": "#/components/schemas/GuideSurveyTextQuestionBlock"
+          },
+          {
+            "$ref": "#/components/schemas/GuideSurveyListQuestionBlock"
+          },
+          {
+            "$ref": "#/components/schemas/GuideSurveyRatingQuestionBlock"
+          },
+          {
+            "$ref": "#/components/schemas/GuideSurveyHiddenFieldBlock"
+          }
+        ],
+        "description": "One content block. `type` selects the block and the shape of `meta`."
+      },
+      "GuideSurveyStepContent": {
+        "type": "array",
+        "items": {
+          "$ref": "#/components/schemas/GuideSurveyContentBlock"
+        },
+        "description": "The step body: content blocks rendered top to bottom, below the step\n`title`. `meta` keys are camelCase. Give each new block a unique `uuid`\n(a v4 UUID) and keep the existing `uuid` when you edit a block, because\nsurvey responses are keyed by it. To change one block, send the step's\nwhole `content` array back with that block edited.\n",
+        "example": [
+          {
+            "uuid": "3f0c2a8e-5b1d-4c7a-9e2f-1a6b8d4c0e11",
+            "type": "markdown",
+            "meta": {
+              "value": "Track any event in two clicks."
+            }
+          },
+          {
+            "uuid": "8d2e6f1a-7c3b-4e9d-a0f5-2b7c9e1d3a42",
+            "type": "button",
+            "meta": {
+              "label": "Next",
+              "buttonType": "primary",
+              "action": {
+                "type": "step_forward"
+              }
+            }
+          }
+        ]
+      },
       "GuideSurveyStepInput": {
         "type": "object",
         "description": "Step payload on create/update. `id` is optional — omit for new steps; include\nwhen updating an existing step row. A negative `id` is a step added to a\npublished guide or survey's draft that has not been published yet.\n",
@@ -9470,7 +10753,7 @@
             "$ref": "#/components/schemas/GuideSurveyStepFormFactor"
           },
           "content": {
-            "description": "Step body content (structure varies by form factor)."
+            "$ref": "#/components/schemas/GuideSurveyStepContent"
           },
           "sort_key": {
             "type": ["integer", "null"]
@@ -9512,15 +10795,31 @@
         "additionalProperties": false
       },
       "GuideSurveyStep": {
-        "allOf": [
-          {
-            "$ref": "#/components/schemas/GuideSurveyStepInput"
+        "type": "object",
+        "required": ["id"],
+        "properties": {
+          "id": {
+            "type": "string"
           },
-          {
+          "title": {
+            "type": ["string", "null"]
+          },
+          "form_factor": {
+            "$ref": "#/components/schemas/GuideSurveyStepFormFactor"
+          },
+          "content": {
+            "$ref": "#/components/schemas/GuideSurveyStepContent"
+          },
+          "content_v2": {
             "type": "object",
-            "required": ["id"]
+            "additionalProperties": true,
+            "readOnly": true,
+            "description": "Block-builder layout: a tree of `layout` containers whose `children`\nare containers or content blocks, including the step's `title` block.\nPresent only on steps built in the block builder. When present, the\ndashboard and SDK render this tree, not `title` and `content`.\nNot accepted on create or update.\n"
+          },
+          "sort_key": {
+            "type": ["integer", "null"]
           }
-        ]
+        }
       },
       "GuideSurveyVariant": {
         "allOf": [
@@ -9599,6 +10898,12 @@
           "step_counter_format": {
             "type": ["string", "null"]
           },
+          "theme_id": {
+            "type": ["string", "null"],
+            "pattern": "^[0-9]+$",
+            "readOnly": true,
+            "description": "Theme applied to this guide or survey. `null` means the project's\ndefault theme for the platform. Fetch it with the Themes API.\n"
+          },
           "variants": {
             "type": "array",
             "items": {
@@ -9624,6 +10929,42 @@
             "readOnly": true,
             "description": "The Experiment feature flag that delivers this nudge, in the same\nshape as the Feature Flags API. Includes audience targeting\n(`target_segments`) and rollout. With\n`include_unpublished_changes=true`, draft rollout and targeting\nsettings are applied over the live flag.\n"
           }
+        }
+      },
+      "ThemeVariablesPatch": {
+        "type": ["object", "null"],
+        "additionalProperties": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "description": "Variables to set, or `null` to reset a variable to its default. Setting a\nname that isn't a known theme variable returns `400`. `null` is\naccepted for any name, so you can remove one stored earlier.\n"
+      },
+      "ThemeVariables": {
+        "type": "object",
+        "additionalProperties": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "number"
+            }
+          ]
+        },
+        "description": "CSS variable values keyed by variable name. Colors accept any CSS color\n(`#ff0000`, `rgb()`, `color-mix()`, `var(--token)`). Sizes need a unit\n(`12px`, `1.5rem`, `100%`). Numbers such as font weights may be JSON\nnumbers or numeric strings. Any value may reference another variable with\n`var(--name)`.\n",
+        "example": {
+          "--base-accent": "rgb(120, 86, 255)",
+          "--font-size-base": "14px",
+          "--font-weight-bold": 700
         }
       },
       "DestinationConnectorKind": {

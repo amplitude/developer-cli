@@ -12,6 +12,10 @@ import {
 } from './args';
 import { usageError } from './cli-error';
 import type { CliBodyProperty, CliOperation } from './generated/cli-manifest';
+import {
+  PROJECT_API_KEY_OPERATION_ID,
+  PROJECT_API_KEY_RAW_FLAG,
+} from './project-api-key';
 import { jsonRecordSchema } from './schemas';
 
 export type QueryValue = boolean | number | string | null | undefined;
@@ -175,6 +179,9 @@ function allowedAliases(operation: CliOperation): Set<string> {
   const aliases = new Set<string>(
     apiGlobalOptionAliases(operation.authentication),
   );
+  if (operation.operationId === PROJECT_API_KEY_OPERATION_ID) {
+    for (const alias of PROJECT_API_KEY_RAW_FLAG.aliases) aliases.add(alias);
+  }
   for (const parameter of operation.parameters) {
     for (const alias of parameter.aliases) {
       aliases.add(alias);

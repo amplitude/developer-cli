@@ -12,6 +12,7 @@ import {
   runAuthTokenCommand,
   startWaitingIndicator,
 } from './authToken';
+import { transportError } from './cli-error';
 import { deviceIdHeader } from './client-identity';
 
 vi.mock('./client-identity', () => ({
@@ -55,6 +56,9 @@ describe('requestDeviceToken open affordance', () => {
     // Enter" hint shows); restore it so the stub can't leak to other tests.
     const originalStderrIsTTY = process.stderr.isTTY;
     process.stderr.isTTY = true;
+    const stderrWrite = vi
+      .spyOn(process.stderr, 'write')
+      .mockImplementation(() => true);
     const opened: string[] = [];
 
     let tokenAttempts = 0;
@@ -101,6 +105,7 @@ describe('requestDeviceToken open affordance', () => {
       });
     } finally {
       process.stderr.isTTY = originalStderrIsTTY;
+      stderrWrite.mockRestore();
     }
 
     expect(opened).toEqual(['https://amp.example/device?user_code=WDJB-MJHT']);
@@ -273,6 +278,72 @@ describe('runAuthTokenCommand', () => {
 });
 
 describe('pollForToken', () => {
+  it('stops retrying if the challenge expires during a retry sleep', async () => {
+    let clock = 0;
+    let attempts = 0;
+    await expect(
+      pollForToken({
+        exchange: async () => {
+          attempts += 1;
+          throw transportError('offline');
+        },
+        sleep: async () => {
+          clock = 9000;
+        },
+        intervalSeconds: 5,
+        transientRetries: 2,
+        deadline: { now: () => clock, expiresInSeconds: 8 },
+      }),
+    ).rejects.toThrow('offline');
+    expect(attempts).toBe(1);
+  });
+
+  it('exhausts the retry budget even when successful pending responses separate failures', async () => {
+    let attempts = 0;
+    const sleeps: number[] = [];
+    await expect(
+      pollForToken({
+        exchange: async () => {
+          attempts += 1;
+          if (attempts % 2 === 1) throw transportError('offline');
+          return { status: 400, body: { error: 'authorization_pending' } };
+        },
+        sleep: async (seconds) => {
+          sleeps.push(seconds);
+        },
+        intervalSeconds: 5,
+        transientRetries: 2,
+      }),
+    ).rejects.toThrow('offline');
+    expect(attempts).toBe(5);
+    expect(sleeps).toEqual([5, 5, 5, 5]);
+  });
+
+  it('does not retry when the effective interval would exceed the challenge lifetime', async () => {
+    let clock = 0;
+    let attempts = 0;
+    const sleeps: number[] = [];
+    await expect(
+      pollForToken({
+        exchange: async () => {
+          attempts += 1;
+          if (attempts === 1)
+            return { status: 400, body: { error: 'slow_down' } };
+          throw transportError('offline');
+        },
+        sleep: async (seconds) => {
+          sleeps.push(seconds);
+          clock += seconds * 1000;
+        },
+        intervalSeconds: 5,
+        transientRetries: 2,
+        deadline: { now: () => clock, expiresInSeconds: 12 },
+      }),
+    ).rejects.toThrow('offline');
+    expect(attempts).toBe(2);
+    expect(sleeps).toEqual([10]);
+  });
+
   it('polls through authorization_pending and slow_down until a token is issued', async () => {
     const exchanges = [
       { status: 400, body: { error: 'authorization_pending' } },
@@ -449,10 +520,14 @@ describe('createAnonymousRequest', () => {
     );
 
     const request = createAnonymousRequest('https://api.test');
+    const failure = request('POST', '/v1/auth/token');
 
-    await expect(request('POST', '/v1/auth/token')).rejects.toThrow(
+    await expect(failure).rejects.toThrow(
       'Could not reach the API at https://api.test.',
     );
+    await expect(failure).rejects.toMatchObject({
+      errorCode: 'transport_error',
+    });
   });
 
   it('falls back to the raw text when the body is not JSON', async () => {

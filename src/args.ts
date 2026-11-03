@@ -4,6 +4,7 @@ import { distance } from 'fastest-levenshtein';
 import { usageError } from './cli-error';
 import { CLI_OPERATIONS, type CliOperation } from './generated/cli-manifest';
 import { LOGIN_ID_FLAG } from './login-id';
+import { PROJECT_API_KEY_RAW_FLAG } from './project-api-key';
 
 export type FlagValue = boolean | string;
 
@@ -253,7 +254,11 @@ function defineOption(
 function optionDefinitions(): ParseableOption[] {
   const byAlias = new Map<string, ValueRequirement>();
 
-  for (const option of [...GLOBAL_OPTIONS, ...AUTH_SIGNUP_OPTIONS]) {
+  for (const option of [
+    ...GLOBAL_OPTIONS,
+    ...AUTH_SIGNUP_OPTIONS,
+    { aliases: PROJECT_API_KEY_RAW_FLAG.aliases, valueRequirement: 'optional' },
+  ] satisfies ParseableOption[]) {
     for (const alias of option.aliases) {
       byAlias.set(alias, option.valueRequirement);
     }

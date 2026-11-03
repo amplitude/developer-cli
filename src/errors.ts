@@ -1,21 +1,27 @@
-interface ProblemDetails {
-  title?: string;
-  status?: number;
-  detail?: string | null;
-  error_code?: string;
-  validation_errors?: Array<{
-    field: string;
-    message: string;
-    code: string;
-  }> | null;
-}
+import { z } from 'zod';
+
+export const problemDetailsSchema = z.object({
+  title: z.string().optional(),
+  status: z.number().optional(),
+  detail: z.string().nullable().optional(),
+  error_code: z.string().optional(),
+  retryable: z.boolean().optional(),
+  validation_errors: z
+    .array(
+      z.object({ field: z.string(), message: z.string(), code: z.string() }),
+    )
+    .nullable()
+    .optional(),
+});
+type ProblemDetails = z.infer<typeof problemDetailsSchema>;
 
 export function asProblem(body: unknown): ProblemDetails | undefined {
-  if (!body || typeof body !== 'object') {
+  const result = problemDetailsSchema.safeParse(body);
+  if (!result.success) {
     return undefined;
   }
 
-  const candidate = body as ProblemDetails;
+  const candidate = result.data;
   if (
     typeof candidate.error_code === 'string' ||
     typeof candidate.title === 'string'
@@ -39,6 +45,20 @@ export function hintForErrorCode(
       return 'Check required flags with `amp <command> --help`.';
     case 'not_found':
       return 'Verify identifiers such as --project, --flag, and --event.';
+    case 'project_selection_required':
+      return 'Run `amp projects list` to find a project, and supply --project <project_id>.';
+    case 'project_not_found':
+      return 'Verify --project and your access to that project.';
+    case 'project_key_access_denied':
+      return "Ask an organization administrator to review your permission to view this project's API key.";
+    case 'project_api_key_not_available':
+      return 'Choose a project that supports ingestion API keys.';
+    case 'project_api_key_unavailable':
+      return "Ask an organization administrator to review the project's API key settings.";
+    case 'operation_availability_unavailable':
+      return 'Retry the request later.';
+    case 'rate_limit_exceeded':
+      return 'Retry after the rate-limit window has passed.';
     case 'auth_unavailable':
     case 'upstream_error':
       return 'Retry the request. If it persists, check API status or try a different region with --region.';
