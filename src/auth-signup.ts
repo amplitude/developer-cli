@@ -250,9 +250,12 @@ export async function runAuthSignup(
         { retryMode: 'rotation_recovery' },
       );
     } catch {
+      const recovery = isInteractive
+        ? `Run \`${loginCommand}\` to sign in again.`
+        : `Run \`${signupLoginCommand(profileName, baseUrl, isFlagEnabled(flags.force), 'device')}\`, then \`${signupPollContinuation(profileName).command}\` to sign in again.`;
       return persistenceError(
         'credential_save_failed',
-        `Authentication completed, but credentials could not be saved. Run \`${loginCommand}\` to sign in again.`,
+        `Authentication completed, but credentials could not be saved. ${recovery}`,
       );
     }
     try {

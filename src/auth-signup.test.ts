@@ -1217,24 +1217,43 @@ describe('auth signup', () => {
     },
   );
 
-  it('returns recovery after real credential persistence fails, preserving prior state', async () => {
-    const before = seedProfile();
-    const pending = seedPending();
-    const save = vi.fn<typeof saveStore>().mockImplementation(() => {
-      throw new Error('secret-access');
-    });
-    const persist: typeof updateStore = (file, mutate) =>
-      updateStore(file, mutate, { save });
-    const result = await runAuthSignup(flags, deps({ updateStore: persist }));
-    expect(result.ok).toBe(false);
-    if (!result.ok)
-      expect(result.error.message).toContain(
-        "amp auth login --profile 'active' --region us",
+  it.each([
+    { isInteractive: true, nonInteractive: false, loginVerb: 'login' },
+    { isInteractive: false, nonInteractive: false, loginVerb: 'login start' },
+    { isInteractive: true, nonInteractive: true, loginVerb: 'login start' },
+  ])(
+    'returns usable credential-save recovery ($loginVerb, terminal=$isInteractive, non-interactive=$nonInteractive)',
+    async ({ isInteractive, nonInteractive, loginVerb }) => {
+      const before = seedProfile();
+      const pending = seedPending();
+      const save = vi.fn<typeof saveStore>().mockImplementation(() => {
+        throw new Error('secret-access');
+      });
+      const persist: typeof updateStore = (file, mutate) =>
+        updateStore(file, mutate, { save });
+      const result = await runAuthSignup(
+        { ...flags, region: 'eu', force: true, 'non-interactive': nonInteractive },
+        deps({ updateStore: persist, isInteractive }),
       );
-    expect(JSON.stringify(result)).not.toContain('secret-access');
-    expect(loadStore(path)).toEqual(before);
-    expect(loadPending(pendingPath)).toEqual(pending);
-  });
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.message).toContain(
+          `amp auth ${loginVerb} --profile 'active' --region eu --force`,
+        );
+        if (loginVerb === 'login start') {
+          expect(result.error.message).toContain('--force --json');
+          expect(result.error.message).toContain(
+            "amp auth login poll --profile 'active' --json",
+          );
+        } else {
+          expect(result.error.message).not.toContain('amp auth login poll');
+        }
+      }
+      expect(JSON.stringify(result)).not.toContain('secret-access');
+      expect(loadStore(path)).toEqual(before);
+      expect(loadPending(pendingPath)).toEqual(pending);
+    },
+  );
 
   it('reports challenge storage failure without replacing stored credentials', async () => {
     const before = seedProfile();

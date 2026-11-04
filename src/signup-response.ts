@@ -208,6 +208,7 @@ export function signupLoginCommand(
   profile: string,
   baseUrl: string,
   force: boolean,
+  flow: 'browser' | 'device' = 'browser',
 ): string {
   const region = Object.entries(REGION_BASE_URLS).find(
     ([, url]) => url === baseUrl,
@@ -215,7 +216,7 @@ export function signupLoginCommand(
   const target = region
     ? `--region ${region}`
     : `--base-url ${shellQuote(baseUrl)}`;
-  return `amp auth login --profile ${shellQuote(profile)} ${target}${force ? ' --force' : ''}`;
+  return `amp auth login${flow === 'device' ? ' start' : ''} --profile ${shellQuote(profile)} ${target}${force ? ' --force' : ''}${flow === 'device' ? ' --json' : ''}`;
 }
 
 export function signupPollContinuation(profile: string): {
