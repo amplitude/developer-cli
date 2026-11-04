@@ -5,27 +5,18 @@
 
 ### Features
 
-* **auth:** support browser authorization during signup ([1144a90](https://github.com/amplitude/developer-cli/commit/1144a90ba32a8679a35416bd3afeed7604bf15a8))
 * **auth:** support browser authorization during signup ([9b0ee96](https://github.com/amplitude/developer-cli/commit/9b0ee9607a8243e8df307566ad038c4d9c27df8c))
-* **events:** add scheduled event action commands ([1144a90](https://github.com/amplitude/developer-cli/commit/1144a90ba32a8679a35416bd3afeed7604bf15a8))
 * **events:** add scheduled event action commands ([9b0ee96](https://github.com/amplitude/developer-cli/commit/9b0ee9607a8243e8df307566ad038c4d9c27df8c))
-* **guides,surveys:** support block-builder step content ([1144a90](https://github.com/amplitude/developer-cli/commit/1144a90ba32a8679a35416bd3afeed7604bf15a8))
 * **guides,surveys:** support block-builder step content ([9b0ee96](https://github.com/amplitude/developer-cli/commit/9b0ee9607a8243e8df307566ad038c4d9c27df8c))
-* **projects:** add project API key lookup with raw output ([1144a90](https://github.com/amplitude/developer-cli/commit/1144a90ba32a8679a35416bd3afeed7604bf15a8))
 * **projects:** add project API key lookup with raw output ([9b0ee96](https://github.com/amplitude/developer-cli/commit/9b0ee9607a8243e8df307566ad038c4d9c27df8c))
-* **themes:** add theme list, get, create, and update commands ([1144a90](https://github.com/amplitude/developer-cli/commit/1144a90ba32a8679a35416bd3afeed7604bf15a8))
 * **themes:** add theme list, get, create, and update commands ([9b0ee96](https://github.com/amplitude/developer-cli/commit/9b0ee9607a8243e8df307566ad038c4d9c27df8c))
 
 
 ### Bug Fixes
 
-* **auth:** preserve login errors and improve signup recovery guidance ([1144a90](https://github.com/amplitude/developer-cli/commit/1144a90ba32a8679a35416bd3afeed7604bf15a8))
 * **auth:** preserve login errors and improve signup recovery guidance ([9b0ee96](https://github.com/amplitude/developer-cli/commit/9b0ee9607a8243e8df307566ad038c4d9c27df8c))
-* **errors:** preserve API error codes, retryability, and existing server-error exit codes ([1144a90](https://github.com/amplitude/developer-cli/commit/1144a90ba32a8679a35416bd3afeed7604bf15a8))
 * **errors:** preserve API error codes, retryability, and existing server-error exit codes ([9b0ee96](https://github.com/amplitude/developer-cli/commit/9b0ee9607a8243e8df307566ad038c4d9c27df8c))
-* **output:** render control characters safely in terminal output ([1144a90](https://github.com/amplitude/developer-cli/commit/1144a90ba32a8679a35416bd3afeed7604bf15a8))
 * **output:** render control characters safely in terminal output ([9b0ee96](https://github.com/amplitude/developer-cli/commit/9b0ee9607a8243e8df307566ad038c4d9c27df8c))
-* **pagination:** accept --next-cursor as an alias of --cursor ([1144a90](https://github.com/amplitude/developer-cli/commit/1144a90ba32a8679a35416bd3afeed7604bf15a8))
 * **pagination:** accept --next-cursor as an alias of --cursor ([9b0ee96](https://github.com/amplitude/developer-cli/commit/9b0ee9607a8243e8df307566ad038c4d9c27df8c))
 
 ## [0.6.0](https://github.com/amplitude/developer-cli/compare/developer-cli-v0.5.0...developer-cli-v0.6.0) (2026-10-28)
