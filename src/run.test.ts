@@ -245,6 +245,18 @@ describe('runOperation', () => {
     expect(new Headers(init?.headers).get('amp-device-id')).toBe('device-123');
   });
 
+  it('identifies itself and the AMP_CLIENT tag in the User-Agent', async () => {
+    vi.stubEnv('AMP_CLIENT', 'mcp');
+    fetchMock.mockResolvedValue(jsonResponse(200, { data: [] }));
+
+    await runOperation(operation(['projects', 'list']), { token: 'amp_test' });
+
+    const [, init] = fetchMock.mock.calls[0];
+    expect(new Headers(init?.headers).get('user-agent')).toMatch(
+      /^amp-cli\/\S+ \(mcp\)$/,
+    );
+  });
+
   it('checks ingestion by API key without resolving or sending OAuth credentials', async () => {
     const envelope = {
       data: {

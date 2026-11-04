@@ -6,7 +6,14 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import { type AuthPatDeps, normalizePat, runAuthPat } from './auth-commands';
 import { CliError } from './cli-error';
-import { getProfile, loadStore } from './credential-store';
+import {
+  emptyStore,
+  getProfile,
+  loadStore,
+  saveStore,
+  setDefault,
+  setProfile,
+} from './credential-store';
 import {
   getPending,
   loadPending,
@@ -74,6 +81,32 @@ describe('runAuthPat', () => {
       'https://developer-api.amplitude.com',
     );
     expect(out.join('\n')).toMatch(/created and set as default/);
+  });
+
+  it('renders a stored previous default without terminal controls', async () => {
+    const path = tempPath();
+    const previous = 'old\u001b[31m';
+    saveStore(
+      setDefault(
+        setProfile(emptyStore(), previous, {
+          base_url: 'https://developer-api.amplitude.com',
+          credential: { type: 'pat', pat: 'amp_old' },
+          saved_at: '2026-06-23T00:00:00.000Z',
+          store: 'file',
+        }),
+        previous,
+      ),
+      path,
+    );
+    const out: string[] = [];
+    await runAuthPat(
+      { profile: 'ci', env: 'prod', 'with-token': true },
+      deps(path, out),
+    );
+
+    const text = out.join('\n');
+    expect(text).toContain('was "old^[[31m"');
+    expect(text.includes('\u001b')).toBe(false);
   });
 
   it('normalizes a prefixed token before saving', async () => {

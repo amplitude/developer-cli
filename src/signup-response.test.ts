@@ -3,10 +3,12 @@ import { join } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
+import { formatErrorEnvelope, formatErrorText } from './cli-error';
 import {
   formatSignupText,
   SIGNUP_DOCUMENT_URLS,
   signupErrorFromResponse,
+  signupLoginCommand,
   signupMissingInformationError,
   signupPollContinuation,
   signupRequestSchema,
@@ -130,6 +132,27 @@ describe('signup response contract', () => {
     expect(error.hint).toBeUndefined();
   });
 
+  it('renders a server signup error without terminal controls', () => {
+    const message = 'Update\u001b[31m this client\u0007';
+    const error = signupErrorFromResponse(400, 'Bad Request', {
+      type: 'error',
+      error: {
+        code: 'terms_documents_outdated',
+        message,
+      },
+    });
+
+    expect(error.message).toBe(message);
+    const text = formatErrorText(error);
+    expect(text).toBe('Update^[[31m this client^G');
+    expect(text.includes('\u001b')).toBe(false);
+    expect(text.includes('\u0007')).toBe(false);
+
+    expect(JSON.parse(formatErrorEnvelope(error, false))).toMatchObject({
+      message,
+    });
+  });
+
   it.each([
     'secret-access',
     { access_token: 'secret-access' },
@@ -153,6 +176,45 @@ describe('signup response contract', () => {
     expect(error.message).toContain('Supply a valid email address.');
   });
 
+  it('retains the server title when a problem has no error code', () => {
+    const error = signupErrorFromResponse(400, 'Bad Request', {
+      title: 'Bad request',
+    });
+    expect(error.errorCode).toBe('request_failed');
+    expect(error.httpStatus).toBe(400);
+    expect(error.message).toBe('Bad request (400 Bad Request)');
+  });
+
+  it.each([
+    { title: 123 },
+    { status: '503' },
+    { detail: {} },
+    { retryable: 'false' },
+    { validation_errors: [{ field: 'email', message: 'Required' }] },
+  ])(
+    'retains signup diagnostics despite a malformed field: %j',
+    (malformed) => {
+      const error = signupErrorFromResponse(503, 'Service Unavailable', {
+        title: 'Signup unavailable',
+        error_code: 'operation_availability_unavailable',
+        status: 503,
+        detail: 'Try later',
+        retryable: true,
+        ...malformed,
+      });
+      expect(error.errorCode).toBe('operation_availability_unavailable');
+      expect(error.httpStatus).toBe(503);
+      expect(error.exitCode).toBe(5);
+      expect(error.detail).toBe(
+        'detail' in malformed ? undefined : 'Try later',
+      );
+      expect(error.retryable).toBe('retryable' in malformed ? undefined : true);
+      expect(error.hint).toBe(
+        'retryable' in malformed ? undefined : 'Retry the request later.',
+      );
+    },
+  );
+
   it('returns exact argv and shell-quotes the profile', () => {
     const profile = "team $(command) 'quoted'";
     const continuation = signupPollContinuation(profile);
@@ -167,6 +229,30 @@ describe('signup response contract', () => {
     ]);
     expect(continuation.command).toBe(
       "amp auth login poll --profile 'team $(command) '\\''quoted'\\''' --json",
+    );
+  });
+
+  it('preserves a custom login target and safely quotes the profile', () => {
+    expect(
+      signupLoginCommand(
+        "team $(command) 'quoted'",
+        'http://localhost:3036',
+        false,
+      ),
+    ).toBe(
+      "amp auth login --profile 'team $(command) '\\''quoted'\\''' --base-url 'http://localhost:3036'",
+    );
+  });
+
+  it('safely quotes a custom target and retains an authorized retarget', () => {
+    expect(
+      signupLoginCommand(
+        'default',
+        "https://api.example.test?value='quoted'",
+        true,
+      ),
+    ).toBe(
+      "amp auth login --profile 'default' --base-url 'https://api.example.test?value='\\''quoted'\\''' --force",
     );
   });
 

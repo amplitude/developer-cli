@@ -72,16 +72,15 @@ the [Terms of Service](https://amplitude.com/terms) and acknowledge the
 [Privacy Policy](https://amplitude.com/privacy) applies.
 
 ```bash
-amp auth signup --non-interactive \
+amp auth signup \
   --email alex@example.com \
   --full-name "Alex Morgan" \
   --region us \
   --accept-tos
 ```
 
-`--non-interactive` is required. Signup returns outstanding requirements without
-prompting, opening a browser, or polling. `--json` controls presentation; piped
-output is also compact JSON.
+`--non-interactive` skips browser interaction and waiting for authorization.
+`--json` controls output format; piped output is compact JSON.
 
 `--accept-tos` passes the Terms of Service and Privacy Policy URLs alongside
 the signup request.
@@ -132,6 +131,7 @@ active access token to stdout (`TOKEN=$(amp auth token)`).
 ```bash
 amp context
 amp projects list
+amp projects api-keys get --project <project_id>
 amp events list --project <project_id> --limit 5
 amp events create --project <project_id> --event-type my_event --display-name "My Event"
 amp flags list --project <project_id> --limit 5
@@ -143,6 +143,34 @@ amp surveys get --project <project_id> --survey <survey_id> --include-unpublishe
 amp heatmaps click-map --project <project_id> --page-url https://example.com/pricing
 amp zoning zone-metrics --project <project_id> --page-url https://example.com/pricing --metric click_rate_pageview
 ```
+
+## Project ingestion API key
+
+Explore the project API-key commands with `amp projects api-keys --help`, or add
+`--json` for structured help.
+
+Retrieve a project's primary ingestion API key using your authenticated profile
+or supplied token:
+
+```bash
+amp projects api-keys get
+amp projects api-keys get --project 12345
+amp projects api-keys get --project 12345 --json
+AMPLITUDE_API_KEY="$(amp projects api-keys get --project 12345 --raw)"
+```
+
+At a terminal, the command shows the project name, ID, and full key. Piped output
+is compact API JSON with the key at `data.api_key`; `--json` forces JSON in any
+environment. `--raw` prints only the key followed by a newline and cannot be
+combined with `--json`.
+
+Supply a positive integer project ID. `--project-id` and `--project_id` are also
+accepted. You can omit the selector when the organization has exactly one
+non-deleted project; otherwise use `amp projects list` to find its ID.
+
+Retrieval requires `projects:read` and permission to view the project's API key.
+The command retrieves the designated project key without creating, rotating, or
+saving it. Failures leave stdout empty and report the error on stderr.
 
 ## Smoke test
 
