@@ -1,5 +1,5 @@
 import { asProblem, hintForErrorCode } from './errors';
-import { formatJsonOutput } from './output';
+import { formatJsonOutput, sanitizeTerminalText } from './output';
 
 export interface CliErrorFields {
   errorCode: string;
@@ -8,6 +8,7 @@ export interface CliErrorFields {
   detail?: string;
   validationErrors?: Array<{ field: string; message: string; code: string }>;
   hint?: string;
+  retryable?: boolean;
 }
 
 const AUTH_CODES = new Set([
@@ -20,6 +21,7 @@ const TRANSPORT_CODES = new Set(['auth_unavailable', 'upstream_error']);
 export function exitCodeForErrorCode(
   errorCode: string,
   httpStatus?: number,
+  retryable?: boolean,
 ): number {
   if (
     errorCode === 'validation_error' ||
@@ -35,10 +37,13 @@ export function exitCodeForErrorCode(
   if (errorCode === 'not_found' || httpStatus === 404) {
     return 4;
   }
-  if (
-    TRANSPORT_CODES.has(errorCode) ||
-    (httpStatus !== undefined && httpStatus >= 500)
-  ) {
+  if (httpStatus !== undefined && httpStatus >= 500) {
+    // Keep released server-error exit codes stable outside the new key command.
+    return errorCode === 'project_api_key_unavailable' && retryable === false
+      ? 1
+      : 5;
+  }
+  if (TRANSPORT_CODES.has(errorCode)) {
     return 5;
   }
   return 1;
@@ -51,6 +56,7 @@ export class CliError extends Error implements CliErrorFields {
   detail?: string;
   validationErrors?: Array<{ field: string; message: string; code: string }>;
   hint?: string;
+  retryable?: boolean;
 
   constructor(fields: CliErrorFields & { message: string }) {
     super(fields.message);
@@ -61,6 +67,7 @@ export class CliError extends Error implements CliErrorFields {
     this.detail = fields.detail;
     this.validationErrors = fields.validationErrors;
     this.hint = fields.hint;
+    this.retryable = fields.retryable;
   }
 }
 
@@ -89,11 +96,12 @@ export function cliErrorFromResponse(
       ? `${title}: ${detail}`
       : `${title} (${status} ${statusText})`,
     errorCode,
-    exitCode: exitCodeForErrorCode(errorCode, status),
+    exitCode: exitCodeForErrorCode(errorCode, status, problem?.retryable),
     httpStatus: status,
     detail,
     validationErrors: problem?.validation_errors ?? undefined,
-    hint: hintForErrorCode(errorCode),
+    hint: hintForErrorCode(errorCode, problem?.retryable),
+    retryable: problem?.retryable,
   });
 }
 
@@ -128,19 +136,28 @@ export function transportError(
 }
 
 export function formatErrorText(error: CliError): string {
-  const lines: string[] = [error.message];
+  const lines: string[] = [sanitizeTerminalText(error.message)];
 
   if (error.validationErrors && error.validationErrors.length > 0) {
     lines.push('');
     lines.push('Validation errors:');
     for (const validationError of error.validationErrors) {
-      lines.push(`  - ${validationError.field}: ${validationError.message}`);
+      lines.push(
+        `  - ${sanitizeTerminalText(validationError.field)}: ${sanitizeTerminalText(validationError.message)}`,
+      );
     }
   }
 
   if (error.hint) {
     lines.push('');
-    lines.push(error.hint);
+    // Hints are CLI-authored paragraphs. Keep the breaks between them, and
+    // sanitize each line so a control character still cannot act on the terminal.
+    lines.push(
+      error.hint
+        .split('\n')
+        .map((line) => sanitizeTerminalText(line))
+        .join('\n'),
+    );
   }
 
   return lines.join('\n');
@@ -157,6 +174,7 @@ export function formatErrorEnvelope(error: CliError, isTTY: boolean): string {
         detail: error.detail,
         validation_errors: error.validationErrors,
         hint: error.hint,
+        retryable: error.retryable,
       },
     },
     isTTY,

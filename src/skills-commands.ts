@@ -5,6 +5,7 @@ import { LOGIN_ID_FLAG } from './login-id';
 import {
   formatJsonOutput,
   normalizeWhitespace,
+  sanitizeTerminalText,
   shouldUseJsonOutput,
 } from './output';
 import { assertFlagsAllowed } from './request';
@@ -69,14 +70,14 @@ function formatIndexText(index: SkillIndexEntry[]): string {
   const skills = index
     .map(
       (entry) =>
-        `\`${normalizeWhitespace(entry.name)}\`\n${normalizeWhitespace(entry.description)}`,
+        `\`${sanitizeTerminalText(normalizeWhitespace(entry.name))}\`\n${sanitizeTerminalText(normalizeWhitespace(entry.description))}`,
     )
     .join('\n\n');
   const exampleName = resolveExampleSkillName(index);
   const example =
     exampleName === undefined
       ? ''
-      : ` For example: \`amp skills get ${exampleName}\`.`;
+      : ` For example: \`amp skills get ${sanitizeTerminalText(exampleName)}\`.`;
 
   return `Available skills (${index.length}):\n\n${skills}\n\nRun \`amp skills get <name>\` to print a skill.${example}`;
 }

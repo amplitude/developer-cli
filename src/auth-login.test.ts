@@ -10,11 +10,14 @@ import {
   oauthCredentialFromToken,
   runAuthLogin,
 } from './auth-commands';
+import { requestDeviceToken } from './authToken';
 import {
   CURRENT_VERSION,
+  emptyStore,
   getProfile,
   loadStore,
   saveStore,
+  setDefault,
   setProfile,
 } from './credential-store';
 import type { TokenResponse } from './oauthResponseSchemas';
@@ -143,6 +146,57 @@ describe('runAuthLogin', () => {
     };
   }
 
+  it.each(['prompt', 'exchange', 'wait'])(
+    'preserves a local %s failure during browser login',
+    async (phase) => {
+      const path = tempPath();
+      const out: string[] = [];
+      const failure = new Error(`Local ${phase} failed`);
+      const before = loadStore(path);
+
+      await expect(
+        runAuthLogin(
+          { profile: 'amplitude', env: 'prod' },
+          {
+            ...deps(path, out),
+            stderr: () => {
+              if (phase === 'prompt') throw failure;
+            },
+            requestToken: (options) =>
+              requestDeviceToken({
+                ...options,
+                now: () => NOW,
+                sleep: async () => {
+                  throw failure;
+                },
+                request: async (_method, endpoint) => {
+                  if (endpoint === '/v1/auth/device-authorization') {
+                    return {
+                      status: 200,
+                      body: {
+                        device_code: 'secret-device',
+                        user_code: 'ABCD-EFGH',
+                        verification_uri: 'https://amp.example/device',
+                        expires_in: 600,
+                        interval: 1,
+                      },
+                    };
+                  }
+                  if (phase === 'exchange') throw failure;
+                  return {
+                    status: 400,
+                    body: { error: 'authorization_pending' },
+                  };
+                },
+              }),
+          },
+        ),
+      ).rejects.toBe(failure);
+      expect(loadStore(path)).toEqual(before);
+      expect(out).toEqual([]);
+    },
+  );
+
   it('creates a profile, activates it, and saves the oauth credential', async () => {
     const path = tempPath();
     const out: string[] = [];
@@ -242,6 +296,29 @@ describe('runAuthLogin', () => {
 
     expect(loadStore(path).default).toBe('staging');
     expect(out.join('\n')).toMatch(/set as default \(was "amplitude"\)/);
+  });
+
+  it('renders a stored previous default without terminal controls', async () => {
+    const path = tempPath();
+    const previous = 'old\u001b[31m';
+    saveStore(
+      setDefault(
+        setProfile(emptyStore(), previous, {
+          base_url: 'https://developer-api.amplitude.com',
+          credential: { type: 'pat', pat: 'amp_old' },
+          saved_at: '2026-06-23T00:00:00.000Z',
+          store: 'file',
+        }),
+        previous,
+      ),
+      path,
+    );
+    const out: string[] = [];
+    await runAuthLogin({ profile: 'amplitude', env: 'prod' }, deps(path, out));
+
+    const text = out.join('\n');
+    expect(text).toContain('was "old^[[31m"');
+    expect(text.includes('\u001b')).toBe(false);
   });
 
   it('re-auths the default in place when --profile is omitted', async () => {

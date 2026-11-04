@@ -7,6 +7,10 @@ import {
 import { DEFAULT_POLL_TIMEOUT_SECONDS } from './config';
 import type { CliOperation } from './generated/cli-manifest';
 import { CLI_OPERATIONS } from './generated/cli-manifest';
+import {
+  PROJECT_API_KEY_OPERATION_ID,
+  PROJECT_API_KEY_RAW_FLAG,
+} from './project-api-key';
 import { SIGNUP_DOCUMENT_URLS } from './signup-response';
 
 export interface CatalogFlag {
@@ -17,6 +21,7 @@ export interface CatalogFlag {
   enum?: string[];
   description?: string;
   items?: Record<string, unknown>;
+  schema?: Record<string, unknown>;
 }
 
 export interface CatalogPositional {
@@ -107,7 +112,8 @@ const GROUP_ORDER: Partial<Record<string, number>> = {
   destinations: 11,
   guides: 12,
   surveys: 13,
-  skills: 14,
+  themes: 14,
+  skills: 15,
   auth: 20,
 };
 
@@ -126,6 +132,7 @@ const GROUP_DESCRIPTIONS: Partial<Record<string, string>> = {
   destinations: 'Configured destinations in a project',
   guides: 'Guides (in-app tours, modals, banners, and tooltips)',
   surveys: 'In-app surveys',
+  themes: 'Themes shared by guides and surveys (draft changes only)',
   skills:
     'Skill documents for implementing Amplitude, intended for AI agents. Run amp skills list to discover them.',
   auth: 'Authentication and credential profiles',
@@ -135,6 +142,7 @@ const GROUP_DESCRIPTIONS: Partial<Record<string, string>> = {
 const EXAMPLES: Partial<Record<string, string>> = {
   context: 'amp context',
   'projects list': 'amp projects list --limit 10',
+  'projects api-keys get': 'amp projects api-keys get --project <project_id>',
   'events list': 'amp events list --project <project_id> --limit 5',
   'events create':
     'amp events create --project <project_id> --event-type my_event',
@@ -173,9 +181,16 @@ const EXAMPLES: Partial<Record<string, string>> = {
     'amp surveys update --project <project_id> --survey <survey_id> --latest-version <version> --title "NPS survey v2"',
   'surveys archive':
     'amp surveys archive --project <project_id> --survey <survey_id> --dry-run',
+  'themes list': 'amp themes list --project <project_id> --platform web',
+  'themes get':
+    'amp themes get --project <project_id> --theme <theme_id> --include-unpublished-changes',
+  'themes create': 'amp themes create --project <project_id> --name "Brand"',
+  'themes update':
+    'amp themes update --project <project_id> --theme <theme_id> --config \'{"lightMode":{"varDefaults":{"--base-accent":"rgb(37, 99, 235)"}}}\'',
 };
 
 const API_COMMAND_DESCRIPTIONS: Partial<Record<string, string>> = {
+  'projects api-keys get': "Retrieves a project's primary ingestion API key.",
   'events check-ingestion-by-api-key':
     'Checks recent event ingestion using an ingestion API key. This command requires --region <us|eu> and never infers an endpoint from credentials or configuration.',
 };
@@ -210,6 +225,7 @@ function flagsForOperation(operation: CliOperation): CatalogFlag[] {
     required: property.required,
     enum: property.enum,
     items: property.items,
+    ...(property.schema ? { schema: property.schema } : {}),
     description:
       [
         property.description,
@@ -220,7 +236,13 @@ function flagsForOperation(operation: CliOperation): CatalogFlag[] {
         .filter(Boolean)
         .join(' ') || undefined,
   }));
-  return [...fromParams, ...fromBody];
+  return [
+    ...fromParams,
+    ...fromBody,
+    ...(operation.operationId === PROJECT_API_KEY_OPERATION_ID
+      ? [PROJECT_API_KEY_RAW_FLAG]
+      : []),
+  ];
 }
 
 function apiCommands(): CatalogCommand[] {
@@ -238,13 +260,15 @@ function apiCommands(): CatalogCommand[] {
       example: EXAMPLES[key],
       description:
         [
+          operation.description,
           API_COMMAND_DESCRIPTIONS[key],
           operation.method === 'DELETE'
             ? 'Requires --yes to apply changes, or --dry-run when supported to validate without applying changes.'
             : undefined,
         ]
+          .map((part) => part?.trim())
           .filter(Boolean)
-          .join(' ') || undefined,
+          .join('\n\n') || undefined,
       requiredScopes: operation.requiredScopes,
     };
   });
@@ -263,7 +287,7 @@ const AUTH_COMMANDS: BespokeCommand[] = [
   {
     command: ['auth', 'signup'],
     summary: 'Sign up for an Amplitude account',
-    description: `Requires --non-interactive. Saves and activates credentials on immediate authorization, or records the supplied device challenge for auth login poll. Outstanding inputs are reported. Signup does not prompt, open a browser, or poll automatically. Exit 0 can indicate requires_auth; inspect status to distinguish it from authorized. By utilizing this command you agree to the Terms of Service (${SIGNUP_DOCUMENT_URLS.terms_of_service}) and acknowledge the Privacy Policy (${SIGNUP_DOCUMENT_URLS.privacy_policy}) applies.`,
+    description: `Creates an account and saves credentials when available. If authorization is required, an interactive terminal shows the verification URL and waits for authorization; with --non-interactive or without a terminal, it returns the next step. Exit 0 can indicate requires_auth; inspect status to distinguish it from authorized. By utilizing this command you agree to the Terms of Service (${SIGNUP_DOCUMENT_URLS.terms_of_service}) and acknowledge the Privacy Policy (${SIGNUP_DOCUMENT_URLS.privacy_policy}) applies.`,
     group: 'auth',
     order: GROUP_ORDER.auth,
     globalFlags: [
@@ -283,9 +307,8 @@ const AUTH_COMMANDS: BespokeCommand[] = [
         name: 'non-interactive',
         aliases: ['non-interactive'],
         type: 'boolean',
-        required: true,
-        description:
-          'Return outstanding inputs or authorization without prompts or polling.',
+        required: false,
+        description: 'Do not open a browser or wait for authorization.',
       },
       {
         name: 'email',

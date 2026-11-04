@@ -79,7 +79,7 @@ describe('main routing', () => {
     vi.mocked(signupCommands.runAuthSignup).mockReset();
     vi.mocked(signupCommands.runAuthSignup).mockResolvedValue({
       ok: false,
-      error: usageError('Signup requires --non-interactive.'),
+      error: usageError('Signup requires --email <email>.'),
     });
     logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
     errSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
@@ -114,12 +114,10 @@ describe('main routing', () => {
     vi.unstubAllGlobals();
   });
 
-  it('requires explicit signup mode through the handler', async () => {
+  it('reports missing signup arguments through the handler', async () => {
     await runWith(['auth', 'signup']);
     expect(process.exitCode).toBe(2);
-    expect(errSpy).toHaveBeenCalledWith(
-      expect.stringContaining('--non-interactive'),
-    );
+    expect(errSpy).toHaveBeenCalledWith(expect.stringContaining('--email'));
     expect(logSpy).not.toHaveBeenCalled();
     expect(signupCommands.runAuthSignup).toHaveBeenCalledWith({});
   });
@@ -481,12 +479,12 @@ describe('main routing', () => {
   });
 
   it('renders a usage_error (exit 2) for a flag valid on another command but not this one', async () => {
-    await runWith(['flags', 'list', '--key', 'foo']);
+    await runWith(['flags', 'list', '--flag', 'foo']);
 
     expect(process.exitCode).toBe(2);
     const parsed = JSON.parse(String(errSpy.mock.calls[0]?.[0]));
     expect(parsed.error.error_code).toBe('usage_error');
-    expect(parsed.message).toBe('Unknown flag --key for `amp flags list`.');
+    expect(parsed.message).toBe('Unknown flag --flag for `amp flags list`.');
     expect(logSpy).not.toHaveBeenCalled();
   });
 

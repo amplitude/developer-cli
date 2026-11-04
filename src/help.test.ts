@@ -15,6 +15,72 @@ import { normalizeWhitespace } from './output';
 
 describe('help', () => {
   it.each([false, true])(
+    'discovers key retrieval under the project API-key topic (JSON: %s)',
+    (json) => {
+      const log = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+      try {
+        printCommandHelp(['projects', 'api-keys'], { json, isTTY: true });
+        const text = log.mock.calls.map((call) => String(call[0])).join('\n');
+        if (json) {
+          expect(JSON.parse(text)).toMatchObject({
+            command: 'projects api-keys',
+            commands: [
+              {
+                command: 'projects api-keys get',
+                summary: 'Retrieve a project API key',
+                requiredScopes: ['projects:read'],
+              },
+            ],
+          });
+        } else {
+          expect(text).toContain('amp projects api-keys — available commands:');
+          expect(text).toContain('projects api-keys get');
+          expect(text).toContain(
+            'amp projects api-keys get --project <project_id>',
+          );
+        }
+      } finally {
+        log.mockRestore();
+      }
+    },
+  );
+
+  it.each([false, true])(
+    'describes project-key selection (JSON: %s)',
+    (json) => {
+      const log = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+      try {
+        printCommandHelp(['projects', 'api-keys', 'get'], {
+          json,
+          isTTY: true,
+        });
+        const text = log.mock.calls.map((call) => String(call[0])).join('\n');
+        expect(text).toContain('projects api-keys get');
+        expect(text).toContain('primary ingestion API key');
+        expect(text).toContain('projects:read');
+        expect(text).toContain('Cannot be combined with --json');
+        if (json) {
+          expect(JSON.parse(text).flags).toContainEqual(
+            expect.objectContaining({ name: 'project_id', required: false }),
+          );
+          expect(JSON.parse(text).flags).toContainEqual(
+            expect.objectContaining({
+              name: 'raw',
+              type: 'boolean',
+              required: false,
+            }),
+          );
+        } else {
+          expect(text).toContain('[--raw]');
+          expect(text).toContain('[--project <project_id>]');
+        }
+      } finally {
+        log.mockRestore();
+      }
+    },
+  );
+
+  it.each([false, true])(
     'hides --loginId throughout help (JSON: %s)',
     (json) => {
       const log = vi.spyOn(console, 'log').mockImplementation(() => undefined);
@@ -274,6 +340,7 @@ describe('help', () => {
       'destinations',
       'guides',
       'surveys',
+      'themes',
       'skills',
       'agent-analytics',
       'mcp-analytics',
@@ -394,7 +461,7 @@ describe('help JSON', () => {
     // stay well under half that however many commands exist. Tied to the
     // principle rather than a snapshot: a bump here is only warranted when
     // commands are added, never to accommodate a per-command size regression.
-    expect(out.length).toBeLessThan(11000);
+    expect(out.length).toBeLessThan(12000);
   });
 
   it('exact command + json → full detail, with flags, and no order', () => {

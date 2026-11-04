@@ -11,8 +11,72 @@ describe('error contract: exit-code map', () => {
     label: string;
     errorCode: string;
     httpStatus?: number;
+    retryable?: boolean;
     exitCode: number;
   }> = [
+    {
+      label: 'nonretryable project key failure',
+      errorCode: 'project_api_key_unavailable',
+      httpStatus: 503,
+      retryable: false,
+      exitCode: 1,
+    },
+    {
+      label:
+        'unimplemented operation retains the released server-error exit code',
+      errorCode: 'not_implemented',
+      httpStatus: 501,
+      retryable: false,
+      exitCode: 5,
+    },
+    {
+      label: 'retryable server failure',
+      errorCode: 'upstream_error',
+      httpStatus: 502,
+      retryable: true,
+      exitCode: 5,
+    },
+    {
+      label: 'upstream failure retains the released server-error exit code',
+      errorCode: 'upstream_error',
+      httpStatus: 502,
+      retryable: false,
+      exitCode: 5,
+    },
+    {
+      label: 'transport code without a server status',
+      errorCode: 'upstream_error',
+      retryable: false,
+      exitCode: 5,
+    },
+    {
+      label: 'transport code on a non-server response',
+      errorCode: 'upstream_error',
+      httpStatus: 429,
+      retryable: false,
+      exitCode: 5,
+    },
+    {
+      label: 'validation code takes priority over server status',
+      errorCode: 'validation_error',
+      httpStatus: 500,
+      retryable: false,
+      exitCode: 2,
+    },
+    {
+      label: 'auth code takes priority over server status',
+      errorCode: 'invalid_token',
+      httpStatus: 503,
+      retryable: false,
+      exitCode: 3,
+    },
+    {
+      label: 'not-found code takes priority over server status',
+      errorCode: 'not_found',
+      httpStatus: 500,
+      retryable: false,
+      exitCode: 4,
+    },
     // usage / validation → 2
     {
       label: 'validation_error code, no status',
@@ -93,7 +157,23 @@ describe('error contract: exit-code map', () => {
       httpStatus: 599,
       exitCode: 5,
     },
+    {
+      label: 'unavailable project key without retryability metadata',
+      errorCode: 'project_api_key_unavailable',
+      httpStatus: 503,
+      exitCode: 5,
+    },
     // generic → 1
+    {
+      label: 'project_api_key_unavailable code, no status',
+      errorCode: 'project_api_key_unavailable',
+      exitCode: 1,
+    },
+    {
+      label: 'unexpected_response code, no status',
+      errorCode: 'unexpected_response',
+      exitCode: 1,
+    },
     {
       label: 'unknown code, no status',
       errorCode: 'something_new',
@@ -109,8 +189,10 @@ describe('error contract: exit-code map', () => {
 
   it.each(cases)(
     '$label → exit $exitCode',
-    ({ errorCode, httpStatus, exitCode }) => {
-      expect(exitCodeForErrorCode(errorCode, httpStatus)).toBe(exitCode);
+    ({ errorCode, httpStatus, retryable, exitCode }) => {
+      expect(exitCodeForErrorCode(errorCode, httpStatus, retryable)).toBe(
+        exitCode,
+      );
     },
   );
 });

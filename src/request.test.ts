@@ -26,6 +26,35 @@ function request(command: string[], argv: string[]) {
 }
 
 describe('manifest invariants', () => {
+  it.each(['checkout', '12345'])(
+    'builds exact flag key lookup for %s',
+    (key) => {
+      expect(
+        request(['flags', 'list'], ['--project', '12345', '--key', key]).path,
+      ).toBe(`/v1/projects/12345/flags?key=${key}`);
+    },
+  );
+
+  it.each(['project', 'project-id', 'project_id'])(
+    'retrieves a project key with --%s without changing the selector',
+    (alias) => {
+      expect(operation(['projects', 'api-keys', 'get'])).toMatchObject({
+        operationId: 'getProjectApiKey',
+        method: 'GET',
+        requiredScopes: ['projects:read'],
+      });
+      expect(
+        request(['projects', 'api-keys', 'get'], [`--${alias}`, '12345']).path,
+      ).toBe('/v1/projects/api-key?project_id=12345');
+    },
+  );
+
+  it('delegates omitted project-key selection to the API', () => {
+    expect(request(['projects', 'api-keys', 'get'], []).path).toBe(
+      '/v1/projects/api-key',
+    );
+  });
+
   it('rejects the skills-only --loginId on API commands', () => {
     expect(() =>
       request(['projects', 'list'], ['--loginId', 'Account-123']),
@@ -53,6 +82,11 @@ describe('manifest invariants', () => {
     expect(request(['projects', 'list'], ['--cursor', '']).path).toBe(
       '/v1/projects',
     );
+    for (const flag of ['--next-cursor', '--next_cursor']) {
+      expect(
+        request(['guides', 'list'], ['--project', '12345', flag, '51015']).path,
+      ).toBe('/v1/projects/12345/guides?cursor=51015');
+    }
     const id = 'a37cf684-96ca-48d8-86ca-9c6213b0ade5';
     expect(
       request(
@@ -419,15 +453,15 @@ describe('buildRequest', () => {
 
 describe('assertKnownFlags (via buildRequest)', () => {
   it('rejects a flag that is valid for another command but not this one', () => {
-    expect(() => request(['flags', 'list'], ['--key', 'foo'])).toThrowError(
-      'Unknown flag --key for `amp flags list`.',
+    expect(() => request(['flags', 'list'], ['--flag', 'foo'])).toThrowError(
+      'Unknown flag --flag for `amp flags list`.',
     );
   });
 
   it('throws a CliError with errorCode usage_error for a misplaced flag', () => {
     let caught: unknown;
     try {
-      request(['flags', 'list'], ['--key', 'foo']);
+      request(['flags', 'list'], ['--flag', 'foo']);
     } catch (error) {
       caught = error;
     }
