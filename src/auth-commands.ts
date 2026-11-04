@@ -47,7 +47,11 @@ import {
   deviceAuthorizationResponseSchema,
   type TokenResponse,
 } from './oauthResponseSchemas';
-import { formatJsonOutput, shouldUseJsonOutput } from './output';
+import {
+  formatJsonOutput,
+  sanitizeTerminalText,
+  shouldUseJsonOutput,
+} from './output';
 import {
   emptyPending,
   gcExpiredPending,
@@ -302,11 +306,10 @@ export async function runAuthLoginStart(
       }),
     );
   } catch (error) {
-    // A thrown CliError (e.g. loginBaseUrl's "requires --region", a usage
-    // error) already classifies itself — carry its code and exit code into
-    // the envelope instead of flattening every failure to start_failed/1, so
-    // the same mistake exits 2 here as it does on `auth pat`.
-    if (error instanceof CliError) {
+    // Transport failures retain start_failed/1. Other classified errors keep
+    // their code and exit code, including invocation errors such as a missing
+    // --region, which must remain usage_error/2.
+    if (error instanceof CliError && error.errorCode !== 'transport_error') {
       emit(
         toJson({
           status: 'error',
@@ -622,10 +625,9 @@ export async function runAuthLoginPoll(
     }
     process.exitCode = 1;
   } catch (error) {
-    // A thrown CliError (e.g. a bare `--profile` with no value) is already a
-    // classified usage error — surface its code and exit code rather than
-    // wrapping it as a retryable poll_failed/1.
-    if (error instanceof CliError) {
+    // Transport failures retain poll_failed/1 and the pending-login retry
+    // guidance. Other classified errors keep their own code and exit code.
+    if (error instanceof CliError && error.errorCode !== 'transport_error') {
       emit(
         toJson({
           status: 'error',
@@ -734,7 +736,7 @@ export async function runAuthLogin(
     !isFlagEnabled(flags.force)
   ) {
     const approved = await confirmOverwrite(
-      `Profile "${profileName}" currently targets ${existing.base_url}. Overwrite to ${baseUrl}?`,
+      `Profile "${sanitizeTerminalText(profileName)}" currently targets ${sanitizeTerminalText(existing.base_url)}. Overwrite to ${sanitizeTerminalText(baseUrl)}?`,
     );
     if (!approved) {
       throw new Error('Aborted.'); // plain-error-ok: TTY-only user cancellation; unreachable non-interactively.
@@ -775,11 +777,11 @@ export async function runAuthLogin(
   const verb = existing ? 'updated' : 'created';
   const wasNote =
     previousDefault && previousDefault !== profileName
-      ? ` (was "${previousDefault}")`
+      ? ` (was "${sanitizeTerminalText(previousDefault)}")`
       : '';
   emitStdout(
     terminal.success(
-      `Profile "${profileName}" ${verb} and set as default${wasNote}.`,
+      `Profile "${sanitizeTerminalText(profileName)}" ${verb} and set as default${wasNote}.`,
     ),
   );
 }
@@ -907,11 +909,11 @@ export async function runAuthPat(
   const verb = existing ? 'updated' : 'created';
   const wasNote =
     previousDefault && previousDefault !== profileName
-      ? ` (was "${previousDefault}")`
+      ? ` (was "${sanitizeTerminalText(previousDefault)}")`
       : '';
   emitStdout(
     terminal.success(
-      `Profile "${profileName}" ${verb} and set as default${wasNote}.`,
+      `Profile "${sanitizeTerminalText(profileName)}" ${verb} and set as default${wasNote}.`,
     ),
   );
 }
@@ -976,9 +978,9 @@ export function formatProfileList(store: CredentialStore, now: number): string {
     const profile = store.profiles[name];
     return {
       marker: store.default === name ? '*' : ' ',
-      profile: name,
-      type: profile.credential.type,
-      env: envLabel(profile.base_url),
+      profile: sanitizeTerminalText(name),
+      type: sanitizeTerminalText(profile.credential.type),
+      env: sanitizeTerminalText(envLabel(profile.base_url)),
       expires: expiryLabel(profile.credential, now),
     };
   });
@@ -1071,9 +1073,13 @@ export async function runAuthUse(
   });
   const wasNote =
     previousDefault && previousDefault !== name
-      ? ` (was "${previousDefault}")`
+      ? ` (was "${sanitizeTerminalText(previousDefault)}")`
       : '';
-  emitStdout(terminal.success(`Default profile is now "${name}"${wasNote}.`));
+  emitStdout(
+    terminal.success(
+      `Default profile is now "${sanitizeTerminalText(name)}"${wasNote}.`,
+    ),
+  );
 }
 
 /**
@@ -1181,7 +1187,9 @@ export async function runLogout(
   }
   if (!hasProfile) {
     emitStdout(
-      terminal.success(`Canceled the in-progress login for "${target}".`),
+      terminal.success(
+        `Canceled the in-progress login for "${sanitizeTerminalText(target)}".`,
+      ),
     );
     return;
   }
@@ -1198,16 +1206,18 @@ export async function runLogout(
   if (lostDefault) {
     const remaining = Object.keys(next.profiles);
     const pick = remaining.length
-      ? `select another (${remaining.join(', ')}) with \`amp auth use <profile>\``
+      ? `select another (${remaining.map((name) => sanitizeTerminalText(name)).join(', ')}) with \`amp auth use <profile>\``
       : 'create one with `amp auth login`';
     emitStdout(
       terminal.success(
-        `Logged out of "${target}". No default set — commands won't authenticate until you ${pick}.`,
+        `Logged out of "${sanitizeTerminalText(target)}". No default set — commands won't authenticate until you ${pick}.`,
       ),
     );
     return;
   }
-  emitStdout(terminal.success(`Logged out of "${target}".`));
+  emitStdout(
+    terminal.success(`Logged out of "${sanitizeTerminalText(target)}".`),
+  );
 }
 
 /** Masks a secret for display: first and last few chars, middle elided. */
@@ -1280,8 +1290,8 @@ export function runAuthStatus(
 
   const emitProfileRows = (name: string, profile: Profile): void => {
     const marker = store.default === name ? ' (default)' : '';
-    emitStdout(`Profile:  ${name}${marker}`);
-    emitStdout(`Type:     ${profile.credential.type}`);
+    emitStdout(`Profile:  ${sanitizeTerminalText(name)}${marker}`);
+    emitStdout(`Type:     ${sanitizeTerminalText(profile.credential.type)}`);
     emitStdout(`Expires:  ${expiryLabel(profile.credential, now)}`);
   };
 
@@ -1297,7 +1307,11 @@ export function runAuthStatus(
       emitProfileRows(selected.name, selected.profile);
     }
     emitStdout(
-      styled.warning(error instanceof Error ? error.message : String(error)),
+      styled.warning(
+        sanitizeTerminalText(
+          error instanceof Error ? error.message : String(error),
+        ),
+      ),
     );
     // Same failure must exit the same regardless of output mode: carry the
     // resolver's CliError exit code (invalid_token/authentication_required →
@@ -1325,7 +1339,7 @@ export function runAuthStatus(
       `Region:   ${region} (${resolveAppOrigin({ apiBaseUrl: auth.baseUrl })}/)`,
     );
   }
-  emitStdout(`Base URL: ${styled.dim(auth.baseUrl)}`);
+  emitStdout(`Base URL: ${styled.dim(sanitizeTerminalText(auth.baseUrl))}`);
   emitStdout(`Token:    ${maskToken(auth.token)}`);
 }
 

@@ -79,4 +79,27 @@ describe('write discovery', () => {
       log.mockRestore();
     }
   });
+
+  it('prints guide trigger, page, lifecycle, and form-factor schemas', () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    try {
+      printCommandHelp(['guides', 'update'], { json: true });
+      const detail = JSON.parse(String(log.mock.calls[0][0]));
+      const schemaOf = (name: string) =>
+        JSON.stringify(
+          detail.flags.find((flag: { name: string }) => flag.name === name),
+        );
+
+      expect(schemaOf('trigger_config')).toContain('analytics_event');
+      expect(schemaOf('trigger_config')).toContain('element_clicked');
+      expect(schemaOf('trigger_config')).toContain('after_time');
+      expect(schemaOf('page_target_segments')).toContain('matchType');
+      expect(schemaOf('lifecycle')).toContain('cooldown_limits');
+      expect(schemaOf('snooze_duration')).toContain('interval');
+      expect(schemaOf('variants')).toContain('showOn');
+      expect(schemaOf('variants')).toContain('popover');
+    } finally {
+      log.mockRestore();
+    }
+  });
 });

@@ -14,6 +14,7 @@ import { pathToFileURL } from 'node:url';
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { CliError, formatErrorEnvelope, formatErrorText } from './cli-error';
 import {
   CREDENTIAL_LOCK_RECOVERY_RETRY_BUDGET_MS,
   CREDENTIAL_LOCK_RETRY_BUDGET_MS,
@@ -318,6 +319,30 @@ describe('credential-store', () => {
           /Invalid profile name/,
         );
       }
+    });
+
+    it('renders a rejected profile name without terminal controls', () => {
+      const name = 'bad\u001b[31mname\u0007';
+      let caught: unknown;
+      try {
+        assertValidProfileName(name);
+      } catch (error) {
+        caught = error;
+      }
+
+      expect(caught).toBeInstanceOf(CliError);
+      if (!(caught instanceof CliError)) {
+        throw new Error('Expected a CliError.');
+      }
+
+      const text = formatErrorText(caught);
+      expect(text).toContain('Invalid profile name "bad^[[31mname^G"');
+      expect(text.includes('\u001b')).toBe(false);
+      expect(text.includes('\u0007')).toBe(false);
+
+      expect(JSON.parse(formatErrorEnvelope(caught, false))).toMatchObject({
+        message: expect.stringContaining(name),
+      });
     });
   });
 

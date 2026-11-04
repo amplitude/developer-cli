@@ -11,6 +11,103 @@ import {
 } from './cli-error';
 
 describe('CliError', () => {
+  it('preserves server diagnostics when retryability is malformed', () => {
+    const error = cliErrorFromResponse(503, 'Service Unavailable', {
+      error_code: 'operation_availability_unavailable',
+      title: 'Operation unavailable',
+      detail: 'Try later',
+      retryable: 'false',
+    });
+    expect(error.errorCode).toBe('operation_availability_unavailable');
+    expect(error.message).toBe('Operation unavailable: Try later');
+    expect(error.exitCode).toBe(5);
+    expect(error.retryable).toBeUndefined();
+    expect(error.hint).toBeUndefined();
+    expect(JSON.parse(formatErrorEnvelope(error, false)).error.error_code).toBe(
+      'operation_availability_unavailable',
+    );
+  });
+
+  it.each([
+    { retryable: true, hint: 'Retry the request later.' },
+    { retryable: false, hint: undefined },
+    { retryable: undefined, hint: undefined },
+  ])(
+    'hints to retry an unavailable operation only when retryable is $retryable',
+    ({ retryable, hint }) => {
+      const error = cliErrorFromResponse(503, 'Service Unavailable', {
+        error_code: 'operation_availability_unavailable',
+        retryable,
+      });
+      expect(error.hint).toBe(hint);
+    },
+  );
+
+  it.each([
+    { status: 501, code: 'not_implemented', retryable: false, exit: 5 },
+    { status: 501, code: 'not_implemented', retryable: true, exit: 5 },
+    { status: 501, code: 'not_implemented', retryable: undefined, exit: 5 },
+    {
+      status: 503,
+      code: 'project_api_key_unavailable',
+      retryable: false,
+      exit: 1,
+    },
+    {
+      status: 503,
+      code: 'project_api_key_unavailable',
+      retryable: true,
+      exit: 5,
+    },
+    {
+      status: 503,
+      code: 'project_api_key_unavailable',
+      retryable: undefined,
+      exit: 5,
+    },
+    { status: 503, code: 'some_future_error', retryable: false, exit: 5 },
+    { status: 502, code: 'upstream_error', retryable: false, exit: 5 },
+    { status: 502, code: 'upstream_error', retryable: true, exit: 5 },
+    { status: 429, code: 'rate_limit_exceeded', retryable: true, exit: 1 },
+    { status: 429, code: 'rate_limit_exceeded', retryable: false, exit: 1 },
+    { status: 401, code: 'authentication_required', retryable: false, exit: 3 },
+    { status: 422, code: 'validation_error', retryable: false, exit: 2 },
+    { status: 404, code: 'not_found', retryable: false, exit: 4 },
+    { status: 500, code: 'validation_error', retryable: false, exit: 2 },
+    { status: 503, code: 'invalid_token', retryable: false, exit: 3 },
+    { status: 500, code: 'not_found', retryable: false, exit: 4 },
+    { status: 429, code: 'upstream_error', retryable: false, exit: 5 },
+  ])(
+    '$code (HTTP $status, retryable: $retryable) exits $exit and preserves retryability',
+    ({ status, code, retryable, exit }) => {
+      const error = cliErrorFromResponse(status, 'Request failed', {
+        error_code: code,
+        title: 'Request failed',
+        retryable,
+      });
+      expect(error.exitCode).toBe(exit);
+      expect(
+        JSON.parse(formatErrorEnvelope(error, false)).error.retryable,
+      ).toBe(retryable);
+    },
+  );
+
+  it('keeps exit 5 for a server error without a body', () => {
+    const error = cliErrorFromResponse(503, 'Service Unavailable', null);
+    expect(error.exitCode).toBe(5);
+    expect(error.retryable).toBeUndefined();
+  });
+
+  it('does not invent retryability when it is absent', () => {
+    const error = cliErrorFromResponse(503, 'Service Unavailable', {
+      error_code: 'some_future_error',
+      title: 'Request failed',
+    });
+    expect(
+      JSON.parse(formatErrorEnvelope(error, false)).error,
+    ).not.toHaveProperty('retryable');
+  });
+
   it('maps error codes to exit codes', () => {
     expect(exitCodeForErrorCode('insufficient_scope', 403)).toBe(3);
     expect(exitCodeForErrorCode('validation_error', 422)).toBe(2);
@@ -147,6 +244,22 @@ describe('formatErrorText', () => {
     });
 
     expect(formatErrorText(err)).toBe('Something broke');
+  });
+
+  it('keeps paragraph breaks in a hint and still hides controls', () => {
+    const err = new CliError({
+      message: 'Could not save skill: disk full.',
+      errorCode: 'transport_error',
+      exitCode: 5,
+      hint: 'Check permissions for the skill cache.\n\nAlternatively, omit `--save`.\nline\u001b[31m',
+    });
+
+    const text = formatErrorText(err);
+    expect(text).toContain(
+      'Check permissions for the skill cache.\n\nAlternatively, omit `--save`.',
+    );
+    expect(text).toContain('line^[[31m');
+    expect(text.includes('\u001b')).toBe(false);
   });
 
   it('gives a transport failure an actionable hint', () => {

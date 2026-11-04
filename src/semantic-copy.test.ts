@@ -27,6 +27,12 @@ const KNOWN_ERROR_CODES = [
   'not_found',
   'auth_unavailable',
   'upstream_error',
+  'project_selection_required',
+  'project_not_found',
+  'project_key_access_denied',
+  'project_api_key_not_available',
+  'project_api_key_unavailable',
+  'operation_availability_unavailable',
 ] as const;
 
 interface CopySample {

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { CliOperation } from './generated/cli-manifest';
 import {
+  formatJsonOutput,
   formatNoContentSuccess,
   formatSuccessOutput,
   isNoContentSuccess,
@@ -227,5 +228,64 @@ describe('output formatting', () => {
     expect(output).toContain('user@example.com');
     expect(output).toContain('Acme');
     expect(output).toContain('read:projects');
+  });
+
+  it('renders control characters in table cells as visible text', () => {
+    const output = formatSuccessOutput(
+      {
+        data: [{ id: '1', name: 'ok\u001b[31mred\u001b[0m\u0007' }],
+        pagination: { has_more: true, next_cursor: 'next\u001b]0;title\u0007' },
+      },
+      listProjects,
+    );
+
+    expect(output).toContain('ok^[[31mred^[[0m^G');
+    expect(output).toContain('--cursor next^[]0;title^G');
+    expect(output.includes('\u001b')).toBe(false);
+    expect(output.includes('\u0007')).toBe(false);
+  });
+
+  it('keeps collapsing whitespace in table cells that also contain escapes', () => {
+    const output = formatSuccessOutput(
+      {
+        data: [{ id: '1', name: 'first\nsecond\u001b[0m' }],
+      },
+      listProjects,
+    );
+
+    expect(output).toContain('first second^[[0m');
+    expect(output).not.toContain('\nsecond');
+  });
+
+  it('renders control characters in the context summary as visible text', () => {
+    const output = formatSuccessOutput(
+      {
+        data: {
+          principal: {
+            login_id: 'user\u001b[2J@evil.test',
+            auth_type: 'pat\u000d',
+            scopes: ['read\u001b[0m:projects'],
+          },
+          org: { id: '1\u009b31m', name: 'Acme\r\u001b[1AHacked' },
+        },
+      },
+      getContext,
+    );
+
+    expect(output).toContain('User: user^[[2J@evil.test');
+    expect(output).toContain('Org:  Acme^M^[[1AHacked (1\\u009b31m)');
+    expect(output).toContain('Auth: pat^M');
+    expect(output).toContain('Scopes: read^[[0m:projects');
+    expect(output.includes('\u001b')).toBe(false);
+    expect(output.includes('\u000d')).toBe(false);
+    expect(output.includes('\u009b')).toBe(false);
+  });
+
+  it('leaves control characters inside JSON serialization', () => {
+    const payload = { data: [{ name: 'a\u001b[31mb' }] };
+
+    expect(formatJsonOutput(payload, false)).toBe(JSON.stringify(payload));
+    expect(JSON.parse(formatJsonOutput(payload, false))).toEqual(payload);
+    expect(formatJsonOutput(payload, false)).not.toContain('\u001b');
   });
 });
