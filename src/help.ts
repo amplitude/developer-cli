@@ -1,6 +1,6 @@
 import packageJson from '../package.json';
 import type { FlagValue, GlobalOptionAlias } from './args';
-import { stringFlag } from './args';
+import { hasFlag } from './args';
 import {
   buildCatalog,
   catalogGroups,
@@ -166,7 +166,7 @@ export function findOperation(
     }
     const projectId =
       flags !== undefined &&
-      stringFlag(flags, ['project', 'project-id', 'project_id']);
+      hasFlag(flags, ['project', 'project-id', 'project_id']);
     const verb = command[1];
     const operationId =
       verb === 'get'

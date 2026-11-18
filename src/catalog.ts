@@ -268,6 +268,7 @@ const DISAMBIGUATED_AI_CONTEXT_COMMANDS: {
   orgOperationId: string;
   projectOperationId: string;
   summary: string;
+  description: string;
   projectExample: string;
 }[] = [
   {
@@ -275,6 +276,8 @@ const DISAMBIGUATED_AI_CONTEXT_COMMANDS: {
     orgOperationId: 'getOrgAiContext',
     projectOperationId: 'getProjectAiContext',
     summary: 'Get organization or project AI context',
+    description:
+      'Returns the customer-managed AI context configured in Settings → AI Controls for the organization, or for a project with --project. Empty string when nothing is configured.',
     projectExample: 'amp ai-context get --project <project_id>',
   },
   {
@@ -282,6 +285,8 @@ const DISAMBIGUATED_AI_CONTEXT_COMMANDS: {
     orgOperationId: 'setOrgAiContext',
     projectOperationId: 'setProjectAiContext',
     summary: 'Set organization or project AI context',
+    description:
+      'Replaces the customer-managed AI context in Settings → AI Controls for the organization, or for a project with --project. Pass --context "" to clear the stored value.',
     projectExample:
       'amp ai-context set --project <project_id> --context "Your project context"',
   },
@@ -325,10 +330,9 @@ function mergeDisambiguatedCommand(
     ...template,
     summary: config.summary,
     flags: [...pathFlags, ...bodyFlags],
-    description:
-      [orgOperation.description?.trim(), AI_CONTEXT_PROJECT_SCOPE_NOTE]
-        .filter(Boolean)
-        .join('\n\n') || undefined,
+    description: [config.description, AI_CONTEXT_PROJECT_SCOPE_NOTE].join(
+      '\n\n',
+    ),
     example: EXAMPLES[config.key] ?? `amp ${config.key}`,
     additionalExamples: [config.projectExample],
     requiredScopes: orgOperation.requiredScopes,
@@ -728,7 +732,7 @@ const TRACKING_PLAN_COMMANDS: CatalogCommand[] = withGlobalFlags(
       flags: [
         {
           name: 'project_id',
-          aliases: ['project'],
+          aliases: ['project', 'project-id', 'project_id'],
           type: 'string',
           required: true,
           description: 'Project identifier.',
@@ -778,7 +782,7 @@ const TRACKING_PLAN_COMMANDS: CatalogCommand[] = withGlobalFlags(
       flags: [
         {
           name: 'project_id',
-          aliases: ['project'],
+          aliases: ['project', 'project-id', 'project_id'],
           type: 'string',
           required: true,
           description: 'Project identifier.',

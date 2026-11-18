@@ -35,9 +35,11 @@ const TRACKING_PLAN_COMMON_FLAGS = [
   'v',
 ] as const;
 
+const PROJECT_ALIASES = ['project', 'project-id', 'project_id'] as const;
+
 const TRACKING_PLAN_EXPORT_FLAGS = [
   ...TRACKING_PLAN_COMMON_FLAGS,
-  'project',
+  ...PROJECT_ALIASES,
   'branch-name',
   'type',
   'include-deleted',
@@ -46,7 +48,7 @@ const TRACKING_PLAN_EXPORT_FLAGS = [
 
 const TRACKING_PLAN_IMPORT_FLAGS = [
   ...TRACKING_PLAN_COMMON_FLAGS,
-  'project',
+  ...PROJECT_ALIASES,
   'file',
   'branch-name',
 ] as const;
@@ -498,7 +500,7 @@ export async function runTrackingPlanExport(
   flags: Record<string, FlagValue>,
   deps: TrackingPlanCommandDeps = {},
 ): Promise<void> {
-  const projectId = stringFlag(flags, ['project']);
+  const projectId = stringFlag(flags, [...PROJECT_ALIASES]);
   if (projectId === undefined || projectId === '') {
     throw usageError('Missing --project <project_id>.');
   }
@@ -517,6 +519,11 @@ export async function runTrackingPlanExport(
 
   const exportType = parseExportType(stringFlag(flags, ['type']));
   const branchName = stringFlag(flags, ['branch-name']);
+  if (branchName === '') {
+    throw usageError(
+      '--branch-name cannot be empty. Omit it to export the default branch.',
+    );
+  }
   const includeDeleted = isFlagEnabled(flags['include-deleted']);
   const write = deps.write ?? writeStdout;
   const fetchImpl = deps.fetchImpl ?? fetch;
@@ -531,7 +538,7 @@ export async function runTrackingPlanExport(
 
   const query = new URLSearchParams();
   query.set('type', exportType);
-  if (branchName !== undefined && branchName !== '') {
+  if (branchName !== undefined) {
     query.set('branch_name', branchName);
   }
   if (includeDeleted) {
@@ -778,7 +785,7 @@ export async function runTrackingPlanImport(
   flags: Record<string, FlagValue>,
   deps: TrackingPlanCommandDeps = {},
 ): Promise<void> {
-  const projectId = stringFlag(flags, ['project']);
+  const projectId = stringFlag(flags, [...PROJECT_ALIASES]);
   if (projectId === undefined || projectId === '') {
     throw usageError('Missing --project <project_id>.');
   }
@@ -787,6 +794,11 @@ export async function runTrackingPlanImport(
     throw usageError('Missing --file <path>.');
   }
   const branchName = stringFlag(flags, ['branch-name']);
+  if (branchName === '') {
+    throw usageError(
+      '--branch-name cannot be empty. Omit it to auto-generate a branch name.',
+    );
+  }
 
   const readFileImpl =
     deps.readFileImpl ??
@@ -821,7 +833,7 @@ export async function runTrackingPlanImport(
   }
 
   const query = new URLSearchParams();
-  if (branchName !== undefined && branchName !== '') {
+  if (branchName !== undefined) {
     query.set('branch_name', branchName);
   }
   const queryString = query.toString();

@@ -86,6 +86,48 @@ describe('tracking-plan export', () => {
     expect(await readFile(out, 'utf8')).toBe('a,b\n1,2\n');
   });
 
+  it.each(['project-id', 'project_id'])(
+    'accepts --%s as the project selector',
+    async (alias) => {
+      const fetchImpl = vi.fn(async (input: URL | RequestInfo) => {
+        expect(new URL(String(input)).pathname).toBe(
+          '/v1/projects/123/tracking-plan/export',
+        );
+        return new Response('a,b\n', { status: 200 });
+      });
+
+      await runTrackingPlanExport(
+        { [alias]: '123', out: '-' },
+        {
+          fetchImpl,
+          stdoutStream: new Writable({
+            write(_chunk, _encoding, callback) {
+              callback();
+            },
+          }),
+        },
+      );
+
+      expect(fetchImpl).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it('rejects an empty --branch-name before requesting the export', async () => {
+    const fetchImpl = vi.fn();
+    await expect(
+      runTrackingPlanExport(
+        { project: '123', out: '-', 'branch-name': '' },
+        { fetchImpl },
+      ),
+    ).rejects.toMatchObject({
+      errorCode: 'usage_error',
+      exitCode: 2,
+      message:
+        '--branch-name cannot be empty. Omit it to export the default branch.',
+    });
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
   it('rejects --json with --out - before requesting the export', async () => {
     const fetchImpl = vi.fn();
     await expect(
@@ -705,6 +747,24 @@ describe('tracking-plan import', () => {
     expect(rendered).toContain('Events total: 120');
     expect(rendered).toContain('Templates total: 4');
     expect(rendered).not.toContain('created 120');
+  });
+
+  it('rejects an empty --branch-name before reading or uploading the file', async () => {
+    const fetchImpl = vi.fn();
+    const statImpl = vi.fn();
+    await expect(
+      runTrackingPlanImport(
+        { project: '123', file: 'plan.csv', 'branch-name': '' },
+        { fetchImpl, statImpl },
+      ),
+    ).rejects.toMatchObject({
+      errorCode: 'usage_error',
+      exitCode: 2,
+      message:
+        '--branch-name cannot be empty. Omit it to auto-generate a branch name.',
+    });
+    expect(statImpl).not.toHaveBeenCalled();
+    expect(fetchImpl).not.toHaveBeenCalled();
   });
 
   it('fails before upload when file size exceeds 50MB', async () => {

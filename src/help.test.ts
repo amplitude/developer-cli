@@ -300,6 +300,39 @@ describe('help', () => {
     expect(findOperation(['ai-context', 'set', '850097'])).toBeUndefined();
   });
 
+  it('routes an empty --project to the project operation so it is reported as missing', () => {
+    expect(
+      findOperation(['ai-context', 'set'], { project: '', context: 'x' })
+        ?.operationId,
+    ).toBe('setProjectAiContext');
+    expect(
+      findOperation(['ai-context', 'get'], { 'project-id': '' })?.operationId,
+    ).toBe('getProjectAiContext');
+  });
+
+  it.each([
+    ['get', 'Returns'],
+    ['set', 'Replaces'],
+  ])(
+    'describes ai-context %s for both organizations and projects',
+    (verb, lead) => {
+      const log = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+      try {
+        printCommandHelp(['ai-context', verb], { json: true, isTTY: false });
+        const help = JSON.parse(String(log.mock.calls[0][0])) as {
+          description: string;
+        };
+        expect(help.description).toMatch(
+          new RegExp(
+            `^${lead} .* for the organization, or for a project with --project\\.`,
+          ),
+        );
+      } finally {
+        log.mockRestore();
+      }
+    },
+  );
+
   it('documents context body on ai-context set help', () => {
     const log = vi.spyOn(console, 'log').mockImplementation(() => undefined);
     try {

@@ -481,6 +481,24 @@ describe('buildRequest', () => {
     expect(buildRequest(found, parsed.flags).body).toEqual({ context: '' });
   });
 
+  it('reports an empty --project on ai-context set as missing', () => {
+    const parsed = parseArgs([
+      'ai-context',
+      'set',
+      '--project=',
+      '--context',
+      'x',
+    ]);
+    const found = findOperation(['ai-context', 'set'], parsed.flags);
+    if (!found) {
+      throw new Error('Missing CLI operation ai-context set.');
+    }
+
+    expect(() => buildRequest(found, parsed.flags)).toThrow(
+      'Missing --project <project_id>.',
+    );
+  });
+
   it('throws a CliError with errorCode usage_error for a missing required flag', () => {
     let caught: unknown;
     try {
