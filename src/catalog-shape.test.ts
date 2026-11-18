@@ -17,6 +17,7 @@ const INDEX_ALLOWLIST = [
 // forcing a deliberate "is this field authoritative/sourced, not invented?"
 // decision in review before it ships on the catalog's public JSON surface.
 const DETAIL_ALLOWLIST = [
+  'additionalExamples',
   'command',
   'description',
   'example',

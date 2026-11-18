@@ -108,6 +108,29 @@ describe('buildCatalog — API operations', () => {
     expect(groups.has('charts')).toBe(true);
   });
 
+  it('includes the bespoke tracking-plan export command with taxonomy read scope', () => {
+    const exportCommand = buildCatalog().find(
+      (command) => command.command.join(' ') === 'tracking-plan export',
+    );
+    expect(exportCommand).toMatchObject({
+      group: 'tracking-plan',
+      requiredScopes: ['taxonomy:read'],
+      example: 'amp tracking-plan export --project <project_id> --out plan.csv',
+    });
+  });
+
+  it('includes the bespoke tracking-plan import command with taxonomy write scope', () => {
+    const importCommand = buildCatalog().find(
+      (command) => command.command.join(' ') === 'tracking-plan import',
+    );
+    expect(importCommand).toMatchObject({
+      group: 'tracking-plan',
+      requiredScopes: ['taxonomy:write'],
+      example:
+        'amp tracking-plan import --project <project_id> --file plan.csv',
+    });
+  });
+
   it('carries OpenAPI descriptions into help', () => {
     const list = buildCatalog().find(
       (c) => c.command.join(' ') === 'projects list',

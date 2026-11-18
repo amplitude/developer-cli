@@ -232,7 +232,7 @@ describe('runOperation', () => {
       'event-type': 'Checkout Completed',
     });
 
-    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(logSpy).toHaveBeenCalledWith(JSON.stringify(envelope));
   });
 
@@ -281,7 +281,7 @@ describe('runOperation', () => {
     });
 
     expect(resolveAuthSpy).not.toHaveBeenCalled();
-    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
     const [url, init] = fetchMock.mock.calls[0];
     expect(url).toBe(
       'https://developer-api.example.com/v1/events/check-recent-ingestion',
@@ -486,7 +486,7 @@ describe('runOperation', () => {
       'timeout-seconds': '6',
     });
 
-    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(logSpy).toHaveBeenCalledWith(JSON.stringify(notObserved));
   });
 
@@ -500,7 +500,7 @@ describe('runOperation', () => {
       'timeout-seconds': '120',
     });
 
-    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(logSpy).toHaveBeenCalledWith(JSON.stringify(inconclusive));
   });
 
@@ -529,7 +529,7 @@ describe('runOperation', () => {
       '{"polling_timeout_seconds":5}',
       '{"polling_timeout_seconds":5}',
     ]);
-    expect(logSpy).toHaveBeenCalledOnce();
+    expect(logSpy).toHaveBeenCalledTimes(1);
     expect(logSpy).toHaveBeenCalledWith(JSON.stringify(observed));
   });
 
@@ -569,7 +569,7 @@ describe('runOperation', () => {
     await vi.advanceTimersByTimeAsync(1_000);
     await result;
 
-    expect(refreshSpy).toHaveBeenCalledOnce();
+    expect(refreshSpy).toHaveBeenCalledTimes(1);
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(fetchMock.mock.calls[1][1].headers.Authorization).toBe(
       'Bearer fresh',
@@ -609,7 +609,7 @@ describe('runOperation', () => {
     await vi.advanceTimersByTimeAsync(1_000);
     await result;
 
-    expect(refreshSpy).toHaveBeenCalledOnce();
+    expect(refreshSpy).toHaveBeenCalledTimes(1);
     expect(fetchMock).toHaveBeenCalledTimes(3);
     expect(fetchMock.mock.calls[2][1].headers.Authorization).toBe(
       'Bearer fresh',
@@ -653,7 +653,7 @@ describe('runOperation', () => {
       'timeout-seconds': '5',
     });
 
-    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(fetchMock.mock.calls[0]?.[1]?.signal).toBeUndefined();
   });
 
@@ -703,8 +703,8 @@ describe('runOperation', () => {
     await vi.advanceTimersByTimeAsync(1_000);
     await result;
 
-    expect(resolveAuthSpy).toHaveBeenCalledOnce();
-    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(resolveAuthSpy).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it('does not retry when the server delay reaches the timeout deadline', async () => {
@@ -717,7 +717,7 @@ describe('runOperation', () => {
       'timeout-seconds': '5',
     });
 
-    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(logSpy).toHaveBeenCalledWith(JSON.stringify(notObserved));
   });
 
@@ -763,7 +763,7 @@ describe('runOperation', () => {
     }).catch((caught: unknown) => caught);
 
     expect(error).toBeInstanceOf(CliError);
-    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it('keeps ingestion check API failures in the structured error path', async () => {
@@ -806,7 +806,7 @@ describe('runOperation', () => {
       json: true,
     });
 
-    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
     // No indentation: stdout is not a TTY in this suite, so output is compact.
     expect(logSpy).toHaveBeenCalledWith('{"data":{"id":"evt_1"}}');
   });
@@ -1125,7 +1125,7 @@ describe('runOperation', () => {
       yes: true,
     });
 
-    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(fetchMock.mock.calls[0][1]).toMatchObject({ method: 'DELETE' });
     expect(logSpy).toHaveBeenCalledWith('null');
   });
@@ -1204,7 +1204,7 @@ describe('runOperation', () => {
         [flag]: true,
       });
 
-      expect(fetchMock).toHaveBeenCalledOnce();
+      expect(fetchMock).toHaveBeenCalledTimes(1);
       expect(String(fetchMock.mock.calls[0][0])).toContain('dry_run=true');
     },
   );

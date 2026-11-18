@@ -49,6 +49,8 @@ tags:
     description: Destination (connection) catalog and CRUD operations.
   - name: Skills
     description: Skill documents for implementing Amplitude, intended for AI agents.
+  - name: AI Context
+    description: Organization- and project-level customer AI context for Global Agent.
   - name: Auth
     description: Signup, OAuth device-flow, and token endpoints (RFC 8628 / RFC 6749).
 paths:
@@ -1002,6 +1004,58 @@ paths:
                 properties:
                   data:
                     $ref: '#/components/schemas/McpAnalyticsEpisode'
+        '400':
+          $ref: '#/components/responses/ValidationProblem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '429':
+          $ref: '#/components/responses/RateLimitProblem'
+        '502':
+          $ref: '#/components/responses/Problem'
+  /v1/projects/{project_id}/mcp-analytics/episodes/{episode_id}/calls:
+    get:
+      tags:
+        - MCP Analytics
+      operationId: listMcpAnalyticsEpisodeCalls
+      summary: List tool calls in an MCP episode
+      description: |
+        Returns the complete episode tool flow in event time and event id order, including recorded
+        properties, rationale, duration, and errors. Properties are returned as
+        recorded; individual input or output fields may be absent.
+        A missing or cross-project episode returns 404.
+      x-required-scopes:
+        - analytics:read
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - name: episode_id
+          in: path
+          required: true
+          description: Episode id returned by the topic or episode list.
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 512
+      responses:
+        '200':
+          description: Complete ordered tool call list. An existing episode with no recorded calls returns an empty list.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                  - pagination
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/McpAnalyticsCall'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
         '400':
           $ref: '#/components/responses/ValidationProblem'
         '401':
@@ -2291,6 +2345,354 @@ paths:
           $ref: '#/components/responses/RateLimitProblem'
         '500':
           $ref: '#/components/responses/Problem'
+  /v1/projects/{project_id}/tracking-plan/export:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+    get:
+      tags:
+        - Taxonomy Events
+      operationId: exportTrackingPlanCsv
+      summary: Export a tracking plan as CSV
+      description: |
+        Streams a CSV export of the project tracking plan, in the same format as
+        the Events and User Properties downloads in Data. Exports the default
+        branch unless `branch_id` or `branch_name` selects another one, and
+        includes that branch's unpublished changes.
+      x-required-scopes:
+        - taxonomy:read
+      parameters:
+        - name: type
+          in: query
+          required: false
+          description: Export format. Defaults to `events`.
+          schema:
+            type: string
+            enum:
+              - events
+              - user_properties
+            default: events
+        - name: branch_id
+          in: query
+          required: false
+          description: Optional branch identifier. Mutually exclusive with `branch_name`.
+          schema:
+            type: string
+            minLength: 1
+        - name: branch_name
+          in: query
+          required: false
+          description: Optional branch name. Mutually exclusive with `branch_id`.
+          schema:
+            type: string
+            minLength: 1
+        - name: include_deleted
+          in: query
+          required: false
+          description: Include deleted events or properties in the export.
+          schema:
+            type: boolean
+            default: false
+        - name: lookback_days
+          in: query
+          required: false
+          description: Lookback window in days for the volume and query columns of the `events` export. Defaults to 30. Ignored for `user_properties`.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 365
+            default: 30
+      responses:
+        '200':
+          description: CSV response body.
+          headers:
+            Content-Disposition:
+              description: Suggested attachment filename.
+              schema:
+                type: string
+          content:
+            text/csv:
+              schema:
+                type: string
+        '400':
+          $ref: '#/components/responses/ValidationProblem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '429':
+          $ref: '#/components/responses/RateLimitProblem'
+        '500':
+          $ref: '#/components/responses/Problem'
+        '502':
+          $ref: '#/components/responses/Problem'
+        '503':
+          $ref: '#/components/responses/AvailabilityUnavailableProblem'
+        '504':
+          description: The export did not start in time.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /v1/projects/{project_id}/tracking-plan/import:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+    post:
+      tags:
+        - Taxonomy Events
+      operationId: importTrackingPlanCsv
+      summary: Import a tracking plan from CSV
+      description: |
+        Sends a tracking-plan CSV as the request body and applies it to a new import branch.
+        This endpoint always imports into a branch and never writes to main directly.
+        Creating the branch publishes any pending changes on main's staging version
+        first, as creating a branch in the product does. When the import fails after
+        the branch was created (422 for invalid rows, 502 for a server failure), the
+        error payload includes `details.branch` so callers can inspect or delete the
+        branch. A duplicate `branch_name` returns 409 before anything is created.
+      x-required-scopes:
+        - taxonomy:write
+      parameters:
+        - name: branch_name
+          in: query
+          required: false
+          description: |
+            Optional name for the import branch, 1 to 256 characters. When omitted,
+            the import uses `import`, or `import-N` if that name is taken. A name
+            that already exists returns 409.
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 256
+      requestBody:
+        required: true
+        description: The CSV file contents, at most 50 MB.
+        content:
+          text/csv:
+            schema:
+              type: string
+      responses:
+        '201':
+          description: Import completed on an import branch.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    type: object
+                    required:
+                      - object
+                      - project_id
+                      - branch_id
+                      - import_type
+                      - event_count
+                      - template_count
+                      - user_property_count
+                    properties:
+                      object:
+                        type: string
+                        enum:
+                          - tracking_plan_import
+                      project_id:
+                        type: string
+                      branch_id:
+                        type: string
+                      branch_name:
+                        type:
+                          - string
+                          - 'null'
+                      current_version_id:
+                        type:
+                          - string
+                          - 'null'
+                      staging_version_id:
+                        type:
+                          - string
+                          - 'null'
+                      import_type:
+                        type: string
+                        enum:
+                          - events
+                          - user_properties
+                        description: |
+                          Public import target type. `events` includes event, template,
+                          event-property, and template-property rows; `user_properties`
+                          includes user-property rows.
+                      event_count:
+                        type: integer
+                      template_count:
+                        type: integer
+                      user_property_count:
+                        type: integer
+                      breakdown:
+                        type:
+                          - object
+                          - 'null'
+                        description: |
+                          Per-type import counters. Units:
+                          - templates/events/user_properties: definition rows changed.
+                          - template_properties/event_properties `created|updated`:
+                            property definition rows changed.
+                          - template_properties/event_properties `unmapped`: properties
+                            removed from templates/events; the property definition is kept.
+                        properties:
+                          templates:
+                            type: object
+                            required:
+                              - created
+                              - updated
+                              - removed
+                            properties:
+                              created:
+                                type: integer
+                              updated:
+                                type: integer
+                              removed:
+                                type: integer
+                          template_properties:
+                            type: object
+                            required:
+                              - created
+                              - updated
+                              - unmapped
+                            properties:
+                              created:
+                                type: integer
+                              updated:
+                                type: integer
+                              unmapped:
+                                type: integer
+                          events:
+                            type: object
+                            required:
+                              - created
+                              - updated
+                              - removed
+                            properties:
+                              created:
+                                type: integer
+                              updated:
+                                type: integer
+                              removed:
+                                type: integer
+                          event_properties:
+                            type: object
+                            required:
+                              - created
+                              - updated
+                              - unmapped
+                            properties:
+                              created:
+                                type: integer
+                              updated:
+                                type: integer
+                              unmapped:
+                                type: integer
+                          user_properties:
+                            type: object
+                            required:
+                              - created
+                              - updated
+                              - removed
+                            properties:
+                              created:
+                                type: integer
+                              updated:
+                                type: integer
+                              removed:
+                                type: integer
+        '400':
+          $ref: '#/components/responses/ValidationProblem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          description: |
+            The requested `branch_name` already exists. Nothing was created; choose
+            another name.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '413':
+          $ref: '#/components/responses/Problem'
+        '415':
+          $ref: '#/components/responses/Problem'
+        '422':
+          description: |
+            The CSV is not valid tracking-plan data. `details.branch` is present when
+            the error was found after the import branch was created.
+          content:
+            application/problem+json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ProblemDetails'
+                  - type: object
+                    properties:
+                      details:
+                        type:
+                          - object
+                          - 'null'
+                        properties:
+                          branch:
+                            type: object
+                            required:
+                              - id
+                              - name
+                            properties:
+                              id:
+                                type: string
+                              name:
+                                type: string
+        '429':
+          $ref: '#/components/responses/RateLimitProblem'
+        '500':
+          $ref: '#/components/responses/Problem'
+        '502':
+          description: |
+            The import did not finish. Not retryable when `details.branch` is present
+            (the branch was created) or when the connection was lost mid-import (the
+            import may have started): a retry could create a second branch. List the
+            project's branches to find the result. A 502 without `details.branch`
+            that is marked retryable means the import was never started.
+          content:
+            application/problem+json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ProblemDetails'
+                  - type: object
+                    properties:
+                      details:
+                        type:
+                          - object
+                          - 'null'
+                        properties:
+                          branch:
+                            type: object
+                            required:
+                              - id
+                              - name
+                            properties:
+                              id:
+                                type: string
+                              name:
+                                type: string
+        '504':
+          description: |
+            The import did not respond in time and may still complete. Not
+            retryable: a retry may create a second branch. List the project's
+            branches to find the result.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
   /v1/projects/{project_id}/scheduled-event-actions:
     parameters:
       - $ref: '#/components/parameters/ProjectId'
@@ -2974,6 +3376,164 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/ProblemDetails'
+  /v1/ai-context:
+    get:
+      tags:
+        - AI Context
+      operationId: getOrgAiContext
+      summary: Get organization AI context
+      description: |
+        Returns the customer-managed AI context configured for the organization in
+        Settings → AI Controls. Empty string when nothing is configured.
+      x-required-scopes:
+        - analytics:read
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/AiContext'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '429':
+          $ref: '#/components/responses/RateLimitProblem'
+        '500':
+          $ref: '#/components/responses/Problem'
+        '503':
+          $ref: '#/components/responses/AvailabilityUnavailableProblem'
+    put:
+      tags:
+        - AI Context
+      operationId: setOrgAiContext
+      summary: Set organization AI context
+      description: |
+        Replaces the customer-managed AI context for the organization in
+        Settings → AI Controls. Send `"context": ""` to clear the stored value.
+        Requires an `Idempotency-Key` header on every request.
+      x-required-scopes:
+        - analytics:write
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AiContextWrite'
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/AiContext'
+        '400':
+          $ref: '#/components/responses/ValidationProblem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '429':
+          $ref: '#/components/responses/RateLimitProblem'
+        '500':
+          $ref: '#/components/responses/Problem'
+        '503':
+          $ref: '#/components/responses/AvailabilityUnavailableProblem'
+  /v1/projects/{project_id}/ai-context:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+    get:
+      tags:
+        - AI Context
+      operationId: getProjectAiContext
+      summary: Get project AI context
+      description: |
+        Returns the customer-managed AI context configured for a project in
+        Settings → AI Controls. Empty string when nothing is configured.
+      x-required-scopes:
+        - analytics:read
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/AiContext'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '429':
+          $ref: '#/components/responses/RateLimitProblem'
+        '500':
+          $ref: '#/components/responses/Problem'
+        '503':
+          $ref: '#/components/responses/AvailabilityUnavailableProblem'
+    put:
+      tags:
+        - AI Context
+      operationId: setProjectAiContext
+      summary: Set project AI context
+      description: |
+        Replaces the customer-managed AI context for a project in
+        Settings → AI Controls. Send `"context": ""` to clear the stored value.
+        Requires an `Idempotency-Key` header on every request.
+      x-required-scopes:
+        - analytics:write
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AiContextWrite'
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/AiContext'
+        '400':
+          $ref: '#/components/responses/ValidationProblem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '429':
+          $ref: '#/components/responses/RateLimitProblem'
+        '500':
+          $ref: '#/components/responses/Problem'
+        '503':
+          $ref: '#/components/responses/AvailabilityUnavailableProblem'
   /v1/projects/{project_id}/metrics:
     get:
       tags:
@@ -3598,6 +4158,7 @@ paths:
                 title:
                   type: string
                   minLength: 1
+                  maxLength: 255
                 description:
                   type:
                     - string
@@ -3658,6 +4219,19 @@ paths:
           schema:
             type: boolean
             default: false
+        - name: include_translations
+          in: query
+          required: false
+          description: |
+            When true, add `localization` (the project's default locale and other
+            locales) and each variant's `translations` and `translation_status`.
+            Read with `include_unpublished_changes=true` before writing
+            translations, so keys and `latest_version` match the draft. When
+            localization is disabled in the project settings, only
+            `localization: {enabled: false}` is added.
+          schema:
+            type: boolean
+            default: false
       responses:
         '200':
           description: Successful response.
@@ -3696,6 +4270,23 @@ paths:
         When `variants` is sent, it must list every existing variant by `id` with
         its unchanged `variant` key; steps within a variant can be added, edited,
         reordered, or removed. `tags` is not writable in v1 and returns `400`.
+
+        To add, change, or clear translations, send
+        `variants: [{"id": "<variant id>", "translations": {...}}]`. Entries
+        that carry only `id` and `translations` may name a subset of the variants
+        and need no `variant` key. `translations` maps locale to translation key to
+        text. Take the keys and their default-locale text from
+        `translation_status.sources` on a `GET` with
+        `include_translations=true&include_unpublished_changes=true`. Translations
+        merge into what is stored: keys you leave out keep their text, `null`
+        clears a key, and `null` for a locale clears every key in it. Only steps
+        and blocks that already exist can be translated, so add new content
+        first, then translate it in a later request. The default locale is edited
+        through the guide content, not `translations`. When the request sends
+        translations, the response includes `localization`, `translations`, and
+        `translation_status`. Translations return `400` when localization is
+        disabled in the project settings or the locale isn't one of the
+        project's locales.
       x-required-scopes:
         - guides:write
       parameters:
@@ -3710,6 +4301,7 @@ paths:
                 title:
                   type: string
                   minLength: 1
+                  maxLength: 255
                 description:
                   type:
                     - string
@@ -3747,19 +4339,20 @@ paths:
                 snooze_duration:
                   $ref: '#/components/schemas/GuideSurveySnoozeDuration'
                 snooze_label:
-                  type:
-                    - string
-                    - 'null'
+                  type: string
+                  maxLength: 255
+                  description: Snooze button label.
                 template_source:
-                  type:
-                    - string
-                    - 'null'
+                  type: string
+                  maxLength: 255
                 show_step_counter:
                   type: boolean
                 step_counter_format:
-                  type:
-                    - string
-                    - 'null'
+                  type: string
+                  enum:
+                    - numeric
+                    - verbose
+                  description: '`numeric` shows "1/3"; `verbose` shows "Step 1 of 3".'
                 tags:
                   type: array
                   items:
@@ -3767,7 +4360,7 @@ paths:
                 variants:
                   type: array
                   items:
-                    $ref: '#/components/schemas/GuideSurveyVariantInput'
+                    $ref: '#/components/schemas/GuideSurveyVariantUpdateInput'
                 latest_version:
                   type: integer
                   description: |
@@ -3934,6 +4527,7 @@ paths:
                 title:
                   type: string
                   minLength: 1
+                  maxLength: 255
                 description:
                   type:
                     - string
@@ -3948,6 +4542,29 @@ paths:
                   type: array
                   items:
                     $ref: '#/components/schemas/GuideSurveyVariantInput'
+                  example:
+                    - variant: treatment-nps
+                      steps:
+                        - title: How likely are you to recommend us to a friend or colleague?
+                          form_factor:
+                            type: popover
+                            position: center
+                            footerLayout: split
+                            titleAlignment: start
+                            contentAlignment: start
+                          content:
+                            - type: survey_rating
+                              meta:
+                                type: nps
+                                options: 10
+                                lowerLabel: Not likely at all
+                                upperLabel: Extremely likely
+                            - type: button
+                              meta:
+                                label: Submit
+                                buttonType: primary
+                                action:
+                                  type: no_action
               additionalProperties: false
       responses:
         '201':
@@ -3994,6 +4611,19 @@ paths:
           schema:
             type: boolean
             default: false
+        - name: include_translations
+          in: query
+          required: false
+          description: |
+            When true, add `localization` (the project's default locale and other
+            locales) and each variant's `translations` and `translation_status`.
+            Read with `include_unpublished_changes=true` before writing
+            translations, so keys and `latest_version` match the draft. When
+            localization is disabled in the project settings, only
+            `localization: {enabled: false}` is added.
+          schema:
+            type: boolean
+            default: false
       responses:
         '200':
           description: Successful response.
@@ -4032,6 +4662,23 @@ paths:
         When `variants` is sent, it must list every existing variant by `id` with
         its unchanged `variant` key; steps within a variant can be added, edited,
         reordered, or removed. `tags` is not writable in v1 and returns `400`.
+
+        To add, change, or clear translations, send
+        `variants: [{"id": "<variant id>", "translations": {...}}]`. Entries
+        that carry only `id` and `translations` may name a subset of the variants
+        and need no `variant` key. `translations` maps locale to translation key to
+        text. Take the keys and their default-locale text from
+        `translation_status.sources` on a `GET` with
+        `include_translations=true&include_unpublished_changes=true`. Translations
+        merge into what is stored: keys you leave out keep their text, `null`
+        clears a key, and `null` for a locale clears every key in it. Only steps
+        and blocks that already exist can be translated, so add new content
+        first, then translate it in a later request. The default locale is edited
+        through the survey content, not `translations`. When the request sends
+        translations, the response includes `localization`, `translations`, and
+        `translation_status`. Translations return `400` when localization is
+        disabled in the project settings or the locale isn't one of the
+        project's locales.
       x-required-scopes:
         - surveys:write
       parameters:
@@ -4046,6 +4693,7 @@ paths:
                 title:
                   type: string
                   minLength: 1
+                  maxLength: 255
                 description:
                   type:
                     - string
@@ -4083,19 +4731,20 @@ paths:
                 snooze_duration:
                   $ref: '#/components/schemas/GuideSurveySnoozeDuration'
                 snooze_label:
-                  type:
-                    - string
-                    - 'null'
+                  type: string
+                  maxLength: 255
+                  description: Snooze button label.
                 template_source:
-                  type:
-                    - string
-                    - 'null'
+                  type: string
+                  maxLength: 255
                 show_step_counter:
                   type: boolean
                 step_counter_format:
-                  type:
-                    - string
-                    - 'null'
+                  type: string
+                  enum:
+                    - numeric
+                    - verbose
+                  description: '`numeric` shows "1/3"; `verbose` shows "Step 1 of 3".'
                 tags:
                   type: array
                   items:
@@ -4103,7 +4752,7 @@ paths:
                 variants:
                   type: array
                   items:
-                    $ref: '#/components/schemas/GuideSurveyVariantInput'
+                    $ref: '#/components/schemas/GuideSurveyVariantUpdateInput'
                 latest_version:
                   type: integer
                   description: |
@@ -4166,6 +4815,104 @@ paths:
         '404':
           $ref: '#/components/responses/Problem'
         '409':
+          $ref: '#/components/responses/Problem'
+        '429':
+          $ref: '#/components/responses/RateLimitProblem'
+        '500':
+          $ref: '#/components/responses/Problem'
+  /v1/projects/{project_id}/releases:
+    get:
+      tags:
+        - Analytics
+      operationId: listReleases
+      summary: List releases
+      description: |
+        Returns product releases in the project. Results use the standard Developer
+        API list envelope with cursor pagination (`cursor`, `limit`, default 50,
+        maximum 200), ordered by release start time descending, then id descending.
+
+        Filter by release start time with `release_start_after` and
+        `release_start_before`. Full-text search (`q`) and custom sort orders are
+        not supported yet.
+      x-required-scopes:
+        - analytics:read
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+        - name: release_start_after
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+        - name: release_start_before
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+        - name: include_deleted
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: false
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                  - pagination
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ReleaseSummary'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+        '400':
+          $ref: '#/components/responses/ValidationProblem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '429':
+          $ref: '#/components/responses/RateLimitProblem'
+        '500':
+          $ref: '#/components/responses/Problem'
+  /v1/projects/{project_id}/releases/{release_id}:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+      - $ref: '#/components/parameters/ReleaseId'
+    get:
+      tags:
+        - Analytics
+      operationId: getRelease
+      summary: Get release
+      x-required-scopes:
+        - analytics:read
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Release'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
           $ref: '#/components/responses/Problem'
         '429':
           $ref: '#/components/responses/RateLimitProblem'
@@ -4555,8 +5302,9 @@ paths:
         Always creates a new destination; the server assigns the `id` used for
         every subsequent lookup. `display_name` is not an identity key, so
         repeating a create makes another destination. When `dry_run=true`, returns
-        a plan envelope without mutating. SECRET/OAUTH config values are
-        write-only.
+        a plan envelope without mutating. Credential config (secret, OAuth,
+        service account, custom HTTP header, ads account, and encrypted text)
+        is write-only and omitted from the response.
       x-required-scopes:
         - destinations:write
       parameters:
@@ -5124,6 +5872,14 @@ components:
       schema:
         type: string
         pattern: ^[0-9]+$
+    ReleaseId:
+      name: release_id
+      in: path
+      required: true
+      description: Product release identifier.
+      schema:
+        type: string
+        minLength: 1
     ThemeId:
       name: theme_id
       in: path
@@ -5167,6 +5923,19 @@ components:
             detail: Too many requests.
             error_code: rate_limit_exceeded
             retryable: true
+    AvailabilityUnavailableProblem:
+      description: Endpoint availability could not be determined. Retry the request.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+          example:
+            type: https://developer-api.amplitude.com/problems/operation-availability-unavailable
+            title: Operation availability unavailable
+            status: 503
+            detail: Operation availability could not be determined. Retry the request.
+            error_code: operation_availability_unavailable
+            retryable: true
     MetricForbiddenProblem:
       description: |
         The caller cannot use this operation. `operation_not_enabled` means the
@@ -5195,19 +5964,6 @@ components:
                 detail: Token missing required scopes.
                 error_code: insufficient_scope
                 retryable: false
-    AvailabilityUnavailableProblem:
-      description: Endpoint availability could not be determined. Retry the request.
-      content:
-        application/problem+json:
-          schema:
-            $ref: '#/components/schemas/ProblemDetails'
-          example:
-            type: https://developer-api.amplitude.com/problems/operation-availability-unavailable
-            title: Operation availability unavailable
-            status: 503
-            detail: Operation availability could not be determined. Retry the request.
-            error_code: operation_availability_unavailable
-            retryable: true
     HeatmapForbiddenProblem:
       description: |
         The caller cannot use this operation. `operation_not_enabled` means the
@@ -5395,6 +6151,11 @@ components:
           type:
             - string
             - 'null'
+        details:
+          type:
+            - object
+            - 'null'
+          additionalProperties: true
         instance:
           type:
             - string
@@ -6482,6 +7243,104 @@ components:
             type:
               type: string
               const: SURVEY
+    ReleaseType:
+      type: string
+      description: |
+        How the release was created. Automatic releases are detected or cut by
+        product automation; manual releases are user- or Developer API-created
+        markers; integration releases are created by integrations or the legacy
+        Releases API. List and get can return all three types.
+      enum:
+        - manual
+        - automatic
+        - integration
+    Release:
+      allOf:
+        - $ref: '#/components/schemas/ReleaseSummary'
+    ReleaseSummary:
+      type: object
+      required:
+        - id
+        - object
+        - project_id
+        - title
+        - release_start
+        - chart_visibility
+        - type
+        - deleted
+      properties:
+        id:
+          type: string
+          description: Release identifier.
+        object:
+          type: string
+          const: release
+        project_id:
+          type: string
+          description: Amplitude project (app) identifier.
+        title:
+          type: string
+        description:
+          type:
+            - string
+            - 'null'
+        version:
+          type:
+            - string
+            - 'null'
+          description: Associated product or app version label.
+        release_start:
+          type: string
+          format: date-time
+          description: Start of the release window (UTC).
+        release_end:
+          type:
+            - string
+            - 'null'
+          format: date-time
+          description: Optional end of the release window (UTC).
+        platforms:
+          type:
+            - array
+            - 'null'
+          items:
+            type: string
+          description: Optional platform tags associated with the release.
+        chart_visibility:
+          type: boolean
+          description: When true, the release marker is shown on time-series charts.
+        type:
+          $ref: '#/components/schemas/ReleaseType'
+        deleted:
+          type: boolean
+          description: |
+            Whether the release has been deleted. Default list responses omit
+            deleted releases unless `include_deleted=true`.
+        created_at:
+          type:
+            - string
+            - 'null'
+          format: date-time
+        updated_at:
+          type:
+            - string
+            - 'null'
+          format: date-time
+        created_by:
+          type:
+            - string
+            - 'null'
+          description: Creator email or login identifier when available.
+        updated_by:
+          type:
+            - string
+            - 'null'
+          description: Last editor email or login identifier when available.
+        url:
+          type: string
+          format: uri
+          description: Deep link to the release in the Amplitude web app.
+      additionalProperties: false
     Theme:
       allOf:
         - $ref: '#/components/schemas/ThemeSummary'
@@ -6767,10 +7626,12 @@ components:
           type: object
           additionalProperties: true
           description: |
-            Partner config keyed by parameter id. SECRET/OAUTH values are write-only
-            and never returned on reads. Values are scalars or structured
-            (objects/arrays, e.g. header maps); structured values round-trip as
-            decoded JSON.
+            Partner config keyed by parameter id. Reads return an allowlist of
+            non-credential types: string, boolean, enum, mapped field, event
+            mapping, and transformation. Secret, OAuth, service-account, custom
+            HTTP header, and ads-account values are write-only and never returned.
+            A string flagged shouldEncryptInDb is omitted too. Structured values
+            round-trip as decoded JSON.
         credential_status:
           $ref: '#/components/schemas/DestinationCredentialStatus'
         version:
@@ -7540,6 +8401,65 @@ components:
               type: array
               items:
                 $ref: '#/components/schemas/McpAnalyticsBreadcrumb'
+    McpAnalyticsCall:
+      type: object
+      required:
+        - id
+        - object
+        - event_time
+        - tool_name
+        - is_error
+        - error_type
+        - error_message
+        - error_code
+        - error_http_status
+        - duration_ms
+        - rationale
+        - properties
+      properties:
+        id:
+          type: string
+          description: Recorded tool call event id.
+        object:
+          type: string
+          const: mcp_analytics_call
+        event_time:
+          type: string
+          format: date-time
+        tool_name:
+          type: string
+        is_error:
+          type: boolean
+        error_type:
+          type:
+            - string
+            - 'null'
+        error_message:
+          type:
+            - string
+            - 'null'
+        error_code:
+          type:
+            - string
+            - 'null'
+        error_http_status:
+          type:
+            - integer
+            - 'null'
+        duration_ms:
+          type:
+            - integer
+            - 'null'
+        rationale:
+          type:
+            - string
+            - 'null'
+        properties:
+          type:
+            - object
+            - 'null'
+          additionalProperties: true
+          description: Recorded event properties. Contents depend on the instrumented tool; input and output fields may be absent.
     SignupDocumentAcceptance:
       type: object
       required:
@@ -7830,6 +8750,42 @@ components:
         reason:
           type: string
           description: Human-readable explanation of truncation.
+    AiContext:
+      type: object
+      required:
+        - object
+        - scope
+        - org_id
+        - project_id
+        - context
+      properties:
+        object:
+          type: string
+          const: ai_context
+        scope:
+          type: string
+          enum:
+            - organization
+            - project
+        org_id:
+          type: string
+        project_id:
+          type:
+            - string
+            - 'null'
+        context:
+          type: string
+          description: Customer-managed markdown or plain text; empty when unset.
+    AiContextWrite:
+      type: object
+      required:
+        - context
+      properties:
+        context:
+          type: string
+          description: |
+            Full customer-managed context to store. Replaces the existing value;
+            send an empty string to clear.
     PropertyType:
       type: string
       description: Property namespace for filters, group-bys, and aggregations.
@@ -8549,8 +9505,6 @@ components:
             - startsWith
             - endsWith
             - regex
-            - domId
-            - domClassname
             - domSelector
         isExclude:
           type: boolean
@@ -8564,11 +9518,11 @@ components:
         value:
           type: string
           description: |
-            Element ID, class name, or selector. Required for `domId`,
-            `domClassname`, and `domSelector`, which are web only.
+            CSS selector of an element that must be on the page. Required for
+            `domSelector`, which is web only.
       description: |
         One page rule. An empty list means every page. Keys stay camelCase, and
-        no other keys are allowed.
+        no other keys are allowed. Send `url: ""` with `domSelector`.
     GuideSurveySummary:
       type: object
       required:
@@ -8682,6 +9636,13 @@ components:
           description: |
             Monotonic version for optimistic concurrency. Send the value from the
             latest GET on PATCH; a stale value returns 409.
+    GuideSurveyVariantKey:
+      type: string
+      pattern: ^[a-z0-9_-]+$
+      description: |
+        Variant key within the nudge: lowercase letters, digits, `-` and `_`.
+        Keys must be unique. `off` is reserved, and `control` can't be given to
+        a new variant.
     GuideSurveyModalPosition:
       type: string
       enum:
@@ -8695,6 +9656,34 @@ components:
         - right-center
         - center
       description: Where a modal or popover sits in the viewport.
+    GuideSurveyStepLayout:
+      type: string
+      enum:
+        - classic
+        - vertical
+        - showcase
+        - horizontal
+      description: Arrangement of media and text in the step.
+    GuideSurveyMediaPosition:
+      type: string
+      enum:
+        - left
+        - right
+      description: Media side for the `horizontal` layout.
+    GuideSurveyContentAlignment:
+      type: string
+      enum:
+        - start
+        - center
+        - end
+    GuideSurveyFooterLayout:
+      type: string
+      enum:
+        - classic
+        - split
+        - centered
+        - stacked
+      description: Arrangement of the step's buttons.
     GuideSurveyModalFormFactor:
       type: object
       additionalProperties: true
@@ -8710,6 +9699,16 @@ components:
           type: boolean
         fullWidthModal:
           type: boolean
+        layout:
+          $ref: '#/components/schemas/GuideSurveyStepLayout'
+        mediaPosition:
+          $ref: '#/components/schemas/GuideSurveyMediaPosition'
+        contentAlignment:
+          $ref: '#/components/schemas/GuideSurveyContentAlignment'
+        titleAlignment:
+          $ref: '#/components/schemas/GuideSurveyContentAlignment'
+        footerLayout:
+          $ref: '#/components/schemas/GuideSurveyFooterLayout'
     GuideSurveyPopoverFormFactor:
       type: object
       additionalProperties: true
@@ -8722,6 +9721,16 @@ components:
           const: popover
         position:
           $ref: '#/components/schemas/GuideSurveyModalPosition'
+        layout:
+          $ref: '#/components/schemas/GuideSurveyStepLayout'
+        mediaPosition:
+          $ref: '#/components/schemas/GuideSurveyMediaPosition'
+        contentAlignment:
+          $ref: '#/components/schemas/GuideSurveyContentAlignment'
+        titleAlignment:
+          $ref: '#/components/schemas/GuideSurveyContentAlignment'
+        footerLayout:
+          $ref: '#/components/schemas/GuideSurveyFooterLayout'
     GuideSurveyBannerFormFactor:
       type: object
       additionalProperties: true
@@ -8747,6 +9756,60 @@ components:
         sticky:
           type: boolean
           description: Keep the banner on screen while the page scrolls.
+        layout:
+          type: string
+          enum:
+            - classic
+            - vertical
+        footerLayout:
+          type: string
+          const: classic
+        contentAlignment:
+          $ref: '#/components/schemas/GuideSurveyContentAlignment'
+        titleAlignment:
+          $ref: '#/components/schemas/GuideSurveyContentAlignment'
+    GuideSurveyAnchorSelector:
+      type: object
+      additionalProperties: true
+      required:
+        - selector
+        - text
+        - tag
+        - attributes
+      properties:
+        selector:
+          type: string
+        text:
+          type: string
+          description: Visible text of the element.
+        tag:
+          type: string
+          description: HTML tag name.
+        attributes:
+          type: object
+          additionalProperties:
+            type: string
+        strategy:
+          type: string
+          enum:
+            - strict
+            - fallback
+            - selector_only
+      description: Richer element match used alongside `anchor`.
+    GuideSurveyOffset:
+      type: object
+      additionalProperties: true
+      required:
+        - x
+        - 'y'
+      properties:
+        x:
+          type: string
+          description: CSS length, for example `0px`.
+        'y':
+          type: string
+          description: CSS length, for example `0px`.
+      description: Both `x` and `y` are required.
     GuideSurveyPinFormFactor:
       type: object
       additionalProperties: true
@@ -8760,6 +9823,8 @@ components:
         anchor:
           type: string
           description: CSS selector the pin attaches to.
+        anchorSelector:
+          $ref: '#/components/schemas/GuideSurveyAnchorSelector'
         position:
           type: string
           enum:
@@ -8768,6 +9833,44 @@ components:
             - bottom
             - left
             - right
+        alignment:
+          type: string
+          enum:
+            - center
+            - top
+            - bottom
+            - left
+            - right
+        offset:
+          $ref: '#/components/schemas/GuideSurveyOffset'
+        pointer:
+          type: object
+          additionalProperties: true
+          required:
+            - type
+          properties:
+            type:
+              type: string
+              enum:
+                - beacon
+                - arrow
+        isOpenByDefault:
+          type: boolean
+        openOnHover:
+          type: boolean
+        isShowingMask:
+          type: boolean
+          description: Dim the rest of the page.
+        canClickOutsideToClose:
+          type: boolean
+        advanceTrigger:
+          type: string
+          description: CSS selector whose click advances to the next step.
+        disableAutoAdvanceOnClick:
+          type: boolean
+        skipIfNotFound:
+          type: boolean
+          description: Skip the step when the anchor is missing.
     GuideSurveyTooltipMarkerPositioning:
       type: object
       additionalProperties: true
@@ -8783,17 +9886,11 @@ components:
             - inline_left
             - inline_right
         offset:
-          type: object
-          additionalProperties: true
-          required:
-            - x
-            - 'y'
-          properties:
-            x:
-              type: string
-            'y':
-              type: string
+          $ref: '#/components/schemas/GuideSurveyOffset'
     GuideSurveyTooltipMarker:
+      description: |
+        The marker users hover or click to open the tooltip. Every marker type
+        also accepts `width` (number) and `elementIsMarker` (boolean).
       oneOf:
         - type: object
           additionalProperties: true
@@ -8864,6 +9961,34 @@ components:
             - click
         marker:
           $ref: '#/components/schemas/GuideSurveyTooltipMarker'
+        anchorSelector:
+          $ref: '#/components/schemas/GuideSurveyAnchorSelector'
+        pointer:
+          type: object
+          additionalProperties: true
+          required:
+            - type
+          properties:
+            type:
+              type: string
+              enum:
+                - arrow
+                - none
+    GuideSurveyCardSize:
+      type: object
+      additionalProperties: true
+      required:
+        - type
+      properties:
+        type:
+          type: string
+          enum:
+            - auto
+            - fixed
+            - full
+        value:
+          type: number
+          description: Pixels, used with `fixed`.
     GuideSurveyCardFormFactor:
       type: object
       additionalProperties: true
@@ -8886,6 +10011,31 @@ components:
             - replace
             - before
             - after
+        anchorSelector:
+          $ref: '#/components/schemas/GuideSurveyAnchorSelector'
+        alignment:
+          $ref: '#/components/schemas/GuideSurveyContentAlignment'
+        cardWidth:
+          $ref: '#/components/schemas/GuideSurveyCardSize'
+        cardHeight:
+          $ref: '#/components/schemas/GuideSurveyCardSize'
+        cardMargin:
+          type: object
+          additionalProperties: true
+          required:
+            - top
+            - right
+            - bottom
+            - left
+          properties:
+            top:
+              type: number
+            right:
+              type: number
+            bottom:
+              type: number
+            left:
+              type: number
     GuideSurveyChecklistFormFactor:
       type: object
       additionalProperties: true
@@ -8895,6 +10045,12 @@ components:
         type:
           type: string
           const: checklist
+        layout:
+          type: string
+          const: classic
+        footerLayout:
+          type: string
+          const: classic
     GuideSurveyStepFormFactor:
       oneOf:
         - $ref: '#/components/schemas/GuideSurveyModalFormFactor'
@@ -8905,18 +10061,21 @@ components:
         - $ref: '#/components/schemas/GuideSurveyCardFormFactor'
         - $ref: '#/components/schemas/GuideSurveyChecklistFormFactor'
       description: |
-        Step layout. `type` selects it. Other layout keys, including `layout`,
-        `footerLayout`, `contentAlignment`, and `titleAlignment`, are accepted
-        and passed through.
+        Step layout. `type` selects it. Every form factor also accepts
+        `zIndexOverride` (number or null) and `textAnimation` (`typewriter`).
+        Modal, popover, pin, tooltip, and card accept the step layout keys
+        `layout`, `mediaPosition`, `contentAlignment`, `titleAlignment`, and
+        `footerLayout`; banner and checklist accept a narrower set. Tooltips and cards can't be snoozed.
     GuideSurveyMarkdownBlock:
       type: object
       required:
-        - uuid
         - type
         - meta
       properties:
         uuid:
-          type: string
+          type:
+            - string
+            - 'null'
         type:
           type: string
           const: markdown
@@ -8929,22 +10088,22 @@ components:
               type: string
               description: Markdown text. Inline HTML is allowed and is sanitized on save.
             alignment:
+              $ref: '#/components/schemas/GuideSurveyContentAlignment'
+            textAnimation:
               type: string
-              enum:
-                - start
-                - center
-                - end
+              const: typewriter
           additionalProperties: true
       description: Body text.
     GuideSurveyImageBlock:
       type: object
       required:
-        - uuid
         - type
         - meta
       properties:
         uuid:
-          type: string
+          type:
+            - string
+            - 'null'
         type:
           type: string
           const: image
@@ -8982,17 +10141,34 @@ components:
             action:
               type: object
               additionalProperties: true
-              description: Optional `link` action opened when the image is clicked.
+              required:
+                - type
+                - value
+              properties:
+                type:
+                  type: string
+                  const: link
+                value:
+                  type: string
+                  description: URL to open.
+                operation:
+                  type: string
+                  enum:
+                    - self
+                    - blank
+                    - router
+              description: Optional link opened when the image is clicked. No other action type is allowed.
           additionalProperties: true
     GuideSurveyVideoBlock:
       type: object
       required:
-        - uuid
         - type
         - meta
       properties:
         uuid:
-          type: string
+          type:
+            - string
+            - 'null'
         type:
           type: string
           const: video
@@ -9028,13 +10204,15 @@ components:
             - `complete`: finish the guide or survey.
             - `dismiss`: close it.
             - `snooze`: hide it for a while, with optional `interval` (`hour`, `day`, `week`) and `value`.
-            - `go_to_step`: jump to the step whose id is in `value`.
+            - `go_to_step`: jump to a step. `value` is the 0-based position of the step in the variant's `steps`, not its id.
             - `link`: open the URL in `value`; `operation` is `self` (same tab), `blank` (new tab) or `router`.
-            - `nudge`: start the guide or survey whose id is in `value`.
-            - `no_action`: do nothing.
+            - `nudge`: start another guide or survey. `value` is its numeric id, and `productType` is `guide` or `survey`.
+            - `no_action`: no action of its own. The button still advances: to the next step, or on the last step it finishes the guide or survey. The dashboard's survey templates use it for the submit button. It does not keep the user on the step; `stay_on_step` does.
 
-            Buttons built in the dashboard can use other action types. Send those
-            back unchanged.
+            Buttons built in the dashboard can also use `stay_on_step`,
+            `click` (`value` is a CSS selector), `callback`, `app_review`,
+            `open_resource_center`, `open_ai_assistant`, `open_chat`, `document`,
+            `video`, and `use_conditional_logic`. Send those back unchanged.
       additionalProperties: true
       example:
         type: link
@@ -9043,12 +10221,13 @@ components:
     GuideSurveyButtonBlock:
       type: object
       required:
-        - uuid
         - type
         - meta
       properties:
         uuid:
-          type: string
+          type:
+            - string
+            - 'null'
         type:
           type: string
           const: button
@@ -9065,6 +10244,12 @@ components:
                 - snooze
             action:
               $ref: '#/components/schemas/GuideSurveyButtonAction'
+            grow:
+              type: boolean
+              description: Stretch the button to fill the footer row.
+            width:
+              type: string
+              description: CSS width, for example `100%`.
             actions:
               type: object
               additionalProperties: true
@@ -9094,12 +10279,13 @@ components:
     GuideSurveyTextQuestionBlock:
       type: object
       required:
-        - uuid
         - type
         - meta
       properties:
         uuid:
-          type: string
+          type:
+            - string
+            - 'null'
         type:
           type: string
           enum:
@@ -9113,9 +10299,24 @@ components:
           properties:
             prompt:
               type: string
-              description: Placeholder shown in the empty answer field.
+              description: Placeholder shown in the empty answer field. Required; send `""` for none.
             label:
               type: string
+            ariaLabel:
+              type: string
+            prefill:
+              type: object
+              required:
+                - enabled
+                - userProperty
+              properties:
+                enabled:
+                  type: boolean
+                userProperty:
+                  type: string
+                  description: User property whose value fills the answer.
+              additionalProperties: true
+              description: '`survey_text_short` only.'
             validation:
               $ref: '#/components/schemas/GuideSurveyQuestionValidation'
           additionalProperties: true
@@ -9123,12 +10324,13 @@ components:
     GuideSurveyListQuestionBlock:
       type: object
       required:
-        - uuid
         - type
         - meta
       properties:
         uuid:
-          type: string
+          type:
+            - string
+            - 'null'
         type:
           type: string
           const: survey_list
@@ -9179,12 +10381,13 @@ components:
     GuideSurveyRatingQuestionBlock:
       type: object
       required:
-        - uuid
         - type
         - meta
       properties:
         uuid:
-          type: string
+          type:
+            - string
+            - 'null'
         type:
           type: string
           const: survey_rating
@@ -9203,15 +10406,18 @@ components:
                 - numbers
                 - emojis
                 - nps
-              description: '`nps` is a 0–10 scale.'
+              description: '`nps` is a 0–10 scale and takes `options: 10`.'
             options:
               type: integer
-              description: Number of choices on the scale.
+              description: |
+                Number of choices on the scale. Allowed values depend on `type`:
+                `stars` 3 or 5, `numbers` 3, 5, 7 or 10, `emojis` 2, 3 or 5, and
+                `nps` 10.
             emojis:
               type: array
               items:
                 type: string
-              description: One emoji per option. Required when `type` is `emojis`.
+              description: Exactly one emoji per option. Required when `type` is `emojis`.
             lowerLabel:
               type: string
             upperLabel:
@@ -9225,12 +10431,13 @@ components:
     GuideSurveyHiddenFieldBlock:
       type: object
       required:
-        - uuid
         - type
         - meta
       properties:
         uuid:
-          type: string
+          type:
+            - string
+            - 'null'
         type:
           type: string
           const: survey_hidden
@@ -9243,22 +10450,31 @@ components:
             label:
               type: string
             source:
-              type: object
-              required:
-                - type
-              properties:
-                type:
-                  type: string
-                  enum:
-                    - static
-                    - event_property
-                value:
-                  type: string
-                  description: The value to record. Used when `type` is `static`.
-                property:
-                  type: string
-                  description: Property of the event that triggered the survey. Used when `type` is `event_property`.
-              additionalProperties: false
+              oneOf:
+                - type: object
+                  required:
+                    - type
+                    - value
+                  properties:
+                    type:
+                      type: string
+                      const: static
+                    value:
+                      type: string
+                      description: The value to record.
+                  additionalProperties: false
+                - type: object
+                  required:
+                    - type
+                    - property
+                  properties:
+                    type:
+                      type: string
+                      const: event_property
+                    property:
+                      type: string
+                      description: Property of the event that triggered the survey.
+                  additionalProperties: false
           additionalProperties: false
       description: Not shown to the user. Adds a value to each survey response.
     GuideSurveyContentBlock:
@@ -9278,10 +10494,17 @@ components:
         $ref: '#/components/schemas/GuideSurveyContentBlock'
       description: |
         The step body: content blocks rendered top to bottom, below the step
-        `title`. `meta` keys are camelCase. Give each new block a unique `uuid`
-        (a v4 UUID) and keep the existing `uuid` when you edit a block, because
-        survey responses are keyed by it. To change one block, send the step's
-        whole `content` array back with that block edited.
+        `title`. `meta` keys are camelCase. Keep a block's existing `uuid` when
+        you edit it, because survey responses are keyed by it; a block sent
+        without one (or with `null`) is given one on save. To change one block,
+        send the step's whole `content` array back with that block edited. Send
+        `[]` for an empty step, not `null`.
+
+        A step can have at most one `markdown` block, one `image` or one `video`
+        (not both), two buttons, ten survey questions, and ten `survey_hidden`
+        fields. Survey question blocks are only allowed in surveys, and only on
+        steps with the `classic` or `vertical` layout. A checklist item can have
+        at most one button. A snooze button needs the variant's `snooze_label`.
       example:
         - uuid: 3f0c2a8e-5b1d-4c7a-9e2f-1a6b8d4c0e11
           type: markdown
@@ -9294,6 +10517,138 @@ components:
             buttonType: primary
             action:
               type: step_forward
+    GuideSurveyContentV2Container:
+      type: object
+      additionalProperties: true
+      required:
+        - type
+        - children
+      properties:
+        type:
+          type: string
+          const: layout
+        children:
+          type: array
+          items:
+            oneOf:
+              - $ref: '#/components/schemas/GuideSurveyContentV2Container'
+              - $ref: '#/components/schemas/GuideSurveyContentBlock'
+              - $ref: '#/components/schemas/GuideSurveyTitleBlock'
+              - $ref: '#/components/schemas/GuideSurveyStepCounterBlock'
+        id:
+          type: string
+          description: Container id, unique within the step.
+        direction:
+          type: string
+          enum:
+            - row
+            - column
+        justify:
+          type: string
+          enum:
+            - start
+            - center
+            - end
+            - space-between
+            - space-around
+        align:
+          $ref: '#/components/schemas/GuideSurveyContentAlignment'
+        gap:
+          type: string
+          description: CSS length, for example `8px`.
+        padding:
+          type: string
+        margin:
+          type: string
+        pinned:
+          type: boolean
+        wrap:
+          type: boolean
+        overflow:
+          type: string
+          enum:
+            - auto
+            - hidden
+        minHeight:
+          type: string
+        width:
+          type: string
+      description: |
+        A block-builder container. `children` are containers or content blocks,
+        plus the `title` and `step_counter` blocks that only exist in trees.
+    GuideSurveyTitleBlock:
+      type: object
+      additionalProperties: true
+      required:
+        - type
+        - meta
+      properties:
+        uuid:
+          type:
+            - string
+            - 'null'
+        type:
+          type: string
+          const: title
+        meta:
+          type: object
+          additionalProperties: true
+          required:
+            - value
+          properties:
+            value:
+              type: string
+            alignment:
+              $ref: '#/components/schemas/GuideSurveyContentAlignment'
+            textAnimation:
+              type: string
+              const: typewriter
+      description: The step title inside a block-builder tree.
+    GuideSurveyStepCounterBlock:
+      type: object
+      additionalProperties: true
+      required:
+        - type
+        - meta
+      properties:
+        uuid:
+          type:
+            - string
+            - 'null'
+        type:
+          type: string
+          const: step_counter
+        meta:
+          type: object
+          additionalProperties: true
+          properties:
+            format:
+              type: string
+              enum:
+                - numeric
+                - verbose
+      description: Shows the step number inside a block-builder tree.
+    GuideSurveyStepContentV2:
+      oneOf:
+        - $ref: '#/components/schemas/GuideSurveyContentV2Container'
+        - type: 'null'
+      description: |
+        Block-builder layout: a tree of `layout` containers whose `children`
+        are containers or content blocks, including the step's `title` block.
+        Returned only on steps built in the block builder; when present, the
+        dashboard and SDK render this tree, not `title` and `content`.
+
+        On update, only accepted on resources that already have a step with a
+        tree; a flat-only guide or survey can't be converted through the API.
+        On create, any step may take one, so a resource read with `content_v2`
+        can be copied. Block `uuid`s must be unique within the step. Keep a block's
+        existing `uuid` when you edit it, because survey responses are keyed by
+        it; a block sent without one is given one on save. The saved tree is
+        normalized to the shape the block builder saves, and the step title is
+        taken from its `title` block. On a step with a tree, send `title` and
+        `content` only together with `content_v2`. Not supported on banner or
+        checklist steps or on mobile platforms. `null` switches the step back
+        to `content`.
     GuideSurveyStepInput:
       type: object
       description: |
@@ -9304,39 +10659,20 @@ components:
         id:
           type: string
         title:
-          type:
-            - string
-            - 'null'
+          type: string
+          maxLength: 255
+          description: Step title. Omit it to leave it unchanged; `null` is rejected.
         form_factor:
           $ref: '#/components/schemas/GuideSurveyStepFormFactor'
         content:
           $ref: '#/components/schemas/GuideSurveyStepContent'
         content_v2:
-          type:
-            - object
-            - 'null'
-          additionalProperties: true
-          description: |
-            Block-builder layout: a tree of `layout` containers whose `children`
-            are containers or content blocks, including the step's `title` block.
-            Returned only on steps built in the block builder; when present, the
-            dashboard and SDK render this tree, not `title` and `content`.
-
-            On update, only accepted on resources that already have a step with a
-            tree; a flat-only guide or survey can't be converted through the API.
-            On create, any step may take one, so a resource read with `content_v2`
-            can be copied. Block `uuid`s must be unique within the step. Keep a block's
-            existing `uuid` when you edit it, because survey responses are keyed by
-            it; a block sent without one is given one on save. The saved tree is
-            normalized to the shape the block builder saves, and the step title is
-            taken from its `title` block. On a step with a tree, send `title` and
-            `content` only together with `content_v2`. Not supported on banner or
-            checklist steps or on mobile platforms. `null` switches the step back
-            to `content`.
+          $ref: '#/components/schemas/GuideSurveyStepContentV2'
         sort_key:
           type:
             - integer
             - 'null'
+          description: Ignored on input. Steps are shown in the order of `steps`.
       additionalProperties: false
     GuideSurveyVariantInput:
       type: object
@@ -9344,33 +10680,33 @@ components:
         Variant payload on create/update. `id` is optional — omit for new variants;
         include when updating an existing variant row. A negative `id` is a variant
         added to a published guide or survey's draft that has not been published yet.
-        `variant` key is required.
+        `variant` key is required. Create doesn't take translations: create the
+        guide or survey, then send `translations` with an update.
       required:
         - variant
       properties:
         id:
           type: string
         variant:
-          type: string
-          description: Variant key within the nudge.
+          $ref: '#/components/schemas/GuideSurveyVariantKey'
         display_title:
-          type:
-            - string
-            - 'null'
+          type: string
+          description: Variant title. Omit it to leave it unchanged; `null` is rejected.
         display_description:
           type:
             - string
             - 'null'
         snooze_label:
-          type:
-            - string
-            - 'null'
+          type: string
+          maxLength: 255
+          description: Snooze button label for this variant. Omit it to leave it unchanged; `null` is rejected.
         done_label:
-          type:
-            - string
-            - 'null'
+          type: string
+          maxLength: 255
+          description: Label of the last step's button. Omit it to leave it unchanged; `null` is rejected.
         steps:
           type: array
+          minItems: 1
           items:
             $ref: '#/components/schemas/GuideSurveyStepInput'
       additionalProperties: false
@@ -9389,6 +10725,37 @@ components:
         `immediately` shows as soon as the page matches. `none` does not fire on
         its own. Neither accepts `data.delay`, and neither can be combined with
         other triggers.
+    GuideSurveyTriggerFilter:
+      type: object
+      additionalProperties: true
+      required:
+        - subprop_key
+        - subprop_op
+        - subprop_value
+      properties:
+        subprop_key:
+          type: string
+          minLength: 1
+          description: Property name.
+        subprop_op:
+          type: string
+          description: Comparison operator, for example `is`, `is not`, or `contains`.
+        subprop_value:
+          type: array
+          minItems: 1
+          items:
+            type: string
+          description: Values to compare against.
+        subprop_type:
+          type:
+            - string
+            - 'null'
+          description: Property type, for example `event` or `user`.
+        group_type:
+          type:
+            - string
+            - 'null'
+      description: One property condition.
     GuideSurveyBehaviorTrigger:
       type: object
       additionalProperties: true
@@ -9409,7 +10776,16 @@ components:
             delay:
               type: number
               minimum: 0
-              description: Milliseconds to wait after the trigger fires.
+              description: Milliseconds to wait after the trigger fires. Omit it rather than sending null.
+            sessionPropertyFilters:
+              type: array
+              description: |
+                Session property conditions. The inner arrays are AND groups, and
+                the outer array ORs them.
+              items:
+                type: array
+                items:
+                  $ref: '#/components/schemas/GuideSurveyTriggerFilter'
       description: |
         Fires on user behavior. `user_confusion` and `exit_intent` are web only.
     GuideSurveyElementTrigger:
@@ -9465,6 +10841,11 @@ components:
               type: number
               minimum: 0
               description: Milliseconds to wait after the event count is reached.
+            filters:
+              type: array
+              description: Event property conditions. Every condition must match.
+              items:
+                $ref: '#/components/schemas/GuideSurveyTriggerFilter'
       description: Fires after an analytics event.
     GuideSurveyAfterTimeTrigger:
       type: object
@@ -9506,8 +10887,9 @@ components:
       description: |
         When the guide or survey appears. One trigger, or an array of triggers
         where any match fires it. Nested keys keep their stored names (`selector`,
-        `event`, `event_count`, `delay`). Optional `filters` and
-        `sessionPropertyFilters` are accepted and passed through.
+        `event`, `event_count`, `delay`, `filters`). Don't send `null`: the dashboard can't open a
+        guide or survey without a trigger. Send `{"type": "immediately"}` to
+        show right away.
       x-help-schema: true
       oneOf:
         - $ref: '#/components/schemas/GuideSurveyTrigger'
@@ -9523,11 +10905,13 @@ components:
         - period
       properties:
         max:
-          type: number
+          type: integer
+          minimum: 1
           description: Maximum impressions in the period.
         periodCount:
-          type: number
-          description: How many `period`s the limit covers.
+          type: integer
+          minimum: 1
+          description: How many `period`s the limit covers. Omitted means 1.
         period:
           type: string
           enum:
@@ -9542,7 +10926,7 @@ components:
       x-help-schema: true
       description: |
         How often the guide or survey may show again. `periodCount` is camelCase;
-        the other keys are snake_case.
+        the other keys are snake_case. Send the whole object, not `null`.
       required:
         - stop_showing_if_completed
         - stop_showing_if_dismissed
@@ -9559,8 +10943,9 @@ components:
             enabled:
               type: boolean
             value:
-              type: number
-              description: Stop after this many survey responses.
+              type: integer
+              minimum: 1
+              description: Stop after this many survey responses. Required when `enabled` is true.
         cooldown_limits:
           type: array
           items:
@@ -9568,11 +10953,16 @@ components:
         even_distribution:
           type: object
           additionalProperties: true
+          required:
+            - enabled
+            - recurrence_period_days
           properties:
             enabled:
               type: boolean
             recurrence_period_days:
-              type: number
+              type: integer
+              minimum: 1
+              description: Days over which impressions are spread evenly. Always required when `even_distribution` is sent.
     GuideSurveySnoozeDuration:
       type: object
       additionalProperties: true
@@ -9590,24 +10980,119 @@ components:
             - week
         value:
           type: number
+          exclusiveMinimum: 0
           description: Number of intervals.
     GuideSurveyStep:
-      allOf:
-        - $ref: '#/components/schemas/GuideSurveyStepInput'
-        - type: object
-          required:
-            - id
+      type: object
+      required:
+        - id
+      properties:
+        id:
+          type: string
+        title:
+          type:
+            - string
+            - 'null'
+          maxLength: 255
+        form_factor:
+          $ref: '#/components/schemas/GuideSurveyStepFormFactor'
+        content:
+          $ref: '#/components/schemas/GuideSurveyStepContent'
+        content_v2:
+          $ref: '#/components/schemas/GuideSurveyStepContentV2'
+        sort_key:
+          type:
+            - integer
+            - 'null'
+      additionalProperties: false
+    GuideSurveyTranslationValue:
+      description: |
+        Translated text. `content.survey_list` keys take an array of option
+        labels in the same order as the source; every other key takes a string.
+        Markdown and title HTML is sanitized like step content.
+      oneOf:
+        - type: string
+        - type: array
+          items:
+            type: string
+    GuideSurveyTranslations:
+      type: object
+      readOnly: true
+      description: |
+        Stored translations, locale to translation key to text. Returned with
+        `include_translations=true` and on updates that send translations.
+      additionalProperties:
+        type: object
+        additionalProperties:
+          $ref: '#/components/schemas/GuideSurveyTranslationValue'
+    GuideSurveyTranslationStatus:
+      type: object
+      readOnly: true
+      description: |
+        What is left to translate. `sources` lists every translatable key with its
+        current default-locale text. Per locale, `missing` keys have no
+        translation and `outdated` keys were translated from text that has since
+        changed.
+      required:
+        - sources
+        - locales
+      properties:
+        sources:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/GuideSurveyTranslationValue'
+        locales:
+          type: object
+          additionalProperties:
+            type: object
+            required:
+              - missing
+              - outdated
+            properties:
+              missing:
+                type: array
+                items:
+                  type: string
+              outdated:
+                type: array
+                items:
+                  type: string
     GuideSurveyVariant:
-      allOf:
-        - $ref: '#/components/schemas/GuideSurveyVariantInput'
-        - type: object
-          required:
-            - id
-          properties:
-            steps:
-              type: array
-              items:
-                $ref: '#/components/schemas/GuideSurveyStep'
+      type: object
+      required:
+        - id
+        - variant
+      properties:
+        id:
+          type: string
+        variant:
+          $ref: '#/components/schemas/GuideSurveyVariantKey'
+        display_title:
+          type:
+            - string
+            - 'null'
+        display_description:
+          type:
+            - string
+            - 'null'
+        snooze_label:
+          type:
+            - string
+            - 'null'
+          maxLength: 255
+        done_label:
+          type:
+            - string
+            - 'null'
+          maxLength: 255
+        steps:
+          type: array
+          items:
+            $ref: '#/components/schemas/GuideSurveyStep'
+        translations:
+          $ref: '#/components/schemas/GuideSurveyTranslations'
+        translation_status:
+          $ref: '#/components/schemas/GuideSurveyTranslationStatus'
     ExperimentVariantSummary:
       type: object
       required:
@@ -9625,6 +11110,25 @@ components:
             - 'null'
         payload:
           description: Optional JSON payload associated with the experiment variant.
+    GuideSurveyLocalization:
+      type: object
+      readOnly: true
+      description: |
+        The project's localization settings. `locales` are the languages other
+        than `default_locale` that translations can be written for. Configure them
+        in project settings. When localization is disabled, only `enabled: false`
+        is returned and variants carry no `translations` or `translation_status`.
+      required:
+        - enabled
+      properties:
+        enabled:
+          type: boolean
+        default_locale:
+          type: string
+        locales:
+          type: array
+          items:
+            type: string
     GuideSurveyDetail:
       type: object
       properties:
@@ -9690,6 +11194,73 @@ components:
             (`target_segments`) and rollout. With
             `include_unpublished_changes=true`, draft rollout and targeting
             settings are applied over the live flag.
+        localization:
+          $ref: '#/components/schemas/GuideSurveyLocalization'
+    GuideSurveyTranslationsInput:
+      type: object
+      description: |
+        Locale (one of `localization.locales`) to translation key to text.
+        Merged into the stored translations: keys you leave out are kept, `null`
+        clears a key, and `null` for a locale clears every key in it.
+
+        Keys name a field by where it sits in the variant: `display_title`,
+        `display_description`, `snooze_label`, `done_label`;
+        `steps[<step id>].title`; and block fields as
+        `steps[<step id>].blocks[<block uuid>].<field>`, for example
+        `content.markdown`, `content.title`, `content.button[primary]`,
+        `content.survey_rating.lowerLabel`, or `content.survey_list`. Copy keys
+        from `translation_status.sources` instead of building them. A key must
+        name a field that has default-locale text.
+      additionalProperties:
+        oneOf:
+          - type: 'null'
+          - type: object
+            additionalProperties:
+              oneOf:
+                - type: 'null'
+                - $ref: '#/components/schemas/GuideSurveyTranslationValue'
+      example:
+        fr:
+          steps[123].title: Bienvenue
+          steps[123].blocks[3f0c1d2e-0000-4000-8000-000000000001].content.markdown: Ravi de vous voir.
+        de: null
+    GuideSurveyVariantUpdateInput:
+      type: object
+      description: |
+        Variant payload on update. `id` names an existing variant. `variant` may be
+        omitted; when sent it must equal the stored key. An entry that carries only
+        `id` and `translations` is translation-only: a list made of
+        translation-only entries may name a subset of the variants. Any other
+        field on any entry makes it a content update, which must list every
+        variant.
+      properties:
+        id:
+          type: string
+        variant:
+          $ref: '#/components/schemas/GuideSurveyVariantKey'
+        display_title:
+          type: string
+          description: Variant title. Omit it to leave it unchanged; `null` is rejected.
+        display_description:
+          type:
+            - string
+            - 'null'
+        snooze_label:
+          type: string
+          maxLength: 255
+          description: Snooze button label for this variant. Omit it to leave it unchanged; `null` is rejected.
+        done_label:
+          type: string
+          maxLength: 255
+          description: Label of the last step's button. Omit it to leave it unchanged; `null` is rejected.
+        steps:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/GuideSurveyStepInput'
+        translations:
+          $ref: '#/components/schemas/GuideSurveyTranslationsInput'
+      additionalProperties: false
     ThemeVariablesPatch:
       type:
         - object

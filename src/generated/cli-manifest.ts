@@ -26,6 +26,7 @@ export interface CliBodyProperty {
   description?: string;
   items?: Record<string, unknown>;
   schema?: Record<string, unknown>;
+  example?: unknown;
 }
 
 export interface CliOperation {
@@ -933,6 +934,37 @@ export const CLI_OPERATIONS = [
     body: [],
   },
   {
+    command: ['mcp-analytics', 'calls', 'list'],
+    method: 'GET',
+    operationId: 'listMcpAnalyticsEpisodeCalls',
+    path: '/v1/projects/{project_id}/mcp-analytics/episodes/{episode_id}/calls',
+    requiredScopes: ['analytics:read'],
+    summary: 'List tool calls in an MCP episode',
+    description:
+      'Returns the complete episode tool flow in event time and event id order, including recorded\nproperties, rationale, duration, and errors. Properties are returned as\nrecorded; individual input or output fields may be absent.\nA missing or cross-project episode returns 404.\n',
+    successStatus: 200,
+    parameters: [
+      {
+        name: 'project_id',
+        in: 'path',
+        required: true,
+        aliases: ['project', 'project-id', 'project_id'],
+        type: 'string',
+        description:
+          'Amplitude project identifier, backed by the canonical app ID.',
+      },
+      {
+        name: 'episode_id',
+        in: 'path',
+        required: true,
+        aliases: ['episode', 'episode-id', 'episode_id'],
+        type: 'string',
+        description: 'Episode id returned by the topic or episode list.',
+      },
+    ],
+    body: [],
+  },
+  {
     command: ['context'],
     method: 'GET',
     operationId: 'getContext',
@@ -1784,6 +1816,7 @@ export const CLI_OPERATIONS = [
         nullable: false,
         items: {
           type: 'string',
+          minLength: 1,
         },
       },
     ],
@@ -1902,11 +1935,13 @@ export const CLI_OPERATIONS = [
           properties: {
             id: {
               type: 'string',
+              minLength: 1,
             },
             days_from_now: {
               type: 'integer',
               description:
                 'New delay until the action runs. The server computes `target_date`.',
+              minimum: 1,
             },
           },
         },
@@ -1956,6 +1991,7 @@ export const CLI_OPERATIONS = [
           properties: {
             event_type: {
               type: 'string',
+              minLength: 1,
             },
             action: {
               type: 'string',
@@ -1967,6 +2003,7 @@ export const CLI_OPERATIONS = [
               type: 'integer',
               description:
                 'Days until the action runs. The server computes `target_date`.',
+              minimum: 1,
             },
           },
         },
@@ -2453,6 +2490,7 @@ export const CLI_OPERATIONS = [
         type: 'string',
         nullable: false,
         description: 'IANA timezone identifier (e.g. `America/New_York`).',
+        example: 'America/New_York',
       },
       {
         name: 'exclude_incomplete_datapoints',
@@ -2482,6 +2520,117 @@ export const CLI_OPERATIONS = [
         nullable: false,
         description:
           'Maximum number of time buckets per series. `0` collapses each series to\na single scalar aggregate.\n',
+      },
+    ],
+  },
+  {
+    command: ['ai-context', 'get'],
+    method: 'GET',
+    operationId: 'getOrgAiContext',
+    path: '/v1/ai-context',
+    requiredScopes: ['analytics:read'],
+    summary: 'Get organization AI context',
+    description:
+      'Returns the customer-managed AI context configured for the organization in\nSettings → AI Controls. Empty string when nothing is configured.\n',
+    successStatus: 200,
+    parameters: [],
+    body: [],
+  },
+  {
+    command: ['ai-context', 'set'],
+    method: 'PUT',
+    operationId: 'setOrgAiContext',
+    path: '/v1/ai-context',
+    requiredScopes: ['analytics:write'],
+    summary: 'Set organization AI context',
+    description:
+      'Replaces the customer-managed AI context for the organization in\nSettings → AI Controls. Send `"context": ""` to clear the stored value.\nRequires an `Idempotency-Key` header on every request.\n',
+    successStatus: 200,
+    parameters: [
+      {
+        name: 'Idempotency-Key',
+        in: 'header',
+        required: true,
+        aliases: ['idempotency-key'],
+        type: 'string',
+        description:
+          "Required on write operations. Keys aren't stored yet, so retrying a write\nwith the same key performs it again; a retried create makes another\nresource. Check whether the first attempt succeeded before you retry.\n",
+      },
+    ],
+    body: [
+      {
+        name: 'context',
+        required: true,
+        aliases: ['context'],
+        type: 'string',
+        nullable: false,
+        description:
+          'Full customer-managed context to store. Replaces the existing value;\nsend an empty string to clear.\n',
+      },
+    ],
+  },
+  {
+    command: ['ai-context', 'get'],
+    method: 'GET',
+    operationId: 'getProjectAiContext',
+    path: '/v1/projects/{project_id}/ai-context',
+    requiredScopes: ['analytics:read'],
+    summary: 'Get project AI context',
+    description:
+      'Returns the customer-managed AI context configured for a project in\nSettings → AI Controls. Empty string when nothing is configured.\n',
+    successStatus: 200,
+    parameters: [
+      {
+        name: 'project_id',
+        in: 'path',
+        required: true,
+        aliases: ['project', 'project-id', 'project_id'],
+        type: 'string',
+        description:
+          'Amplitude project identifier, backed by the canonical app ID.',
+      },
+    ],
+    body: [],
+  },
+  {
+    command: ['ai-context', 'set'],
+    method: 'PUT',
+    operationId: 'setProjectAiContext',
+    path: '/v1/projects/{project_id}/ai-context',
+    requiredScopes: ['analytics:write'],
+    summary: 'Set project AI context',
+    description:
+      'Replaces the customer-managed AI context for a project in\nSettings → AI Controls. Send `"context": ""` to clear the stored value.\nRequires an `Idempotency-Key` header on every request.\n',
+    successStatus: 200,
+    parameters: [
+      {
+        name: 'project_id',
+        in: 'path',
+        required: true,
+        aliases: ['project', 'project-id', 'project_id'],
+        type: 'string',
+        description:
+          'Amplitude project identifier, backed by the canonical app ID.',
+      },
+      {
+        name: 'Idempotency-Key',
+        in: 'header',
+        required: true,
+        aliases: ['idempotency-key'],
+        type: 'string',
+        description:
+          "Required on write operations. Keys aren't stored yet, so retrying a write\nwith the same key performs it again; a retried create makes another\nresource. Check whether the first attempt succeeded before you retry.\n",
+      },
+    ],
+    body: [
+      {
+        name: 'context',
+        required: true,
+        aliases: ['context'],
+        type: 'string',
+        nullable: false,
+        description:
+          'Full customer-managed context to store. Replaces the existing value;\nsend an empty string to clear.\n',
       },
     ],
   },
@@ -2611,6 +2760,7 @@ export const CLI_OPERATIONS = [
         nullable: false,
         description:
           'Page URL to analyze. Accepts `http` and `https` URLs; a URL without a\nscheme is treated as `https`. The query string and fragment are removed\nbefore matching, so `https://example.com/pricing?utm=x` and\n`https://example.com/pricing` are the same page.\n',
+        example: 'https://example.com/pricing',
       },
       {
         name: 'url_match',
@@ -2709,6 +2859,7 @@ export const CLI_OPERATIONS = [
         nullable: false,
         description:
           'Page URL to analyze. Accepts `http` and `https` URLs; a URL without a\nscheme is treated as `https`. The query string and fragment are removed\nbefore matching, so `https://example.com/pricing?utm=x` and\n`https://example.com/pricing` are the same page.\n',
+        example: 'https://example.com/pricing',
       },
       {
         name: 'url_match',
@@ -2778,6 +2929,7 @@ export const CLI_OPERATIONS = [
         nullable: false,
         description:
           'Page URL to analyze. Accepts `http` and `https` URLs; a URL without a\nscheme is treated as `https`. The query string and fragment are removed\nbefore matching, so `https://example.com/pricing?utm=x` and\n`https://example.com/pricing` are the same page.\n',
+        example: 'https://example.com/pricing',
       },
       {
         name: 'url_match',
@@ -2827,6 +2979,7 @@ export const CLI_OPERATIONS = [
           'Restrict the result to these zones. A zone id is the CSS selector of\nthe element, as returned in `zones[].zone_id`. Omit to rank every zone\non the page.\n',
         items: {
           type: 'string',
+          minLength: 1,
         },
       },
       {
@@ -2967,6 +3120,7 @@ export const CLI_OPERATIONS = [
             key: {
               type: 'string',
               description: 'Stable variant key. The value `off` is reserved.',
+              pattern: '^[A-Za-z0-9_-]+$',
             },
             name: {
               type: ['string', 'null'],
@@ -3058,6 +3212,7 @@ export const CLI_OPERATIONS = [
                     type: 'string',
                     description:
                       'Property name or cohort identifier being targeted.',
+                    minLength: 1,
                   },
                   prop_type: {
                     type: ['string', 'null'],
@@ -3094,6 +3249,7 @@ export const CLI_OPERATIONS = [
                     type: 'array',
                     description:
                       'At least one value to match against. Conditions with no values are rejected.',
+                    minItems: 1,
                     items: {
                       type: 'string',
                     },
@@ -3104,6 +3260,8 @@ export const CLI_OPERATIONS = [
             percentage: {
               type: 'integer',
               description: 'Segment rollout percentage.',
+              minimum: 0,
+              maximum: 100,
             },
             rollout_weights: {
               type: 'object',
@@ -3437,7 +3595,7 @@ export const CLI_OPERATIONS = [
         items: {
           type: 'object',
           description:
-            "Variant payload on create/update. `id` is optional — omit for new variants;\ninclude when updating an existing variant row. A negative `id` is a variant\nadded to a published guide or survey's draft that has not been published yet.\n`variant` key is required.\n",
+            "Variant payload on create/update. `id` is optional — omit for new variants;\ninclude when updating an existing variant row. A negative `id` is a variant\nadded to a published guide or survey's draft that has not been published yet.\n`variant` key is required. Create doesn't take translations: create the\nguide or survey, then send `translations` with an update.\n",
           required: ['variant'],
           properties: {
             id: {
@@ -3445,22 +3603,33 @@ export const CLI_OPERATIONS = [
             },
             variant: {
               type: 'string',
-              description: 'Variant key within the nudge.',
+              description:
+                "Variant key within the nudge: lowercase letters, digits, `-` and `_`.\nKeys must be unique. `off` is reserved, and `control` can't be given to\na new variant.\n",
+              pattern: '^[a-z0-9_-]+$',
             },
             display_title: {
-              type: ['string', 'null'],
+              type: 'string',
+              description:
+                'Variant title. Omit it to leave it unchanged; `null` is rejected.',
             },
             display_description: {
               type: ['string', 'null'],
             },
             snooze_label: {
-              type: ['string', 'null'],
+              type: 'string',
+              description:
+                'Snooze button label for this variant. Omit it to leave it unchanged; `null` is rejected.',
+              maxLength: 255,
             },
             done_label: {
-              type: ['string', 'null'],
+              type: 'string',
+              description:
+                "Label of the last step's button. Omit it to leave it unchanged; `null` is rejected.",
+              maxLength: 255,
             },
             steps: {
               type: 'array',
+              minItems: 1,
               items: {
                 type: 'object',
                 description:
@@ -3470,11 +3639,14 @@ export const CLI_OPERATIONS = [
                     type: 'string',
                   },
                   title: {
-                    type: ['string', 'null'],
+                    type: 'string',
+                    description:
+                      'Step title. Omit it to leave it unchanged; `null` is rejected.',
+                    maxLength: 255,
                   },
                   form_factor: {
                     description:
-                      'Step layout. `type` selects it. Other layout keys, including `layout`,\n`footerLayout`, `contentAlignment`, and `titleAlignment`, are accepted\nand passed through.\n',
+                      "Step layout. `type` selects it. Every form factor also accepts\n`zIndexOverride` (number or null) and `textAnimation` (`typewriter`).\nModal, popover, pin, tooltip, and card accept the step layout keys\n`layout`, `mediaPosition`, `contentAlignment`, `titleAlignment`, and\n`footerLayout`; banner and checklist accept a narrower set. Tooltips and cards can't be snoozed.\n",
                     oneOf: [
                       {
                         type: 'object',
@@ -3506,6 +3678,36 @@ export const CLI_OPERATIONS = [
                           fullWidthModal: {
                             type: 'boolean',
                           },
+                          layout: {
+                            type: 'string',
+                            description:
+                              'Arrangement of media and text in the step.',
+                            enum: [
+                              'classic',
+                              'vertical',
+                              'showcase',
+                              'horizontal',
+                            ],
+                          },
+                          mediaPosition: {
+                            type: 'string',
+                            description:
+                              'Media side for the `horizontal` layout.',
+                            enum: ['left', 'right'],
+                          },
+                          contentAlignment: {
+                            type: 'string',
+                            enum: ['start', 'center', 'end'],
+                          },
+                          titleAlignment: {
+                            type: 'string',
+                            enum: ['start', 'center', 'end'],
+                          },
+                          footerLayout: {
+                            type: 'string',
+                            description: "Arrangement of the step's buttons.",
+                            enum: ['classic', 'split', 'centered', 'stacked'],
+                          },
                         },
                       },
                       {
@@ -3532,6 +3734,36 @@ export const CLI_OPERATIONS = [
                               'center',
                             ],
                           },
+                          layout: {
+                            type: 'string',
+                            description:
+                              'Arrangement of media and text in the step.',
+                            enum: [
+                              'classic',
+                              'vertical',
+                              'showcase',
+                              'horizontal',
+                            ],
+                          },
+                          mediaPosition: {
+                            type: 'string',
+                            description:
+                              'Media side for the `horizontal` layout.',
+                            enum: ['left', 'right'],
+                          },
+                          contentAlignment: {
+                            type: 'string',
+                            enum: ['start', 'center', 'end'],
+                          },
+                          titleAlignment: {
+                            type: 'string',
+                            enum: ['start', 'center', 'end'],
+                          },
+                          footerLayout: {
+                            type: 'string',
+                            description: "Arrangement of the step's buttons.",
+                            enum: ['classic', 'split', 'centered', 'stacked'],
+                          },
                         },
                       },
                       {
@@ -3555,6 +3787,22 @@ export const CLI_OPERATIONS = [
                             description:
                               'Keep the banner on screen while the page scrolls.',
                           },
+                          layout: {
+                            type: 'string',
+                            enum: ['classic', 'vertical'],
+                          },
+                          footerLayout: {
+                            type: 'string',
+                            const: 'classic',
+                          },
+                          contentAlignment: {
+                            type: 'string',
+                            enum: ['start', 'center', 'end'],
+                          },
+                          titleAlignment: {
+                            type: 'string',
+                            enum: ['start', 'center', 'end'],
+                          },
                         },
                       },
                       {
@@ -3569,9 +3817,90 @@ export const CLI_OPERATIONS = [
                             type: 'string',
                             description: 'CSS selector the pin attaches to.',
                           },
+                          anchorSelector: {
+                            type: 'object',
+                            description:
+                              'Richer element match used alongside `anchor`.',
+                            required: ['selector', 'text', 'tag', 'attributes'],
+                            properties: {
+                              selector: {
+                                type: 'string',
+                              },
+                              text: {
+                                type: 'string',
+                                description: 'Visible text of the element.',
+                              },
+                              tag: {
+                                type: 'string',
+                                description: 'HTML tag name.',
+                              },
+                              attributes: {
+                                type: 'object',
+                              },
+                              strategy: {
+                                type: 'string',
+                                enum: ['strict', 'fallback', 'selector_only'],
+                              },
+                            },
+                          },
                           position: {
                             type: 'string',
                             enum: ['auto', 'top', 'bottom', 'left', 'right'],
+                          },
+                          alignment: {
+                            type: 'string',
+                            enum: ['center', 'top', 'bottom', 'left', 'right'],
+                          },
+                          offset: {
+                            type: 'object',
+                            description: 'Both `x` and `y` are required.',
+                            required: ['x', 'y'],
+                            properties: {
+                              x: {
+                                type: 'string',
+                                description: 'CSS length, for example `0px`.',
+                              },
+                              y: {
+                                type: 'string',
+                                description: 'CSS length, for example `0px`.',
+                              },
+                            },
+                          },
+                          pointer: {
+                            type: 'object',
+                            required: ['type'],
+                            properties: {
+                              type: {
+                                type: 'string',
+                                enum: ['beacon', 'arrow'],
+                              },
+                            },
+                          },
+                          isOpenByDefault: {
+                            type: 'boolean',
+                          },
+                          openOnHover: {
+                            type: 'boolean',
+                          },
+                          isShowingMask: {
+                            type: 'boolean',
+                            description: 'Dim the rest of the page.',
+                          },
+                          canClickOutsideToClose: {
+                            type: 'boolean',
+                          },
+                          advanceTrigger: {
+                            type: 'string',
+                            description:
+                              'CSS selector whose click advances to the next step.',
+                          },
+                          disableAutoAdvanceOnClick: {
+                            type: 'boolean',
+                          },
+                          skipIfNotFound: {
+                            type: 'boolean',
+                            description:
+                              'Skip the step when the anchor is missing.',
                           },
                         },
                       },
@@ -3593,6 +3922,8 @@ export const CLI_OPERATIONS = [
                             enum: ['hover', 'click'],
                           },
                           marker: {
+                            description:
+                              'The marker users hover or click to open the tooltip. Every marker type\nalso accepts `width` (number) and `elementIsMarker` (boolean).\n',
                             oneOf: [
                               {
                                 type: 'object',
@@ -3617,13 +3948,19 @@ export const CLI_OPERATIONS = [
                                       },
                                       offset: {
                                         type: 'object',
+                                        description:
+                                          'Both `x` and `y` are required.',
                                         required: ['x', 'y'],
                                         properties: {
                                           x: {
                                             type: 'string',
+                                            description:
+                                              'CSS length, for example `0px`.',
                                           },
                                           y: {
                                             type: 'string',
+                                            description:
+                                              'CSS length, for example `0px`.',
                                           },
                                         },
                                       },
@@ -3665,13 +4002,19 @@ export const CLI_OPERATIONS = [
                                       },
                                       offset: {
                                         type: 'object',
+                                        description:
+                                          'Both `x` and `y` are required.',
                                         required: ['x', 'y'],
                                         properties: {
                                           x: {
                                             type: 'string',
+                                            description:
+                                              'CSS length, for example `0px`.',
                                           },
                                           y: {
                                             type: 'string',
+                                            description:
+                                              'CSS length, for example `0px`.',
                                           },
                                         },
                                       },
@@ -3706,13 +4049,19 @@ export const CLI_OPERATIONS = [
                                       },
                                       offset: {
                                         type: 'object',
+                                        description:
+                                          'Both `x` and `y` are required.',
                                         required: ['x', 'y'],
                                         properties: {
                                           x: {
                                             type: 'string',
+                                            description:
+                                              'CSS length, for example `0px`.',
                                           },
                                           y: {
                                             type: 'string',
+                                            description:
+                                              'CSS length, for example `0px`.',
                                           },
                                         },
                                       },
@@ -3721,6 +4070,42 @@ export const CLI_OPERATIONS = [
                                 },
                               },
                             ],
+                          },
+                          anchorSelector: {
+                            type: 'object',
+                            description:
+                              'Richer element match used alongside `anchor`.',
+                            required: ['selector', 'text', 'tag', 'attributes'],
+                            properties: {
+                              selector: {
+                                type: 'string',
+                              },
+                              text: {
+                                type: 'string',
+                                description: 'Visible text of the element.',
+                              },
+                              tag: {
+                                type: 'string',
+                                description: 'HTML tag name.',
+                              },
+                              attributes: {
+                                type: 'object',
+                              },
+                              strategy: {
+                                type: 'string',
+                                enum: ['strict', 'fallback', 'selector_only'],
+                              },
+                            },
+                          },
+                          pointer: {
+                            type: 'object',
+                            required: ['type'],
+                            properties: {
+                              type: {
+                                type: 'string',
+                                enum: ['arrow', 'none'],
+                              },
+                            },
                           },
                         },
                       },
@@ -3746,6 +4131,82 @@ export const CLI_OPERATIONS = [
                               'after',
                             ],
                           },
+                          anchorSelector: {
+                            type: 'object',
+                            description:
+                              'Richer element match used alongside `anchor`.',
+                            required: ['selector', 'text', 'tag', 'attributes'],
+                            properties: {
+                              selector: {
+                                type: 'string',
+                              },
+                              text: {
+                                type: 'string',
+                                description: 'Visible text of the element.',
+                              },
+                              tag: {
+                                type: 'string',
+                                description: 'HTML tag name.',
+                              },
+                              attributes: {
+                                type: 'object',
+                              },
+                              strategy: {
+                                type: 'string',
+                                enum: ['strict', 'fallback', 'selector_only'],
+                              },
+                            },
+                          },
+                          alignment: {
+                            type: 'string',
+                            enum: ['start', 'center', 'end'],
+                          },
+                          cardWidth: {
+                            type: 'object',
+                            required: ['type'],
+                            properties: {
+                              type: {
+                                type: 'string',
+                                enum: ['auto', 'fixed', 'full'],
+                              },
+                              value: {
+                                type: 'number',
+                                description: 'Pixels, used with `fixed`.',
+                              },
+                            },
+                          },
+                          cardHeight: {
+                            type: 'object',
+                            required: ['type'],
+                            properties: {
+                              type: {
+                                type: 'string',
+                                enum: ['auto', 'fixed', 'full'],
+                              },
+                              value: {
+                                type: 'number',
+                                description: 'Pixels, used with `fixed`.',
+                              },
+                            },
+                          },
+                          cardMargin: {
+                            type: 'object',
+                            required: ['top', 'right', 'bottom', 'left'],
+                            properties: {
+                              top: {
+                                type: 'number',
+                              },
+                              right: {
+                                type: 'number',
+                              },
+                              bottom: {
+                                type: 'number',
+                              },
+                              left: {
+                                type: 'number',
+                              },
+                            },
+                          },
                         },
                       },
                       {
@@ -3756,6 +4217,14 @@ export const CLI_OPERATIONS = [
                             type: 'string',
                             const: 'checklist',
                           },
+                          layout: {
+                            type: 'string',
+                            const: 'classic',
+                          },
+                          footerLayout: {
+                            type: 'string',
+                            const: 'classic',
+                          },
                         },
                       },
                     ],
@@ -3763,7 +4232,7 @@ export const CLI_OPERATIONS = [
                   content: {
                     type: 'array',
                     description:
-                      "The step body: content blocks rendered top to bottom, below the step\n`title`. `meta` keys are camelCase. Give each new block a unique `uuid`\n(a v4 UUID) and keep the existing `uuid` when you edit a block, because\nsurvey responses are keyed by it. To change one block, send the step's\nwhole `content` array back with that block edited.\n",
+                      "The step body: content blocks rendered top to bottom, below the step\n`title`. `meta` keys are camelCase. Keep a block's existing `uuid` when\nyou edit it, because survey responses are keyed by it; a block sent\nwithout one (or with `null`) is given one on save. To change one block,\nsend the step's whole `content` array back with that block edited. Send\n`[]` for an empty step, not `null`.\n\nA step can have at most one `markdown` block, one `image` or one `video`\n(not both), two buttons, ten survey questions, and ten `survey_hidden`\nfields. Survey question blocks are only allowed in surveys, and only on\nsteps with the `classic` or `vertical` layout. A checklist item can have\nat most one button. A snooze button needs the variant's `snooze_label`.\n",
                     items: {
                       description:
                         'One content block. `type` selects the block and the shape of `meta`.',
@@ -3771,10 +4240,10 @@ export const CLI_OPERATIONS = [
                         {
                           type: 'object',
                           description: 'Body text.',
-                          required: ['uuid', 'type', 'meta'],
+                          required: ['type', 'meta'],
                           properties: {
                             uuid: {
-                              type: 'string',
+                              type: ['string', 'null'],
                             },
                             type: {
                               type: 'string',
@@ -3793,16 +4262,20 @@ export const CLI_OPERATIONS = [
                                   type: 'string',
                                   enum: ['start', 'center', 'end'],
                                 },
+                                textAnimation: {
+                                  type: 'string',
+                                  const: 'typewriter',
+                                },
                               },
                             },
                           },
                         },
                         {
                           type: 'object',
-                          required: ['uuid', 'type', 'meta'],
+                          required: ['type', 'meta'],
                           properties: {
                             uuid: {
-                              type: 'string',
+                              type: ['string', 'null'],
                             },
                             type: {
                               type: 'string',
@@ -3846,7 +4319,22 @@ export const CLI_OPERATIONS = [
                                 action: {
                                   type: 'object',
                                   description:
-                                    'Optional `link` action opened when the image is clicked.',
+                                    'Optional link opened when the image is clicked. No other action type is allowed.',
+                                  required: ['type', 'value'],
+                                  properties: {
+                                    type: {
+                                      type: 'string',
+                                      const: 'link',
+                                    },
+                                    value: {
+                                      type: 'string',
+                                      description: 'URL to open.',
+                                    },
+                                    operation: {
+                                      type: 'string',
+                                      enum: ['self', 'blank', 'router'],
+                                    },
+                                  },
                                 },
                               },
                             },
@@ -3854,10 +4342,10 @@ export const CLI_OPERATIONS = [
                         },
                         {
                           type: 'object',
-                          required: ['uuid', 'type', 'meta'],
+                          required: ['type', 'meta'],
                           properties: {
                             uuid: {
-                              type: 'string',
+                              type: ['string', 'null'],
                             },
                             type: {
                               type: 'string',
@@ -3890,10 +4378,10 @@ export const CLI_OPERATIONS = [
                         },
                         {
                           type: 'object',
-                          required: ['uuid', 'type', 'meta'],
+                          required: ['type', 'meta'],
                           properties: {
                             uuid: {
-                              type: 'string',
+                              type: ['string', 'null'],
                             },
                             type: {
                               type: 'string',
@@ -3916,9 +4404,18 @@ export const CLI_OPERATIONS = [
                                     type: {
                                       type: 'string',
                                       description:
-                                        'Common actions:\n- `step_forward`, `step_back`: go to the next or previous step.\n- `complete`: finish the guide or survey.\n- `dismiss`: close it.\n- `snooze`: hide it for a while, with optional `interval` (`hour`, `day`, `week`) and `value`.\n- `go_to_step`: jump to the step whose id is in `value`.\n- `link`: open the URL in `value`; `operation` is `self` (same tab), `blank` (new tab) or `router`.\n- `nudge`: start the guide or survey whose id is in `value`.\n- `no_action`: do nothing.\n\nButtons built in the dashboard can use other action types. Send those\nback unchanged.\n',
+                                        "Common actions:\n- `step_forward`, `step_back`: go to the next or previous step.\n- `complete`: finish the guide or survey.\n- `dismiss`: close it.\n- `snooze`: hide it for a while, with optional `interval` (`hour`, `day`, `week`) and `value`.\n- `go_to_step`: jump to a step. `value` is the 0-based position of the step in the variant's `steps`, not its id.\n- `link`: open the URL in `value`; `operation` is `self` (same tab), `blank` (new tab) or `router`.\n- `nudge`: start another guide or survey. `value` is its numeric id, and `productType` is `guide` or `survey`.\n- `no_action`: no action of its own. The button still advances: to the next step, or on the last step it finishes the guide or survey. The dashboard's survey templates use it for the submit button. It does not keep the user on the step; `stay_on_step` does.\n\nButtons built in the dashboard can also use `stay_on_step`,\n`click` (`value` is a CSS selector), `callback`, `app_review`,\n`open_resource_center`, `open_ai_assistant`, `open_chat`, `document`,\n`video`, and `use_conditional_logic`. Send those back unchanged.\n",
                                     },
                                   },
+                                },
+                                grow: {
+                                  type: 'boolean',
+                                  description:
+                                    'Stretch the button to fill the footer row.',
+                                },
+                                width: {
+                                  type: 'string',
+                                  description: 'CSS width, for example `100%`.',
                                 },
                                 actions: {
                                   type: 'object',
@@ -3933,10 +4430,10 @@ export const CLI_OPERATIONS = [
                           type: 'object',
                           description:
                             'Free-text survey question. Put the question itself in a `markdown` block or the step `title`.',
-                          required: ['uuid', 'type', 'meta'],
+                          required: ['type', 'meta'],
                           properties: {
                             uuid: {
-                              type: 'string',
+                              type: ['string', 'null'],
                             },
                             type: {
                               type: 'string',
@@ -3951,10 +4448,28 @@ export const CLI_OPERATIONS = [
                                 prompt: {
                                   type: 'string',
                                   description:
-                                    'Placeholder shown in the empty answer field.',
+                                    'Placeholder shown in the empty answer field. Required; send `""` for none.',
                                 },
                                 label: {
                                   type: 'string',
+                                },
+                                ariaLabel: {
+                                  type: 'string',
+                                },
+                                prefill: {
+                                  type: 'object',
+                                  description: '`survey_text_short` only.',
+                                  required: ['enabled', 'userProperty'],
+                                  properties: {
+                                    enabled: {
+                                      type: 'boolean',
+                                    },
+                                    userProperty: {
+                                      type: 'string',
+                                      description:
+                                        'User property whose value fills the answer.',
+                                    },
+                                  },
                                 },
                                 validation: {
                                   type: 'object',
@@ -3982,10 +4497,10 @@ export const CLI_OPERATIONS = [
                         {
                           type: 'object',
                           description: 'Multiple-choice survey question.',
-                          required: ['uuid', 'type', 'meta'],
+                          required: ['type', 'meta'],
                           properties: {
                             uuid: {
-                              type: 'string',
+                              type: ['string', 'null'],
                             },
                             type: {
                               type: 'string',
@@ -4060,10 +4575,10 @@ export const CLI_OPERATIONS = [
                         {
                           type: 'object',
                           description: 'Rating survey question.',
-                          required: ['uuid', 'type', 'meta'],
+                          required: ['type', 'meta'],
                           properties: {
                             uuid: {
-                              type: 'string',
+                              type: ['string', 'null'],
                             },
                             type: {
                               type: 'string',
@@ -4080,18 +4595,19 @@ export const CLI_OPERATIONS = [
                               properties: {
                                 type: {
                                   type: 'string',
-                                  description: '`nps` is a 0–10 scale.',
+                                  description:
+                                    '`nps` is a 0–10 scale and takes `options: 10`.',
                                   enum: ['stars', 'numbers', 'emojis', 'nps'],
                                 },
                                 options: {
                                   type: 'integer',
                                   description:
-                                    'Number of choices on the scale.',
+                                    'Number of choices on the scale. Allowed values depend on `type`:\n`stars` 3 or 5, `numbers` 3, 5, 7 or 10, `emojis` 2, 3 or 5, and\n`nps` 10.\n',
                                 },
                                 emojis: {
                                   type: 'array',
                                   description:
-                                    'One emoji per option. Required when `type` is `emojis`.',
+                                    'Exactly one emoji per option. Required when `type` is `emojis`.',
                                   items: {
                                     type: 'string',
                                   },
@@ -4132,10 +4648,10 @@ export const CLI_OPERATIONS = [
                           type: 'object',
                           description:
                             'Not shown to the user. Adds a value to each survey response.',
-                          required: ['uuid', 'type', 'meta'],
+                          required: ['type', 'meta'],
                           properties: {
                             uuid: {
-                              type: 'string',
+                              type: ['string', 'null'],
                             },
                             type: {
                               type: 'string',
@@ -4149,24 +4665,37 @@ export const CLI_OPERATIONS = [
                                   type: 'string',
                                 },
                                 source: {
-                                  type: 'object',
-                                  required: ['type'],
-                                  properties: {
-                                    type: {
-                                      type: 'string',
-                                      enum: ['static', 'event_property'],
+                                  oneOf: [
+                                    {
+                                      type: 'object',
+                                      required: ['type', 'value'],
+                                      properties: {
+                                        type: {
+                                          type: 'string',
+                                          const: 'static',
+                                        },
+                                        value: {
+                                          type: 'string',
+                                          description: 'The value to record.',
+                                        },
+                                      },
                                     },
-                                    value: {
-                                      type: 'string',
-                                      description:
-                                        'The value to record. Used when `type` is `static`.',
+                                    {
+                                      type: 'object',
+                                      required: ['type', 'property'],
+                                      properties: {
+                                        type: {
+                                          type: 'string',
+                                          const: 'event_property',
+                                        },
+                                        property: {
+                                          type: 'string',
+                                          description:
+                                            'Property of the event that triggered the survey.',
+                                        },
+                                      },
                                     },
-                                    property: {
-                                      type: 'string',
-                                      description:
-                                        'Property of the event that triggered the survey. Used when `type` is `event_property`.',
-                                    },
-                                  },
+                                  ],
                                 },
                               },
                             },
@@ -4176,12 +4705,651 @@ export const CLI_OPERATIONS = [
                     },
                   },
                   content_v2: {
-                    type: ['object', 'null'],
                     description:
                       "Block-builder layout: a tree of `layout` containers whose `children`\nare containers or content blocks, including the step's `title` block.\nReturned only on steps built in the block builder; when present, the\ndashboard and SDK render this tree, not `title` and `content`.\n\nOn update, only accepted on resources that already have a step with a\ntree; a flat-only guide or survey can't be converted through the API.\nOn create, any step may take one, so a resource read with `content_v2`\ncan be copied. Block `uuid`s must be unique within the step. Keep a block's\nexisting `uuid` when you edit it, because survey responses are keyed by\nit; a block sent without one is given one on save. The saved tree is\nnormalized to the shape the block builder saves, and the step title is\ntaken from its `title` block. On a step with a tree, send `title` and\n`content` only together with `content_v2`. Not supported on banner or\nchecklist steps or on mobile platforms. `null` switches the step back\nto `content`.\n",
+                    oneOf: [
+                      {
+                        type: 'object',
+                        description:
+                          'A block-builder container. `children` are containers or content blocks,\nplus the `title` and `step_counter` blocks that only exist in trees.\n',
+                        required: ['type', 'children'],
+                        properties: {
+                          type: {
+                            type: 'string',
+                            const: 'layout',
+                          },
+                          children: {
+                            type: 'array',
+                            items: {
+                              oneOf: [
+                                {
+                                  type: 'object',
+                                  description:
+                                    'A block-builder container. `children` are containers or content blocks,\nplus the `title` and `step_counter` blocks that only exist in trees.\n',
+                                },
+                                {
+                                  description:
+                                    'One content block. `type` selects the block and the shape of `meta`.',
+                                  oneOf: [
+                                    {
+                                      type: 'object',
+                                      description: 'Body text.',
+                                      required: ['type', 'meta'],
+                                      properties: {
+                                        uuid: {
+                                          type: ['string', 'null'],
+                                        },
+                                        type: {
+                                          type: 'string',
+                                          const: 'markdown',
+                                        },
+                                        meta: {
+                                          type: 'object',
+                                          required: ['value'],
+                                          properties: {
+                                            value: {
+                                              type: 'string',
+                                              description:
+                                                'Markdown text. Inline HTML is allowed and is sanitized on save.',
+                                            },
+                                            alignment: {
+                                              type: 'string',
+                                              enum: ['start', 'center', 'end'],
+                                            },
+                                            textAnimation: {
+                                              type: 'string',
+                                              const: 'typewriter',
+                                            },
+                                          },
+                                        },
+                                      },
+                                    },
+                                    {
+                                      type: 'object',
+                                      required: ['type', 'meta'],
+                                      properties: {
+                                        uuid: {
+                                          type: ['string', 'null'],
+                                        },
+                                        type: {
+                                          type: 'string',
+                                          const: 'image',
+                                        },
+                                        meta: {
+                                          type: 'object',
+                                          required: ['src', 'filename', 'size'],
+                                          properties: {
+                                            src: {
+                                              type: 'string',
+                                              description: 'Image URL.',
+                                            },
+                                            filename: {
+                                              type: 'string',
+                                            },
+                                            size: {
+                                              type: 'string',
+                                            },
+                                            altText: {
+                                              type: 'string',
+                                            },
+                                            style: {
+                                              type: 'object',
+                                              properties: {
+                                                scale: {
+                                                  type: 'string',
+                                                },
+                                                radius: {
+                                                  type: 'string',
+                                                },
+                                                fit: {
+                                                  type: 'string',
+                                                  enum: ['cover', 'contain'],
+                                                },
+                                                height: {
+                                                  type: 'string',
+                                                },
+                                              },
+                                            },
+                                            action: {
+                                              type: 'object',
+                                              description:
+                                                'Optional link opened when the image is clicked. No other action type is allowed.',
+                                              required: ['type', 'value'],
+                                              properties: {
+                                                type: {
+                                                  type: 'string',
+                                                  const: 'link',
+                                                },
+                                                value: {
+                                                  type: 'string',
+                                                  description: 'URL to open.',
+                                                },
+                                                operation: {
+                                                  type: 'string',
+                                                  enum: [
+                                                    'self',
+                                                    'blank',
+                                                    'router',
+                                                  ],
+                                                },
+                                              },
+                                            },
+                                          },
+                                        },
+                                      },
+                                    },
+                                    {
+                                      type: 'object',
+                                      required: ['type', 'meta'],
+                                      properties: {
+                                        uuid: {
+                                          type: ['string', 'null'],
+                                        },
+                                        type: {
+                                          type: 'string',
+                                          const: 'video',
+                                        },
+                                        meta: {
+                                          type: 'object',
+                                          required: ['type', 'src'],
+                                          properties: {
+                                            type: {
+                                              type: 'string',
+                                              const: 'url',
+                                            },
+                                            src: {
+                                              type: 'string',
+                                              description:
+                                                'Video URL, for example a YouTube, Vimeo or Loom link.',
+                                            },
+                                            style: {
+                                              type: 'object',
+                                              properties: {
+                                                radius: {
+                                                  type: 'string',
+                                                },
+                                              },
+                                            },
+                                          },
+                                        },
+                                      },
+                                    },
+                                    {
+                                      type: 'object',
+                                      required: ['type', 'meta'],
+                                      properties: {
+                                        uuid: {
+                                          type: ['string', 'null'],
+                                        },
+                                        type: {
+                                          type: 'string',
+                                          const: 'button',
+                                        },
+                                        meta: {
+                                          type: 'object',
+                                          properties: {
+                                            label: {
+                                              type: 'string',
+                                            },
+                                            buttonType: {
+                                              type: 'string',
+                                              enum: [
+                                                'primary',
+                                                'secondary',
+                                                'snooze',
+                                              ],
+                                            },
+                                            action: {
+                                              type: 'object',
+                                              required: ['type'],
+                                              properties: {
+                                                type: {
+                                                  type: 'string',
+                                                  description:
+                                                    "Common actions:\n- `step_forward`, `step_back`: go to the next or previous step.\n- `complete`: finish the guide or survey.\n- `dismiss`: close it.\n- `snooze`: hide it for a while, with optional `interval` (`hour`, `day`, `week`) and `value`.\n- `go_to_step`: jump to a step. `value` is the 0-based position of the step in the variant's `steps`, not its id.\n- `link`: open the URL in `value`; `operation` is `self` (same tab), `blank` (new tab) or `router`.\n- `nudge`: start another guide or survey. `value` is its numeric id, and `productType` is `guide` or `survey`.\n- `no_action`: no action of its own. The button still advances: to the next step, or on the last step it finishes the guide or survey. The dashboard's survey templates use it for the submit button. It does not keep the user on the step; `stay_on_step` does.\n\nButtons built in the dashboard can also use `stay_on_step`,\n`click` (`value` is a CSS selector), `callback`, `app_review`,\n`open_resource_center`, `open_ai_assistant`, `open_chat`, `document`,\n`video`, and `use_conditional_logic`. Send those back unchanged.\n",
+                                                },
+                                              },
+                                            },
+                                            grow: {
+                                              type: 'boolean',
+                                              description:
+                                                'Stretch the button to fill the footer row.',
+                                            },
+                                            width: {
+                                              type: 'string',
+                                              description:
+                                                'CSS width, for example `100%`.',
+                                            },
+                                            actions: {
+                                              type: 'object',
+                                              description:
+                                                'Optional action sequence the dashboard writes for buttons with side\neffects: `{type: "action_sequence", navigation: <action>, effects: [<action>]}`.\nWhen present, the SDK runs it instead of `action`, so update both or\nneither.\n',
+                                            },
+                                          },
+                                        },
+                                      },
+                                    },
+                                    {
+                                      type: 'object',
+                                      description:
+                                        'Free-text survey question. Put the question itself in a `markdown` block or the step `title`.',
+                                      required: ['type', 'meta'],
+                                      properties: {
+                                        uuid: {
+                                          type: ['string', 'null'],
+                                        },
+                                        type: {
+                                          type: 'string',
+                                          description:
+                                            '`survey_text` is a multi-line answer; `survey_text_short` is a single line.',
+                                          enum: [
+                                            'survey_text',
+                                            'survey_text_short',
+                                          ],
+                                        },
+                                        meta: {
+                                          type: 'object',
+                                          required: ['prompt'],
+                                          properties: {
+                                            prompt: {
+                                              type: 'string',
+                                              description:
+                                                'Placeholder shown in the empty answer field. Required; send `""` for none.',
+                                            },
+                                            label: {
+                                              type: 'string',
+                                            },
+                                            ariaLabel: {
+                                              type: 'string',
+                                            },
+                                            prefill: {
+                                              type: 'object',
+                                              description:
+                                                '`survey_text_short` only.',
+                                              required: [
+                                                'enabled',
+                                                'userProperty',
+                                              ],
+                                              properties: {
+                                                enabled: {
+                                                  type: 'boolean',
+                                                },
+                                                userProperty: {
+                                                  type: 'string',
+                                                  description:
+                                                    'User property whose value fills the answer.',
+                                                },
+                                              },
+                                            },
+                                            validation: {
+                                              type: 'object',
+                                              properties: {
+                                                required: {
+                                                  type: 'object',
+                                                  required: ['value'],
+                                                  properties: {
+                                                    value: {
+                                                      type: 'boolean',
+                                                    },
+                                                    message: {
+                                                      type: ['string', 'null'],
+                                                      description:
+                                                        'Error shown when a required question is left empty. Required when `value` is `true`.',
+                                                    },
+                                                  },
+                                                },
+                                              },
+                                            },
+                                          },
+                                        },
+                                      },
+                                    },
+                                    {
+                                      type: 'object',
+                                      description:
+                                        'Multiple-choice survey question.',
+                                      required: ['type', 'meta'],
+                                      properties: {
+                                        uuid: {
+                                          type: ['string', 'null'],
+                                        },
+                                        type: {
+                                          type: 'string',
+                                          const: 'survey_list',
+                                        },
+                                        meta: {
+                                          type: 'object',
+                                          required: [
+                                            'options',
+                                            'listType',
+                                            'displayType',
+                                          ],
+                                          properties: {
+                                            options: {
+                                              type: 'array',
+                                              items: {
+                                                type: 'string',
+                                              },
+                                            },
+                                            listType: {
+                                              type: 'string',
+                                              enum: ['single', 'multiple'],
+                                            },
+                                            displayType: {
+                                              type: 'string',
+                                              enum: [
+                                                'list',
+                                                'dropdown',
+                                                'grid',
+                                              ],
+                                            },
+                                            isOrderRandom: {
+                                              type: 'boolean',
+                                            },
+                                            otherOption: {
+                                              type: 'object',
+                                              required: [
+                                                'enabled',
+                                                'label',
+                                                'placeholderLabel',
+                                              ],
+                                              properties: {
+                                                enabled: {
+                                                  type: 'boolean',
+                                                },
+                                                label: {
+                                                  type: 'string',
+                                                },
+                                                placeholderLabel: {
+                                                  type: 'string',
+                                                },
+                                              },
+                                            },
+                                            label: {
+                                              type: 'string',
+                                            },
+                                            validation: {
+                                              type: 'object',
+                                              properties: {
+                                                required: {
+                                                  type: 'object',
+                                                  required: ['value'],
+                                                  properties: {
+                                                    value: {
+                                                      type: 'boolean',
+                                                    },
+                                                    message: {
+                                                      type: ['string', 'null'],
+                                                      description:
+                                                        'Error shown when a required question is left empty. Required when `value` is `true`.',
+                                                    },
+                                                  },
+                                                },
+                                              },
+                                            },
+                                          },
+                                        },
+                                      },
+                                    },
+                                    {
+                                      type: 'object',
+                                      description: 'Rating survey question.',
+                                      required: ['type', 'meta'],
+                                      properties: {
+                                        uuid: {
+                                          type: ['string', 'null'],
+                                        },
+                                        type: {
+                                          type: 'string',
+                                          const: 'survey_rating',
+                                        },
+                                        meta: {
+                                          type: 'object',
+                                          required: [
+                                            'type',
+                                            'options',
+                                            'lowerLabel',
+                                            'upperLabel',
+                                          ],
+                                          properties: {
+                                            type: {
+                                              type: 'string',
+                                              description:
+                                                '`nps` is a 0–10 scale and takes `options: 10`.',
+                                              enum: [
+                                                'stars',
+                                                'numbers',
+                                                'emojis',
+                                                'nps',
+                                              ],
+                                            },
+                                            options: {
+                                              type: 'integer',
+                                              description:
+                                                'Number of choices on the scale. Allowed values depend on `type`:\n`stars` 3 or 5, `numbers` 3, 5, 7 or 10, `emojis` 2, 3 or 5, and\n`nps` 10.\n',
+                                            },
+                                            emojis: {
+                                              type: 'array',
+                                              description:
+                                                'Exactly one emoji per option. Required when `type` is `emojis`.',
+                                              items: {
+                                                type: 'string',
+                                              },
+                                            },
+                                            lowerLabel: {
+                                              type: 'string',
+                                            },
+                                            upperLabel: {
+                                              type: 'string',
+                                            },
+                                            label: {
+                                              type: 'string',
+                                            },
+                                            validation: {
+                                              type: 'object',
+                                              properties: {
+                                                required: {
+                                                  type: 'object',
+                                                  required: ['value'],
+                                                  properties: {
+                                                    value: {
+                                                      type: 'boolean',
+                                                    },
+                                                    message: {
+                                                      type: ['string', 'null'],
+                                                      description:
+                                                        'Error shown when a required question is left empty. Required when `value` is `true`.',
+                                                    },
+                                                  },
+                                                },
+                                              },
+                                            },
+                                          },
+                                        },
+                                      },
+                                    },
+                                    {
+                                      type: 'object',
+                                      description:
+                                        'Not shown to the user. Adds a value to each survey response.',
+                                      required: ['type', 'meta'],
+                                      properties: {
+                                        uuid: {
+                                          type: ['string', 'null'],
+                                        },
+                                        type: {
+                                          type: 'string',
+                                          const: 'survey_hidden',
+                                        },
+                                        meta: {
+                                          type: 'object',
+                                          required: ['label', 'source'],
+                                          properties: {
+                                            label: {
+                                              type: 'string',
+                                            },
+                                            source: {
+                                              oneOf: [
+                                                {
+                                                  type: 'object',
+                                                  required: ['type', 'value'],
+                                                  properties: {
+                                                    type: {
+                                                      type: 'string',
+                                                      const: 'static',
+                                                    },
+                                                    value: {
+                                                      type: 'string',
+                                                      description:
+                                                        'The value to record.',
+                                                    },
+                                                  },
+                                                },
+                                                {
+                                                  type: 'object',
+                                                  required: [
+                                                    'type',
+                                                    'property',
+                                                  ],
+                                                  properties: {
+                                                    type: {
+                                                      type: 'string',
+                                                      const: 'event_property',
+                                                    },
+                                                    property: {
+                                                      type: 'string',
+                                                      description:
+                                                        'Property of the event that triggered the survey.',
+                                                    },
+                                                  },
+                                                },
+                                              ],
+                                            },
+                                          },
+                                        },
+                                      },
+                                    },
+                                  ],
+                                },
+                                {
+                                  type: 'object',
+                                  description:
+                                    'The step title inside a block-builder tree.',
+                                  required: ['type', 'meta'],
+                                  properties: {
+                                    uuid: {
+                                      type: ['string', 'null'],
+                                    },
+                                    type: {
+                                      type: 'string',
+                                      const: 'title',
+                                    },
+                                    meta: {
+                                      type: 'object',
+                                      required: ['value'],
+                                      properties: {
+                                        value: {
+                                          type: 'string',
+                                        },
+                                        alignment: {
+                                          type: 'string',
+                                          enum: ['start', 'center', 'end'],
+                                        },
+                                        textAnimation: {
+                                          type: 'string',
+                                          const: 'typewriter',
+                                        },
+                                      },
+                                    },
+                                  },
+                                },
+                                {
+                                  type: 'object',
+                                  description:
+                                    'Shows the step number inside a block-builder tree.',
+                                  required: ['type', 'meta'],
+                                  properties: {
+                                    uuid: {
+                                      type: ['string', 'null'],
+                                    },
+                                    type: {
+                                      type: 'string',
+                                      const: 'step_counter',
+                                    },
+                                    meta: {
+                                      type: 'object',
+                                      properties: {
+                                        format: {
+                                          type: 'string',
+                                          enum: ['numeric', 'verbose'],
+                                        },
+                                      },
+                                    },
+                                  },
+                                },
+                              ],
+                            },
+                          },
+                          id: {
+                            type: 'string',
+                            description:
+                              'Container id, unique within the step.',
+                          },
+                          direction: {
+                            type: 'string',
+                            enum: ['row', 'column'],
+                          },
+                          justify: {
+                            type: 'string',
+                            enum: [
+                              'start',
+                              'center',
+                              'end',
+                              'space-between',
+                              'space-around',
+                            ],
+                          },
+                          align: {
+                            type: 'string',
+                            enum: ['start', 'center', 'end'],
+                          },
+                          gap: {
+                            type: 'string',
+                            description: 'CSS length, for example `8px`.',
+                          },
+                          padding: {
+                            type: 'string',
+                          },
+                          margin: {
+                            type: 'string',
+                          },
+                          pinned: {
+                            type: 'boolean',
+                          },
+                          wrap: {
+                            type: 'boolean',
+                          },
+                          overflow: {
+                            type: 'string',
+                            enum: ['auto', 'hidden'],
+                          },
+                          minHeight: {
+                            type: 'string',
+                          },
+                          width: {
+                            type: 'string',
+                          },
+                        },
+                      },
+                      {
+                        type: 'null',
+                      },
+                    ],
                   },
                   sort_key: {
                     type: ['integer', 'null'],
+                    description:
+                      'Ignored on input. Steps are shown in the order of `steps`.',
                   },
                 },
               },
@@ -4274,6 +5442,15 @@ export const CLI_OPERATIONS = [
         description:
           'When true, return the latest draft (unpublished edits) when one exists.\nDefault false returns the live published guide.\n',
       },
+      {
+        name: 'include_translations',
+        in: 'query',
+        required: false,
+        aliases: ['include-translations', 'include_translations'],
+        type: 'boolean',
+        description:
+          "When true, add `localization` (the project's default locale and other\nlocales) and each variant's `translations` and `translation_status`.\nRead with `include_unpublished_changes=true` before writing\ntranslations, so keys and `latest_version` match the draft. When\nlocalization is disabled in the project settings, only\n`localization: {enabled: false}` is added.\n",
+      },
     ],
     body: [],
   },
@@ -4285,7 +5462,7 @@ export const CLI_OPERATIONS = [
     requiredScopes: ['guides:write'],
     summary: 'Update guide',
     description:
-      'Updates metadata, targeting, and content variants. For published guides,\nchanges apply to a draft until publish in the UI. `latest_version` is\nrequired and must match the current draft, otherwise the update returns\n`409`. The check runs before the write rather than atomically with it, so it\nreduces but does not fully prevent lost updates from concurrent writers.\nPublish, schedule, and test instrumentation are not\navailable via API in v1. Status fields on the response are derived read-only.\nWhen `variants` is sent, it must list every existing variant by `id` with\nits unchanged `variant` key; steps within a variant can be added, edited,\nreordered, or removed. `tags` is not writable in v1 and returns `400`.\n',
+      'Updates metadata, targeting, and content variants. For published guides,\nchanges apply to a draft until publish in the UI. `latest_version` is\nrequired and must match the current draft, otherwise the update returns\n`409`. The check runs before the write rather than atomically with it, so it\nreduces but does not fully prevent lost updates from concurrent writers.\nPublish, schedule, and test instrumentation are not\navailable via API in v1. Status fields on the response are derived read-only.\nWhen `variants` is sent, it must list every existing variant by `id` with\nits unchanged `variant` key; steps within a variant can be added, edited,\nreordered, or removed. `tags` is not writable in v1 and returns `400`.\n\nTo add, change, or clear translations, send\n`variants: [{"id": "<variant id>", "translations": {...}}]`. Entries\nthat carry only `id` and `translations` may name a subset of the variants\nand need no `variant` key. `translations` maps locale to translation key to\ntext. Take the keys and their default-locale text from\n`translation_status.sources` on a `GET` with\n`include_translations=true&include_unpublished_changes=true`. Translations\nmerge into what is stored: keys you leave out keep their text, `null`\nclears a key, and `null` for a locale clears every key in it. Only steps\nand blocks that already exist can be translated, so add new content\nfirst, then translate it in a later request. The default locale is edited\nthrough the guide content, not `translations`. When the request sends\ntranslations, the response includes `localization`, `translations`, and\n`translation_status`. Translations return `400` when localization is\ndisabled in the project settings or the locale isn\'t one of the\nproject\'s locales.\n',
     successStatus: 200,
     parameters: [
       {
@@ -4358,7 +5535,7 @@ export const CLI_OPERATIONS = [
         items: {
           type: 'object',
           description:
-            'One page rule. An empty list means every page. Keys stay camelCase, and\nno other keys are allowed.\n',
+            'One page rule. An empty list means every page. Keys stay camelCase, and\nno other keys are allowed. Send `url: ""` with `domSelector`.\n',
           required: ['url', 'matchType', 'isExclude'],
           properties: {
             url: {
@@ -4375,8 +5552,6 @@ export const CLI_OPERATIONS = [
                 'startsWith',
                 'endsWith',
                 'regex',
-                'domId',
-                'domClassname',
                 'domSelector',
               ],
             },
@@ -4392,7 +5567,7 @@ export const CLI_OPERATIONS = [
             value: {
               type: 'string',
               description:
-                'Element ID, class name, or selector. Required for `domId`,\n`domClassname`, and `domSelector`, which are web only.\n',
+                'CSS selector of an element that must be on the page. Required for\n`domSelector`, which is web only.\n',
             },
           },
         },
@@ -4410,7 +5585,7 @@ export const CLI_OPERATIONS = [
         items: {
           type: 'object',
           description:
-            'One page rule. An empty list means every page. Keys stay camelCase, and\nno other keys are allowed.\n',
+            'One page rule. An empty list means every page. Keys stay camelCase, and\nno other keys are allowed. Send `url: ""` with `domSelector`.\n',
           required: ['url', 'matchType', 'isExclude'],
           properties: {
             url: {
@@ -4427,8 +5602,6 @@ export const CLI_OPERATIONS = [
                 'startsWith',
                 'endsWith',
                 'regex',
-                'domId',
-                'domClassname',
                 'domSelector',
               ],
             },
@@ -4444,7 +5617,7 @@ export const CLI_OPERATIONS = [
             value: {
               type: 'string',
               description:
-                'Element ID, class name, or selector. Required for `domId`,\n`domClassname`, and `domSelector`, which are web only.\n',
+                'CSS selector of an element that must be on the page. Required for\n`domSelector`, which is web only.\n',
             },
           },
         },
@@ -4466,7 +5639,7 @@ export const CLI_OPERATIONS = [
         type: 'object',
         nullable: false,
         description:
-          'When the guide or survey appears. One trigger, or an array of triggers\nwhere any match fires it. Nested keys keep their stored names (`selector`,\n`event`, `event_count`, `delay`). Optional `filters` and\n`sessionPropertyFilters` are accepted and passed through.\n',
+          'When the guide or survey appears. One trigger, or an array of triggers\nwhere any match fires it. Nested keys keep their stored names (`selector`,\n`event`, `event_count`, `delay`, `filters`). Don\'t send `null`: the dashboard can\'t open a\nguide or survey without a trigger. Send `{"type": "immediately"}` to\nshow right away.\n',
         schema: {
           oneOf: [
             {
@@ -4506,7 +5679,53 @@ export const CLI_OPERATIONS = [
                         delay: {
                           type: 'number',
                           description:
-                            'Milliseconds to wait after the trigger fires.',
+                            'Milliseconds to wait after the trigger fires. Omit it rather than sending null.',
+                          minimum: 0,
+                        },
+                        sessionPropertyFilters: {
+                          type: 'array',
+                          description:
+                            'Session property conditions. The inner arrays are AND groups, and\nthe outer array ORs them.\n',
+                          items: {
+                            type: 'array',
+                            items: {
+                              type: 'object',
+                              description: 'One property condition.',
+                              required: [
+                                'subprop_key',
+                                'subprop_op',
+                                'subprop_value',
+                              ],
+                              properties: {
+                                subprop_key: {
+                                  type: 'string',
+                                  description: 'Property name.',
+                                  minLength: 1,
+                                },
+                                subprop_op: {
+                                  type: 'string',
+                                  description:
+                                    'Comparison operator, for example `is`, `is not`, or `contains`.',
+                                },
+                                subprop_value: {
+                                  type: 'array',
+                                  description: 'Values to compare against.',
+                                  minItems: 1,
+                                  items: {
+                                    type: 'string',
+                                  },
+                                },
+                                subprop_type: {
+                                  type: ['string', 'null'],
+                                  description:
+                                    'Property type, for example `event` or `user`.',
+                                },
+                                group_type: {
+                                  type: ['string', 'null'],
+                                },
+                              },
+                            },
+                          },
                         },
                       },
                     },
@@ -4534,6 +5753,7 @@ export const CLI_OPERATIONS = [
                           type: 'number',
                           description:
                             'Milliseconds to wait after the element appears or is clicked.',
+                          minimum: 0,
                         },
                       },
                     },
@@ -4561,11 +5781,55 @@ export const CLI_OPERATIONS = [
                           type: 'integer',
                           description:
                             'Times the event must occur. Omitted means once.',
+                          minimum: 1,
                         },
                         delay: {
                           type: 'number',
                           description:
                             'Milliseconds to wait after the event count is reached.',
+                          minimum: 0,
+                        },
+                        filters: {
+                          type: 'array',
+                          description:
+                            'Event property conditions. Every condition must match.',
+                          items: {
+                            type: 'object',
+                            description: 'One property condition.',
+                            required: [
+                              'subprop_key',
+                              'subprop_op',
+                              'subprop_value',
+                            ],
+                            properties: {
+                              subprop_key: {
+                                type: 'string',
+                                description: 'Property name.',
+                                minLength: 1,
+                              },
+                              subprop_op: {
+                                type: 'string',
+                                description:
+                                  'Comparison operator, for example `is`, `is not`, or `contains`.',
+                              },
+                              subprop_value: {
+                                type: 'array',
+                                description: 'Values to compare against.',
+                                minItems: 1,
+                                items: {
+                                  type: 'string',
+                                },
+                              },
+                              subprop_type: {
+                                type: ['string', 'null'],
+                                description:
+                                  'Property type, for example `event` or `user`.',
+                              },
+                              group_type: {
+                                type: ['string', 'null'],
+                              },
+                            },
+                          },
                         },
                       },
                     },
@@ -4602,6 +5866,7 @@ export const CLI_OPERATIONS = [
             },
             {
               type: 'array',
+              minItems: 1,
               items: {
                 description:
                   'One trigger. `type` selects which fields `data` uses.',
@@ -4639,7 +5904,53 @@ export const CLI_OPERATIONS = [
                           delay: {
                             type: 'number',
                             description:
-                              'Milliseconds to wait after the trigger fires.',
+                              'Milliseconds to wait after the trigger fires. Omit it rather than sending null.',
+                            minimum: 0,
+                          },
+                          sessionPropertyFilters: {
+                            type: 'array',
+                            description:
+                              'Session property conditions. The inner arrays are AND groups, and\nthe outer array ORs them.\n',
+                            items: {
+                              type: 'array',
+                              items: {
+                                type: 'object',
+                                description: 'One property condition.',
+                                required: [
+                                  'subprop_key',
+                                  'subprop_op',
+                                  'subprop_value',
+                                ],
+                                properties: {
+                                  subprop_key: {
+                                    type: 'string',
+                                    description: 'Property name.',
+                                    minLength: 1,
+                                  },
+                                  subprop_op: {
+                                    type: 'string',
+                                    description:
+                                      'Comparison operator, for example `is`, `is not`, or `contains`.',
+                                  },
+                                  subprop_value: {
+                                    type: 'array',
+                                    description: 'Values to compare against.',
+                                    minItems: 1,
+                                    items: {
+                                      type: 'string',
+                                    },
+                                  },
+                                  subprop_type: {
+                                    type: ['string', 'null'],
+                                    description:
+                                      'Property type, for example `event` or `user`.',
+                                  },
+                                  group_type: {
+                                    type: ['string', 'null'],
+                                  },
+                                },
+                              },
+                            },
                           },
                         },
                       },
@@ -4667,6 +5978,7 @@ export const CLI_OPERATIONS = [
                             type: 'number',
                             description:
                               'Milliseconds to wait after the element appears or is clicked.',
+                            minimum: 0,
                           },
                         },
                       },
@@ -4694,11 +6006,55 @@ export const CLI_OPERATIONS = [
                             type: 'integer',
                             description:
                               'Times the event must occur. Omitted means once.',
+                            minimum: 1,
                           },
                           delay: {
                             type: 'number',
                             description:
                               'Milliseconds to wait after the event count is reached.',
+                            minimum: 0,
+                          },
+                          filters: {
+                            type: 'array',
+                            description:
+                              'Event property conditions. Every condition must match.',
+                            items: {
+                              type: 'object',
+                              description: 'One property condition.',
+                              required: [
+                                'subprop_key',
+                                'subprop_op',
+                                'subprop_value',
+                              ],
+                              properties: {
+                                subprop_key: {
+                                  type: 'string',
+                                  description: 'Property name.',
+                                  minLength: 1,
+                                },
+                                subprop_op: {
+                                  type: 'string',
+                                  description:
+                                    'Comparison operator, for example `is`, `is not`, or `contains`.',
+                                },
+                                subprop_value: {
+                                  type: 'array',
+                                  description: 'Values to compare against.',
+                                  minItems: 1,
+                                  items: {
+                                    type: 'string',
+                                  },
+                                },
+                                subprop_type: {
+                                  type: ['string', 'null'],
+                                  description:
+                                    'Property type, for example `event` or `user`.',
+                                },
+                                group_type: {
+                                  type: ['string', 'null'],
+                                },
+                              },
+                            },
                           },
                         },
                       },
@@ -4744,7 +6100,7 @@ export const CLI_OPERATIONS = [
         type: 'object',
         nullable: false,
         description:
-          'How often the guide or survey may show again. `periodCount` is camelCase;\nthe other keys are snake_case.\n',
+          'How often the guide or survey may show again. `periodCount` is camelCase;\nthe other keys are snake_case. Send the whole object, not `null`.\n',
         schema: {
           type: 'object',
           required: [
@@ -4766,8 +6122,10 @@ export const CLI_OPERATIONS = [
                   type: 'boolean',
                 },
                 value: {
-                  type: 'number',
-                  description: 'Stop after this many survey responses.',
+                  type: 'integer',
+                  description:
+                    'Stop after this many survey responses. Required when `enabled` is true.',
+                  minimum: 1,
                 },
               },
             },
@@ -4778,12 +6136,15 @@ export const CLI_OPERATIONS = [
                 required: ['max', 'period'],
                 properties: {
                   max: {
-                    type: 'number',
+                    type: 'integer',
                     description: 'Maximum impressions in the period.',
+                    minimum: 1,
                   },
                   periodCount: {
-                    type: 'number',
-                    description: 'How many `period`s the limit covers.',
+                    type: 'integer',
+                    description:
+                      'How many `period`s the limit covers. Omitted means 1.',
+                    minimum: 1,
                   },
                   period: {
                     type: 'string',
@@ -4794,12 +6155,16 @@ export const CLI_OPERATIONS = [
             },
             even_distribution: {
               type: 'object',
+              required: ['enabled', 'recurrence_period_days'],
               properties: {
                 enabled: {
                   type: 'boolean',
                 },
                 recurrence_period_days: {
-                  type: 'number',
+                  type: 'integer',
+                  description:
+                    'Days over which impressions are spread evenly. Always required when `even_distribution` is sent.',
+                  minimum: 1,
                 },
               },
             },
@@ -4845,6 +6210,7 @@ export const CLI_OPERATIONS = [
             value: {
               type: 'number',
               description: 'Number of intervals.',
+              exclusiveMinimum: 0,
             },
           },
         },
@@ -4854,14 +6220,15 @@ export const CLI_OPERATIONS = [
         required: false,
         aliases: ['snooze-label', 'snooze_label'],
         type: 'string',
-        nullable: true,
+        nullable: false,
+        description: 'Snooze button label.',
       },
       {
         name: 'template_source',
         required: false,
         aliases: ['template-source', 'template_source'],
         type: 'string',
-        nullable: true,
+        nullable: false,
       },
       {
         name: 'show_step_counter',
@@ -4875,7 +6242,9 @@ export const CLI_OPERATIONS = [
         required: false,
         aliases: ['step-counter-format', 'step_counter_format'],
         type: 'string',
-        nullable: true,
+        nullable: false,
+        enum: ['numeric', 'verbose'],
+        description: '`numeric` shows "1/3"; `verbose` shows "Step 1 of 3".',
       },
       {
         name: 'tags',
@@ -4896,30 +6265,40 @@ export const CLI_OPERATIONS = [
         items: {
           type: 'object',
           description:
-            "Variant payload on create/update. `id` is optional — omit for new variants;\ninclude when updating an existing variant row. A negative `id` is a variant\nadded to a published guide or survey's draft that has not been published yet.\n`variant` key is required.\n",
-          required: ['variant'],
+            'Variant payload on update. `id` names an existing variant. `variant` may be\nomitted; when sent it must equal the stored key. An entry that carries only\n`id` and `translations` is translation-only: a list made of\ntranslation-only entries may name a subset of the variants. Any other\nfield on any entry makes it a content update, which must list every\nvariant.\n',
           properties: {
             id: {
               type: 'string',
             },
             variant: {
               type: 'string',
-              description: 'Variant key within the nudge.',
+              description:
+                "Variant key within the nudge: lowercase letters, digits, `-` and `_`.\nKeys must be unique. `off` is reserved, and `control` can't be given to\na new variant.\n",
+              pattern: '^[a-z0-9_-]+$',
             },
             display_title: {
-              type: ['string', 'null'],
+              type: 'string',
+              description:
+                'Variant title. Omit it to leave it unchanged; `null` is rejected.',
             },
             display_description: {
               type: ['string', 'null'],
             },
             snooze_label: {
-              type: ['string', 'null'],
+              type: 'string',
+              description:
+                'Snooze button label for this variant. Omit it to leave it unchanged; `null` is rejected.',
+              maxLength: 255,
             },
             done_label: {
-              type: ['string', 'null'],
+              type: 'string',
+              description:
+                "Label of the last step's button. Omit it to leave it unchanged; `null` is rejected.",
+              maxLength: 255,
             },
             steps: {
               type: 'array',
+              minItems: 1,
               items: {
                 type: 'object',
                 description:
@@ -4929,11 +6308,14 @@ export const CLI_OPERATIONS = [
                     type: 'string',
                   },
                   title: {
-                    type: ['string', 'null'],
+                    type: 'string',
+                    description:
+                      'Step title. Omit it to leave it unchanged; `null` is rejected.',
+                    maxLength: 255,
                   },
                   form_factor: {
                     description:
-                      'Step layout. `type` selects it. Other layout keys, including `layout`,\n`footerLayout`, `contentAlignment`, and `titleAlignment`, are accepted\nand passed through.\n',
+                      "Step layout. `type` selects it. Every form factor also accepts\n`zIndexOverride` (number or null) and `textAnimation` (`typewriter`).\nModal, popover, pin, tooltip, and card accept the step layout keys\n`layout`, `mediaPosition`, `contentAlignment`, `titleAlignment`, and\n`footerLayout`; banner and checklist accept a narrower set. Tooltips and cards can't be snoozed.\n",
                     oneOf: [
                       {
                         type: 'object',
@@ -4965,6 +6347,36 @@ export const CLI_OPERATIONS = [
                           fullWidthModal: {
                             type: 'boolean',
                           },
+                          layout: {
+                            type: 'string',
+                            description:
+                              'Arrangement of media and text in the step.',
+                            enum: [
+                              'classic',
+                              'vertical',
+                              'showcase',
+                              'horizontal',
+                            ],
+                          },
+                          mediaPosition: {
+                            type: 'string',
+                            description:
+                              'Media side for the `horizontal` layout.',
+                            enum: ['left', 'right'],
+                          },
+                          contentAlignment: {
+                            type: 'string',
+                            enum: ['start', 'center', 'end'],
+                          },
+                          titleAlignment: {
+                            type: 'string',
+                            enum: ['start', 'center', 'end'],
+                          },
+                          footerLayout: {
+                            type: 'string',
+                            description: "Arrangement of the step's buttons.",
+                            enum: ['classic', 'split', 'centered', 'stacked'],
+                          },
                         },
                       },
                       {
@@ -4991,6 +6403,36 @@ export const CLI_OPERATIONS = [
                               'center',
                             ],
                           },
+                          layout: {
+                            type: 'string',
+                            description:
+                              'Arrangement of media and text in the step.',
+                            enum: [
+                              'classic',
+                              'vertical',
+                              'showcase',
+                              'horizontal',
+                            ],
+                          },
+                          mediaPosition: {
+                            type: 'string',
+                            description:
+                              'Media side for the `horizontal` layout.',
+                            enum: ['left', 'right'],
+                          },
+                          contentAlignment: {
+                            type: 'string',
+                            enum: ['start', 'center', 'end'],
+                          },
+                          titleAlignment: {
+                            type: 'string',
+                            enum: ['start', 'center', 'end'],
+                          },
+                          footerLayout: {
+                            type: 'string',
+                            description: "Arrangement of the step's buttons.",
+                            enum: ['classic', 'split', 'centered', 'stacked'],
+                          },
                         },
                       },
                       {
@@ -5014,6 +6456,22 @@ export const CLI_OPERATIONS = [
                             description:
                               'Keep the banner on screen while the page scrolls.',
                           },
+                          layout: {
+                            type: 'string',
+                            enum: ['classic', 'vertical'],
+                          },
+                          footerLayout: {
+                            type: 'string',
+                            const: 'classic',
+                          },
+                          contentAlignment: {
+                            type: 'string',
+                            enum: ['start', 'center', 'end'],
+                          },
+                          titleAlignment: {
+                            type: 'string',
+                            enum: ['start', 'center', 'end'],
+                          },
                         },
                       },
                       {
@@ -5028,9 +6486,90 @@ export const CLI_OPERATIONS = [
                             type: 'string',
                             description: 'CSS selector the pin attaches to.',
                           },
+                          anchorSelector: {
+                            type: 'object',
+                            description:
+                              'Richer element match used alongside `anchor`.',
+                            required: ['selector', 'text', 'tag', 'attributes'],
+                            properties: {
+                              selector: {
+                                type: 'string',
+                              },
+                              text: {
+                                type: 'string',
+                                description: 'Visible text of the element.',
+                              },
+                              tag: {
+                                type: 'string',
+                                description: 'HTML tag name.',
+                              },
+                              attributes: {
+                                type: 'object',
+                              },
+                              strategy: {
+                                type: 'string',
+                                enum: ['strict', 'fallback', 'selector_only'],
+                              },
+                            },
+                          },
                           position: {
                             type: 'string',
                             enum: ['auto', 'top', 'bottom', 'left', 'right'],
+                          },
+                          alignment: {
+                            type: 'string',
+                            enum: ['center', 'top', 'bottom', 'left', 'right'],
+                          },
+                          offset: {
+                            type: 'object',
+                            description: 'Both `x` and `y` are required.',
+                            required: ['x', 'y'],
+                            properties: {
+                              x: {
+                                type: 'string',
+                                description: 'CSS length, for example `0px`.',
+                              },
+                              y: {
+                                type: 'string',
+                                description: 'CSS length, for example `0px`.',
+                              },
+                            },
+                          },
+                          pointer: {
+                            type: 'object',
+                            required: ['type'],
+                            properties: {
+                              type: {
+                                type: 'string',
+                                enum: ['beacon', 'arrow'],
+                              },
+                            },
+                          },
+                          isOpenByDefault: {
+                            type: 'boolean',
+                          },
+                          openOnHover: {
+                            type: 'boolean',
+                          },
+                          isShowingMask: {
+                            type: 'boolean',
+                            description: 'Dim the rest of the page.',
+                          },
+                          canClickOutsideToClose: {
+                            type: 'boolean',
+                          },
+                          advanceTrigger: {
+                            type: 'string',
+                            description:
+                              'CSS selector whose click advances to the next step.',
+                          },
+                          disableAutoAdvanceOnClick: {
+                            type: 'boolean',
+                          },
+                          skipIfNotFound: {
+                            type: 'boolean',
+                            description:
+                              'Skip the step when the anchor is missing.',
                           },
                         },
                       },
@@ -5052,6 +6591,8 @@ export const CLI_OPERATIONS = [
                             enum: ['hover', 'click'],
                           },
                           marker: {
+                            description:
+                              'The marker users hover or click to open the tooltip. Every marker type\nalso accepts `width` (number) and `elementIsMarker` (boolean).\n',
                             oneOf: [
                               {
                                 type: 'object',
@@ -5076,13 +6617,19 @@ export const CLI_OPERATIONS = [
                                       },
                                       offset: {
                                         type: 'object',
+                                        description:
+                                          'Both `x` and `y` are required.',
                                         required: ['x', 'y'],
                                         properties: {
                                           x: {
                                             type: 'string',
+                                            description:
+                                              'CSS length, for example `0px`.',
                                           },
                                           y: {
                                             type: 'string',
+                                            description:
+                                              'CSS length, for example `0px`.',
                                           },
                                         },
                                       },
@@ -5124,13 +6671,19 @@ export const CLI_OPERATIONS = [
                                       },
                                       offset: {
                                         type: 'object',
+                                        description:
+                                          'Both `x` and `y` are required.',
                                         required: ['x', 'y'],
                                         properties: {
                                           x: {
                                             type: 'string',
+                                            description:
+                                              'CSS length, for example `0px`.',
                                           },
                                           y: {
                                             type: 'string',
+                                            description:
+                                              'CSS length, for example `0px`.',
                                           },
                                         },
                                       },
@@ -5165,13 +6718,19 @@ export const CLI_OPERATIONS = [
                                       },
                                       offset: {
                                         type: 'object',
+                                        description:
+                                          'Both `x` and `y` are required.',
                                         required: ['x', 'y'],
                                         properties: {
                                           x: {
                                             type: 'string',
+                                            description:
+                                              'CSS length, for example `0px`.',
                                           },
                                           y: {
                                             type: 'string',
+                                            description:
+                                              'CSS length, for example `0px`.',
                                           },
                                         },
                                       },
@@ -5180,6 +6739,42 @@ export const CLI_OPERATIONS = [
                                 },
                               },
                             ],
+                          },
+                          anchorSelector: {
+                            type: 'object',
+                            description:
+                              'Richer element match used alongside `anchor`.',
+                            required: ['selector', 'text', 'tag', 'attributes'],
+                            properties: {
+                              selector: {
+                                type: 'string',
+                              },
+                              text: {
+                                type: 'string',
+                                description: 'Visible text of the element.',
+                              },
+                              tag: {
+                                type: 'string',
+                                description: 'HTML tag name.',
+                              },
+                              attributes: {
+                                type: 'object',
+                              },
+                              strategy: {
+                                type: 'string',
+                                enum: ['strict', 'fallback', 'selector_only'],
+                              },
+                            },
+                          },
+                          pointer: {
+                            type: 'object',
+                            required: ['type'],
+                            properties: {
+                              type: {
+                                type: 'string',
+                                enum: ['arrow', 'none'],
+                              },
+                            },
                           },
                         },
                       },
@@ -5205,6 +6800,82 @@ export const CLI_OPERATIONS = [
                               'after',
                             ],
                           },
+                          anchorSelector: {
+                            type: 'object',
+                            description:
+                              'Richer element match used alongside `anchor`.',
+                            required: ['selector', 'text', 'tag', 'attributes'],
+                            properties: {
+                              selector: {
+                                type: 'string',
+                              },
+                              text: {
+                                type: 'string',
+                                description: 'Visible text of the element.',
+                              },
+                              tag: {
+                                type: 'string',
+                                description: 'HTML tag name.',
+                              },
+                              attributes: {
+                                type: 'object',
+                              },
+                              strategy: {
+                                type: 'string',
+                                enum: ['strict', 'fallback', 'selector_only'],
+                              },
+                            },
+                          },
+                          alignment: {
+                            type: 'string',
+                            enum: ['start', 'center', 'end'],
+                          },
+                          cardWidth: {
+                            type: 'object',
+                            required: ['type'],
+                            properties: {
+                              type: {
+                                type: 'string',
+                                enum: ['auto', 'fixed', 'full'],
+                              },
+                              value: {
+                                type: 'number',
+                                description: 'Pixels, used with `fixed`.',
+                              },
+                            },
+                          },
+                          cardHeight: {
+                            type: 'object',
+                            required: ['type'],
+                            properties: {
+                              type: {
+                                type: 'string',
+                                enum: ['auto', 'fixed', 'full'],
+                              },
+                              value: {
+                                type: 'number',
+                                description: 'Pixels, used with `fixed`.',
+                              },
+                            },
+                          },
+                          cardMargin: {
+                            type: 'object',
+                            required: ['top', 'right', 'bottom', 'left'],
+                            properties: {
+                              top: {
+                                type: 'number',
+                              },
+                              right: {
+                                type: 'number',
+                              },
+                              bottom: {
+                                type: 'number',
+                              },
+                              left: {
+                                type: 'number',
+                              },
+                            },
+                          },
                         },
                       },
                       {
@@ -5215,6 +6886,14 @@ export const CLI_OPERATIONS = [
                             type: 'string',
                             const: 'checklist',
                           },
+                          layout: {
+                            type: 'string',
+                            const: 'classic',
+                          },
+                          footerLayout: {
+                            type: 'string',
+                            const: 'classic',
+                          },
                         },
                       },
                     ],
@@ -5222,7 +6901,7 @@ export const CLI_OPERATIONS = [
                   content: {
                     type: 'array',
                     description:
-                      "The step body: content blocks rendered top to bottom, below the step\n`title`. `meta` keys are camelCase. Give each new block a unique `uuid`\n(a v4 UUID) and keep the existing `uuid` when you edit a block, because\nsurvey responses are keyed by it. To change one block, send the step's\nwhole `content` array back with that block edited.\n",
+                      "The step body: content blocks rendered top to bottom, below the step\n`title`. `meta` keys are camelCase. Keep a block's existing `uuid` when\nyou edit it, because survey responses are keyed by it; a block sent\nwithout one (or with `null`) is given one on save. To change one block,\nsend the step's whole `content` array back with that block edited. Send\n`[]` for an empty step, not `null`.\n\nA step can have at most one `markdown` block, one `image` or one `video`\n(not both), two buttons, ten survey questions, and ten `survey_hidden`\nfields. Survey question blocks are only allowed in surveys, and only on\nsteps with the `classic` or `vertical` layout. A checklist item can have\nat most one button. A snooze button needs the variant's `snooze_label`.\n",
                     items: {
                       description:
                         'One content block. `type` selects the block and the shape of `meta`.',
@@ -5230,10 +6909,10 @@ export const CLI_OPERATIONS = [
                         {
                           type: 'object',
                           description: 'Body text.',
-                          required: ['uuid', 'type', 'meta'],
+                          required: ['type', 'meta'],
                           properties: {
                             uuid: {
-                              type: 'string',
+                              type: ['string', 'null'],
                             },
                             type: {
                               type: 'string',
@@ -5252,16 +6931,20 @@ export const CLI_OPERATIONS = [
                                   type: 'string',
                                   enum: ['start', 'center', 'end'],
                                 },
+                                textAnimation: {
+                                  type: 'string',
+                                  const: 'typewriter',
+                                },
                               },
                             },
                           },
                         },
                         {
                           type: 'object',
-                          required: ['uuid', 'type', 'meta'],
+                          required: ['type', 'meta'],
                           properties: {
                             uuid: {
-                              type: 'string',
+                              type: ['string', 'null'],
                             },
                             type: {
                               type: 'string',
@@ -5305,7 +6988,22 @@ export const CLI_OPERATIONS = [
                                 action: {
                                   type: 'object',
                                   description:
-                                    'Optional `link` action opened when the image is clicked.',
+                                    'Optional link opened when the image is clicked. No other action type is allowed.',
+                                  required: ['type', 'value'],
+                                  properties: {
+                                    type: {
+                                      type: 'string',
+                                      const: 'link',
+                                    },
+                                    value: {
+                                      type: 'string',
+                                      description: 'URL to open.',
+                                    },
+                                    operation: {
+                                      type: 'string',
+                                      enum: ['self', 'blank', 'router'],
+                                    },
+                                  },
                                 },
                               },
                             },
@@ -5313,10 +7011,10 @@ export const CLI_OPERATIONS = [
                         },
                         {
                           type: 'object',
-                          required: ['uuid', 'type', 'meta'],
+                          required: ['type', 'meta'],
                           properties: {
                             uuid: {
-                              type: 'string',
+                              type: ['string', 'null'],
                             },
                             type: {
                               type: 'string',
@@ -5349,10 +7047,10 @@ export const CLI_OPERATIONS = [
                         },
                         {
                           type: 'object',
-                          required: ['uuid', 'type', 'meta'],
+                          required: ['type', 'meta'],
                           properties: {
                             uuid: {
-                              type: 'string',
+                              type: ['string', 'null'],
                             },
                             type: {
                               type: 'string',
@@ -5375,9 +7073,18 @@ export const CLI_OPERATIONS = [
                                     type: {
                                       type: 'string',
                                       description:
-                                        'Common actions:\n- `step_forward`, `step_back`: go to the next or previous step.\n- `complete`: finish the guide or survey.\n- `dismiss`: close it.\n- `snooze`: hide it for a while, with optional `interval` (`hour`, `day`, `week`) and `value`.\n- `go_to_step`: jump to the step whose id is in `value`.\n- `link`: open the URL in `value`; `operation` is `self` (same tab), `blank` (new tab) or `router`.\n- `nudge`: start the guide or survey whose id is in `value`.\n- `no_action`: do nothing.\n\nButtons built in the dashboard can use other action types. Send those\nback unchanged.\n',
+                                        "Common actions:\n- `step_forward`, `step_back`: go to the next or previous step.\n- `complete`: finish the guide or survey.\n- `dismiss`: close it.\n- `snooze`: hide it for a while, with optional `interval` (`hour`, `day`, `week`) and `value`.\n- `go_to_step`: jump to a step. `value` is the 0-based position of the step in the variant's `steps`, not its id.\n- `link`: open the URL in `value`; `operation` is `self` (same tab), `blank` (new tab) or `router`.\n- `nudge`: start another guide or survey. `value` is its numeric id, and `productType` is `guide` or `survey`.\n- `no_action`: no action of its own. The button still advances: to the next step, or on the last step it finishes the guide or survey. The dashboard's survey templates use it for the submit button. It does not keep the user on the step; `stay_on_step` does.\n\nButtons built in the dashboard can also use `stay_on_step`,\n`click` (`value` is a CSS selector), `callback`, `app_review`,\n`open_resource_center`, `open_ai_assistant`, `open_chat`, `document`,\n`video`, and `use_conditional_logic`. Send those back unchanged.\n",
                                     },
                                   },
+                                },
+                                grow: {
+                                  type: 'boolean',
+                                  description:
+                                    'Stretch the button to fill the footer row.',
+                                },
+                                width: {
+                                  type: 'string',
+                                  description: 'CSS width, for example `100%`.',
                                 },
                                 actions: {
                                   type: 'object',
@@ -5392,10 +7099,10 @@ export const CLI_OPERATIONS = [
                           type: 'object',
                           description:
                             'Free-text survey question. Put the question itself in a `markdown` block or the step `title`.',
-                          required: ['uuid', 'type', 'meta'],
+                          required: ['type', 'meta'],
                           properties: {
                             uuid: {
-                              type: 'string',
+                              type: ['string', 'null'],
                             },
                             type: {
                               type: 'string',
@@ -5410,10 +7117,28 @@ export const CLI_OPERATIONS = [
                                 prompt: {
                                   type: 'string',
                                   description:
-                                    'Placeholder shown in the empty answer field.',
+                                    'Placeholder shown in the empty answer field. Required; send `""` for none.',
                                 },
                                 label: {
                                   type: 'string',
+                                },
+                                ariaLabel: {
+                                  type: 'string',
+                                },
+                                prefill: {
+                                  type: 'object',
+                                  description: '`survey_text_short` only.',
+                                  required: ['enabled', 'userProperty'],
+                                  properties: {
+                                    enabled: {
+                                      type: 'boolean',
+                                    },
+                                    userProperty: {
+                                      type: 'string',
+                                      description:
+                                        'User property whose value fills the answer.',
+                                    },
+                                  },
                                 },
                                 validation: {
                                   type: 'object',
@@ -5441,10 +7166,10 @@ export const CLI_OPERATIONS = [
                         {
                           type: 'object',
                           description: 'Multiple-choice survey question.',
-                          required: ['uuid', 'type', 'meta'],
+                          required: ['type', 'meta'],
                           properties: {
                             uuid: {
-                              type: 'string',
+                              type: ['string', 'null'],
                             },
                             type: {
                               type: 'string',
@@ -5519,10 +7244,10 @@ export const CLI_OPERATIONS = [
                         {
                           type: 'object',
                           description: 'Rating survey question.',
-                          required: ['uuid', 'type', 'meta'],
+                          required: ['type', 'meta'],
                           properties: {
                             uuid: {
-                              type: 'string',
+                              type: ['string', 'null'],
                             },
                             type: {
                               type: 'string',
@@ -5539,18 +7264,19 @@ export const CLI_OPERATIONS = [
                               properties: {
                                 type: {
                                   type: 'string',
-                                  description: '`nps` is a 0–10 scale.',
+                                  description:
+                                    '`nps` is a 0–10 scale and takes `options: 10`.',
                                   enum: ['stars', 'numbers', 'emojis', 'nps'],
                                 },
                                 options: {
                                   type: 'integer',
                                   description:
-                                    'Number of choices on the scale.',
+                                    'Number of choices on the scale. Allowed values depend on `type`:\n`stars` 3 or 5, `numbers` 3, 5, 7 or 10, `emojis` 2, 3 or 5, and\n`nps` 10.\n',
                                 },
                                 emojis: {
                                   type: 'array',
                                   description:
-                                    'One emoji per option. Required when `type` is `emojis`.',
+                                    'Exactly one emoji per option. Required when `type` is `emojis`.',
                                   items: {
                                     type: 'string',
                                   },
@@ -5591,10 +7317,10 @@ export const CLI_OPERATIONS = [
                           type: 'object',
                           description:
                             'Not shown to the user. Adds a value to each survey response.',
-                          required: ['uuid', 'type', 'meta'],
+                          required: ['type', 'meta'],
                           properties: {
                             uuid: {
-                              type: 'string',
+                              type: ['string', 'null'],
                             },
                             type: {
                               type: 'string',
@@ -5608,24 +7334,37 @@ export const CLI_OPERATIONS = [
                                   type: 'string',
                                 },
                                 source: {
-                                  type: 'object',
-                                  required: ['type'],
-                                  properties: {
-                                    type: {
-                                      type: 'string',
-                                      enum: ['static', 'event_property'],
+                                  oneOf: [
+                                    {
+                                      type: 'object',
+                                      required: ['type', 'value'],
+                                      properties: {
+                                        type: {
+                                          type: 'string',
+                                          const: 'static',
+                                        },
+                                        value: {
+                                          type: 'string',
+                                          description: 'The value to record.',
+                                        },
+                                      },
                                     },
-                                    value: {
-                                      type: 'string',
-                                      description:
-                                        'The value to record. Used when `type` is `static`.',
+                                    {
+                                      type: 'object',
+                                      required: ['type', 'property'],
+                                      properties: {
+                                        type: {
+                                          type: 'string',
+                                          const: 'event_property',
+                                        },
+                                        property: {
+                                          type: 'string',
+                                          description:
+                                            'Property of the event that triggered the survey.',
+                                        },
+                                      },
                                     },
-                                    property: {
-                                      type: 'string',
-                                      description:
-                                        'Property of the event that triggered the survey. Used when `type` is `event_property`.',
-                                    },
-                                  },
+                                  ],
                                 },
                               },
                             },
@@ -5635,15 +7374,659 @@ export const CLI_OPERATIONS = [
                     },
                   },
                   content_v2: {
-                    type: ['object', 'null'],
                     description:
                       "Block-builder layout: a tree of `layout` containers whose `children`\nare containers or content blocks, including the step's `title` block.\nReturned only on steps built in the block builder; when present, the\ndashboard and SDK render this tree, not `title` and `content`.\n\nOn update, only accepted on resources that already have a step with a\ntree; a flat-only guide or survey can't be converted through the API.\nOn create, any step may take one, so a resource read with `content_v2`\ncan be copied. Block `uuid`s must be unique within the step. Keep a block's\nexisting `uuid` when you edit it, because survey responses are keyed by\nit; a block sent without one is given one on save. The saved tree is\nnormalized to the shape the block builder saves, and the step title is\ntaken from its `title` block. On a step with a tree, send `title` and\n`content` only together with `content_v2`. Not supported on banner or\nchecklist steps or on mobile platforms. `null` switches the step back\nto `content`.\n",
+                    oneOf: [
+                      {
+                        type: 'object',
+                        description:
+                          'A block-builder container. `children` are containers or content blocks,\nplus the `title` and `step_counter` blocks that only exist in trees.\n',
+                        required: ['type', 'children'],
+                        properties: {
+                          type: {
+                            type: 'string',
+                            const: 'layout',
+                          },
+                          children: {
+                            type: 'array',
+                            items: {
+                              oneOf: [
+                                {
+                                  type: 'object',
+                                  description:
+                                    'A block-builder container. `children` are containers or content blocks,\nplus the `title` and `step_counter` blocks that only exist in trees.\n',
+                                },
+                                {
+                                  description:
+                                    'One content block. `type` selects the block and the shape of `meta`.',
+                                  oneOf: [
+                                    {
+                                      type: 'object',
+                                      description: 'Body text.',
+                                      required: ['type', 'meta'],
+                                      properties: {
+                                        uuid: {
+                                          type: ['string', 'null'],
+                                        },
+                                        type: {
+                                          type: 'string',
+                                          const: 'markdown',
+                                        },
+                                        meta: {
+                                          type: 'object',
+                                          required: ['value'],
+                                          properties: {
+                                            value: {
+                                              type: 'string',
+                                              description:
+                                                'Markdown text. Inline HTML is allowed and is sanitized on save.',
+                                            },
+                                            alignment: {
+                                              type: 'string',
+                                              enum: ['start', 'center', 'end'],
+                                            },
+                                            textAnimation: {
+                                              type: 'string',
+                                              const: 'typewriter',
+                                            },
+                                          },
+                                        },
+                                      },
+                                    },
+                                    {
+                                      type: 'object',
+                                      required: ['type', 'meta'],
+                                      properties: {
+                                        uuid: {
+                                          type: ['string', 'null'],
+                                        },
+                                        type: {
+                                          type: 'string',
+                                          const: 'image',
+                                        },
+                                        meta: {
+                                          type: 'object',
+                                          required: ['src', 'filename', 'size'],
+                                          properties: {
+                                            src: {
+                                              type: 'string',
+                                              description: 'Image URL.',
+                                            },
+                                            filename: {
+                                              type: 'string',
+                                            },
+                                            size: {
+                                              type: 'string',
+                                            },
+                                            altText: {
+                                              type: 'string',
+                                            },
+                                            style: {
+                                              type: 'object',
+                                              properties: {
+                                                scale: {
+                                                  type: 'string',
+                                                },
+                                                radius: {
+                                                  type: 'string',
+                                                },
+                                                fit: {
+                                                  type: 'string',
+                                                  enum: ['cover', 'contain'],
+                                                },
+                                                height: {
+                                                  type: 'string',
+                                                },
+                                              },
+                                            },
+                                            action: {
+                                              type: 'object',
+                                              description:
+                                                'Optional link opened when the image is clicked. No other action type is allowed.',
+                                              required: ['type', 'value'],
+                                              properties: {
+                                                type: {
+                                                  type: 'string',
+                                                  const: 'link',
+                                                },
+                                                value: {
+                                                  type: 'string',
+                                                  description: 'URL to open.',
+                                                },
+                                                operation: {
+                                                  type: 'string',
+                                                  enum: [
+                                                    'self',
+                                                    'blank',
+                                                    'router',
+                                                  ],
+                                                },
+                                              },
+                                            },
+                                          },
+                                        },
+                                      },
+                                    },
+                                    {
+                                      type: 'object',
+                                      required: ['type', 'meta'],
+                                      properties: {
+                                        uuid: {
+                                          type: ['string', 'null'],
+                                        },
+                                        type: {
+                                          type: 'string',
+                                          const: 'video',
+                                        },
+                                        meta: {
+                                          type: 'object',
+                                          required: ['type', 'src'],
+                                          properties: {
+                                            type: {
+                                              type: 'string',
+                                              const: 'url',
+                                            },
+                                            src: {
+                                              type: 'string',
+                                              description:
+                                                'Video URL, for example a YouTube, Vimeo or Loom link.',
+                                            },
+                                            style: {
+                                              type: 'object',
+                                              properties: {
+                                                radius: {
+                                                  type: 'string',
+                                                },
+                                              },
+                                            },
+                                          },
+                                        },
+                                      },
+                                    },
+                                    {
+                                      type: 'object',
+                                      required: ['type', 'meta'],
+                                      properties: {
+                                        uuid: {
+                                          type: ['string', 'null'],
+                                        },
+                                        type: {
+                                          type: 'string',
+                                          const: 'button',
+                                        },
+                                        meta: {
+                                          type: 'object',
+                                          properties: {
+                                            label: {
+                                              type: 'string',
+                                            },
+                                            buttonType: {
+                                              type: 'string',
+                                              enum: [
+                                                'primary',
+                                                'secondary',
+                                                'snooze',
+                                              ],
+                                            },
+                                            action: {
+                                              type: 'object',
+                                              required: ['type'],
+                                              properties: {
+                                                type: {
+                                                  type: 'string',
+                                                  description:
+                                                    "Common actions:\n- `step_forward`, `step_back`: go to the next or previous step.\n- `complete`: finish the guide or survey.\n- `dismiss`: close it.\n- `snooze`: hide it for a while, with optional `interval` (`hour`, `day`, `week`) and `value`.\n- `go_to_step`: jump to a step. `value` is the 0-based position of the step in the variant's `steps`, not its id.\n- `link`: open the URL in `value`; `operation` is `self` (same tab), `blank` (new tab) or `router`.\n- `nudge`: start another guide or survey. `value` is its numeric id, and `productType` is `guide` or `survey`.\n- `no_action`: no action of its own. The button still advances: to the next step, or on the last step it finishes the guide or survey. The dashboard's survey templates use it for the submit button. It does not keep the user on the step; `stay_on_step` does.\n\nButtons built in the dashboard can also use `stay_on_step`,\n`click` (`value` is a CSS selector), `callback`, `app_review`,\n`open_resource_center`, `open_ai_assistant`, `open_chat`, `document`,\n`video`, and `use_conditional_logic`. Send those back unchanged.\n",
+                                                },
+                                              },
+                                            },
+                                            grow: {
+                                              type: 'boolean',
+                                              description:
+                                                'Stretch the button to fill the footer row.',
+                                            },
+                                            width: {
+                                              type: 'string',
+                                              description:
+                                                'CSS width, for example `100%`.',
+                                            },
+                                            actions: {
+                                              type: 'object',
+                                              description:
+                                                'Optional action sequence the dashboard writes for buttons with side\neffects: `{type: "action_sequence", navigation: <action>, effects: [<action>]}`.\nWhen present, the SDK runs it instead of `action`, so update both or\nneither.\n',
+                                            },
+                                          },
+                                        },
+                                      },
+                                    },
+                                    {
+                                      type: 'object',
+                                      description:
+                                        'Free-text survey question. Put the question itself in a `markdown` block or the step `title`.',
+                                      required: ['type', 'meta'],
+                                      properties: {
+                                        uuid: {
+                                          type: ['string', 'null'],
+                                        },
+                                        type: {
+                                          type: 'string',
+                                          description:
+                                            '`survey_text` is a multi-line answer; `survey_text_short` is a single line.',
+                                          enum: [
+                                            'survey_text',
+                                            'survey_text_short',
+                                          ],
+                                        },
+                                        meta: {
+                                          type: 'object',
+                                          required: ['prompt'],
+                                          properties: {
+                                            prompt: {
+                                              type: 'string',
+                                              description:
+                                                'Placeholder shown in the empty answer field. Required; send `""` for none.',
+                                            },
+                                            label: {
+                                              type: 'string',
+                                            },
+                                            ariaLabel: {
+                                              type: 'string',
+                                            },
+                                            prefill: {
+                                              type: 'object',
+                                              description:
+                                                '`survey_text_short` only.',
+                                              required: [
+                                                'enabled',
+                                                'userProperty',
+                                              ],
+                                              properties: {
+                                                enabled: {
+                                                  type: 'boolean',
+                                                },
+                                                userProperty: {
+                                                  type: 'string',
+                                                  description:
+                                                    'User property whose value fills the answer.',
+                                                },
+                                              },
+                                            },
+                                            validation: {
+                                              type: 'object',
+                                              properties: {
+                                                required: {
+                                                  type: 'object',
+                                                  required: ['value'],
+                                                  properties: {
+                                                    value: {
+                                                      type: 'boolean',
+                                                    },
+                                                    message: {
+                                                      type: ['string', 'null'],
+                                                      description:
+                                                        'Error shown when a required question is left empty. Required when `value` is `true`.',
+                                                    },
+                                                  },
+                                                },
+                                              },
+                                            },
+                                          },
+                                        },
+                                      },
+                                    },
+                                    {
+                                      type: 'object',
+                                      description:
+                                        'Multiple-choice survey question.',
+                                      required: ['type', 'meta'],
+                                      properties: {
+                                        uuid: {
+                                          type: ['string', 'null'],
+                                        },
+                                        type: {
+                                          type: 'string',
+                                          const: 'survey_list',
+                                        },
+                                        meta: {
+                                          type: 'object',
+                                          required: [
+                                            'options',
+                                            'listType',
+                                            'displayType',
+                                          ],
+                                          properties: {
+                                            options: {
+                                              type: 'array',
+                                              items: {
+                                                type: 'string',
+                                              },
+                                            },
+                                            listType: {
+                                              type: 'string',
+                                              enum: ['single', 'multiple'],
+                                            },
+                                            displayType: {
+                                              type: 'string',
+                                              enum: [
+                                                'list',
+                                                'dropdown',
+                                                'grid',
+                                              ],
+                                            },
+                                            isOrderRandom: {
+                                              type: 'boolean',
+                                            },
+                                            otherOption: {
+                                              type: 'object',
+                                              required: [
+                                                'enabled',
+                                                'label',
+                                                'placeholderLabel',
+                                              ],
+                                              properties: {
+                                                enabled: {
+                                                  type: 'boolean',
+                                                },
+                                                label: {
+                                                  type: 'string',
+                                                },
+                                                placeholderLabel: {
+                                                  type: 'string',
+                                                },
+                                              },
+                                            },
+                                            label: {
+                                              type: 'string',
+                                            },
+                                            validation: {
+                                              type: 'object',
+                                              properties: {
+                                                required: {
+                                                  type: 'object',
+                                                  required: ['value'],
+                                                  properties: {
+                                                    value: {
+                                                      type: 'boolean',
+                                                    },
+                                                    message: {
+                                                      type: ['string', 'null'],
+                                                      description:
+                                                        'Error shown when a required question is left empty. Required when `value` is `true`.',
+                                                    },
+                                                  },
+                                                },
+                                              },
+                                            },
+                                          },
+                                        },
+                                      },
+                                    },
+                                    {
+                                      type: 'object',
+                                      description: 'Rating survey question.',
+                                      required: ['type', 'meta'],
+                                      properties: {
+                                        uuid: {
+                                          type: ['string', 'null'],
+                                        },
+                                        type: {
+                                          type: 'string',
+                                          const: 'survey_rating',
+                                        },
+                                        meta: {
+                                          type: 'object',
+                                          required: [
+                                            'type',
+                                            'options',
+                                            'lowerLabel',
+                                            'upperLabel',
+                                          ],
+                                          properties: {
+                                            type: {
+                                              type: 'string',
+                                              description:
+                                                '`nps` is a 0–10 scale and takes `options: 10`.',
+                                              enum: [
+                                                'stars',
+                                                'numbers',
+                                                'emojis',
+                                                'nps',
+                                              ],
+                                            },
+                                            options: {
+                                              type: 'integer',
+                                              description:
+                                                'Number of choices on the scale. Allowed values depend on `type`:\n`stars` 3 or 5, `numbers` 3, 5, 7 or 10, `emojis` 2, 3 or 5, and\n`nps` 10.\n',
+                                            },
+                                            emojis: {
+                                              type: 'array',
+                                              description:
+                                                'Exactly one emoji per option. Required when `type` is `emojis`.',
+                                              items: {
+                                                type: 'string',
+                                              },
+                                            },
+                                            lowerLabel: {
+                                              type: 'string',
+                                            },
+                                            upperLabel: {
+                                              type: 'string',
+                                            },
+                                            label: {
+                                              type: 'string',
+                                            },
+                                            validation: {
+                                              type: 'object',
+                                              properties: {
+                                                required: {
+                                                  type: 'object',
+                                                  required: ['value'],
+                                                  properties: {
+                                                    value: {
+                                                      type: 'boolean',
+                                                    },
+                                                    message: {
+                                                      type: ['string', 'null'],
+                                                      description:
+                                                        'Error shown when a required question is left empty. Required when `value` is `true`.',
+                                                    },
+                                                  },
+                                                },
+                                              },
+                                            },
+                                          },
+                                        },
+                                      },
+                                    },
+                                    {
+                                      type: 'object',
+                                      description:
+                                        'Not shown to the user. Adds a value to each survey response.',
+                                      required: ['type', 'meta'],
+                                      properties: {
+                                        uuid: {
+                                          type: ['string', 'null'],
+                                        },
+                                        type: {
+                                          type: 'string',
+                                          const: 'survey_hidden',
+                                        },
+                                        meta: {
+                                          type: 'object',
+                                          required: ['label', 'source'],
+                                          properties: {
+                                            label: {
+                                              type: 'string',
+                                            },
+                                            source: {
+                                              oneOf: [
+                                                {
+                                                  type: 'object',
+                                                  required: ['type', 'value'],
+                                                  properties: {
+                                                    type: {
+                                                      type: 'string',
+                                                      const: 'static',
+                                                    },
+                                                    value: {
+                                                      type: 'string',
+                                                      description:
+                                                        'The value to record.',
+                                                    },
+                                                  },
+                                                },
+                                                {
+                                                  type: 'object',
+                                                  required: [
+                                                    'type',
+                                                    'property',
+                                                  ],
+                                                  properties: {
+                                                    type: {
+                                                      type: 'string',
+                                                      const: 'event_property',
+                                                    },
+                                                    property: {
+                                                      type: 'string',
+                                                      description:
+                                                        'Property of the event that triggered the survey.',
+                                                    },
+                                                  },
+                                                },
+                                              ],
+                                            },
+                                          },
+                                        },
+                                      },
+                                    },
+                                  ],
+                                },
+                                {
+                                  type: 'object',
+                                  description:
+                                    'The step title inside a block-builder tree.',
+                                  required: ['type', 'meta'],
+                                  properties: {
+                                    uuid: {
+                                      type: ['string', 'null'],
+                                    },
+                                    type: {
+                                      type: 'string',
+                                      const: 'title',
+                                    },
+                                    meta: {
+                                      type: 'object',
+                                      required: ['value'],
+                                      properties: {
+                                        value: {
+                                          type: 'string',
+                                        },
+                                        alignment: {
+                                          type: 'string',
+                                          enum: ['start', 'center', 'end'],
+                                        },
+                                        textAnimation: {
+                                          type: 'string',
+                                          const: 'typewriter',
+                                        },
+                                      },
+                                    },
+                                  },
+                                },
+                                {
+                                  type: 'object',
+                                  description:
+                                    'Shows the step number inside a block-builder tree.',
+                                  required: ['type', 'meta'],
+                                  properties: {
+                                    uuid: {
+                                      type: ['string', 'null'],
+                                    },
+                                    type: {
+                                      type: 'string',
+                                      const: 'step_counter',
+                                    },
+                                    meta: {
+                                      type: 'object',
+                                      properties: {
+                                        format: {
+                                          type: 'string',
+                                          enum: ['numeric', 'verbose'],
+                                        },
+                                      },
+                                    },
+                                  },
+                                },
+                              ],
+                            },
+                          },
+                          id: {
+                            type: 'string',
+                            description:
+                              'Container id, unique within the step.',
+                          },
+                          direction: {
+                            type: 'string',
+                            enum: ['row', 'column'],
+                          },
+                          justify: {
+                            type: 'string',
+                            enum: [
+                              'start',
+                              'center',
+                              'end',
+                              'space-between',
+                              'space-around',
+                            ],
+                          },
+                          align: {
+                            type: 'string',
+                            enum: ['start', 'center', 'end'],
+                          },
+                          gap: {
+                            type: 'string',
+                            description: 'CSS length, for example `8px`.',
+                          },
+                          padding: {
+                            type: 'string',
+                          },
+                          margin: {
+                            type: 'string',
+                          },
+                          pinned: {
+                            type: 'boolean',
+                          },
+                          wrap: {
+                            type: 'boolean',
+                          },
+                          overflow: {
+                            type: 'string',
+                            enum: ['auto', 'hidden'],
+                          },
+                          minHeight: {
+                            type: 'string',
+                          },
+                          width: {
+                            type: 'string',
+                          },
+                        },
+                      },
+                      {
+                        type: 'null',
+                      },
+                    ],
                   },
                   sort_key: {
                     type: ['integer', 'null'],
+                    description:
+                      'Ignored on input. Steps are shown in the order of `steps`.',
                   },
                 },
               },
+            },
+            translations: {
+              type: 'object',
+              description:
+                'Locale (one of `localization.locales`) to translation key to text.\nMerged into the stored translations: keys you leave out are kept, `null`\nclears a key, and `null` for a locale clears every key in it.\n\nKeys name a field by where it sits in the variant: `display_title`,\n`display_description`, `snooze_label`, `done_label`;\n`steps[<step id>].title`; and block fields as\n`steps[<step id>].blocks[<block uuid>].<field>`, for example\n`content.markdown`, `content.title`, `content.button[primary]`,\n`content.survey_rating.lowerLabel`, or `content.survey_list`. Copy keys\nfrom `translation_status.sources` instead of building them. A key must\nname a field that has default-locale text.\n',
             },
           },
         },
@@ -5806,7 +8189,7 @@ export const CLI_OPERATIONS = [
         items: {
           type: 'object',
           description:
-            "Variant payload on create/update. `id` is optional — omit for new variants;\ninclude when updating an existing variant row. A negative `id` is a variant\nadded to a published guide or survey's draft that has not been published yet.\n`variant` key is required.\n",
+            "Variant payload on create/update. `id` is optional — omit for new variants;\ninclude when updating an existing variant row. A negative `id` is a variant\nadded to a published guide or survey's draft that has not been published yet.\n`variant` key is required. Create doesn't take translations: create the\nguide or survey, then send `translations` with an update.\n",
           required: ['variant'],
           properties: {
             id: {
@@ -5814,22 +8197,33 @@ export const CLI_OPERATIONS = [
             },
             variant: {
               type: 'string',
-              description: 'Variant key within the nudge.',
+              description:
+                "Variant key within the nudge: lowercase letters, digits, `-` and `_`.\nKeys must be unique. `off` is reserved, and `control` can't be given to\na new variant.\n",
+              pattern: '^[a-z0-9_-]+$',
             },
             display_title: {
-              type: ['string', 'null'],
+              type: 'string',
+              description:
+                'Variant title. Omit it to leave it unchanged; `null` is rejected.',
             },
             display_description: {
               type: ['string', 'null'],
             },
             snooze_label: {
-              type: ['string', 'null'],
+              type: 'string',
+              description:
+                'Snooze button label for this variant. Omit it to leave it unchanged; `null` is rejected.',
+              maxLength: 255,
             },
             done_label: {
-              type: ['string', 'null'],
+              type: 'string',
+              description:
+                "Label of the last step's button. Omit it to leave it unchanged; `null` is rejected.",
+              maxLength: 255,
             },
             steps: {
               type: 'array',
+              minItems: 1,
               items: {
                 type: 'object',
                 description:
@@ -5839,11 +8233,14 @@ export const CLI_OPERATIONS = [
                     type: 'string',
                   },
                   title: {
-                    type: ['string', 'null'],
+                    type: 'string',
+                    description:
+                      'Step title. Omit it to leave it unchanged; `null` is rejected.',
+                    maxLength: 255,
                   },
                   form_factor: {
                     description:
-                      'Step layout. `type` selects it. Other layout keys, including `layout`,\n`footerLayout`, `contentAlignment`, and `titleAlignment`, are accepted\nand passed through.\n',
+                      "Step layout. `type` selects it. Every form factor also accepts\n`zIndexOverride` (number or null) and `textAnimation` (`typewriter`).\nModal, popover, pin, tooltip, and card accept the step layout keys\n`layout`, `mediaPosition`, `contentAlignment`, `titleAlignment`, and\n`footerLayout`; banner and checklist accept a narrower set. Tooltips and cards can't be snoozed.\n",
                     oneOf: [
                       {
                         type: 'object',
@@ -5875,6 +8272,36 @@ export const CLI_OPERATIONS = [
                           fullWidthModal: {
                             type: 'boolean',
                           },
+                          layout: {
+                            type: 'string',
+                            description:
+                              'Arrangement of media and text in the step.',
+                            enum: [
+                              'classic',
+                              'vertical',
+                              'showcase',
+                              'horizontal',
+                            ],
+                          },
+                          mediaPosition: {
+                            type: 'string',
+                            description:
+                              'Media side for the `horizontal` layout.',
+                            enum: ['left', 'right'],
+                          },
+                          contentAlignment: {
+                            type: 'string',
+                            enum: ['start', 'center', 'end'],
+                          },
+                          titleAlignment: {
+                            type: 'string',
+                            enum: ['start', 'center', 'end'],
+                          },
+                          footerLayout: {
+                            type: 'string',
+                            description: "Arrangement of the step's buttons.",
+                            enum: ['classic', 'split', 'centered', 'stacked'],
+                          },
                         },
                       },
                       {
@@ -5901,6 +8328,36 @@ export const CLI_OPERATIONS = [
                               'center',
                             ],
                           },
+                          layout: {
+                            type: 'string',
+                            description:
+                              'Arrangement of media and text in the step.',
+                            enum: [
+                              'classic',
+                              'vertical',
+                              'showcase',
+                              'horizontal',
+                            ],
+                          },
+                          mediaPosition: {
+                            type: 'string',
+                            description:
+                              'Media side for the `horizontal` layout.',
+                            enum: ['left', 'right'],
+                          },
+                          contentAlignment: {
+                            type: 'string',
+                            enum: ['start', 'center', 'end'],
+                          },
+                          titleAlignment: {
+                            type: 'string',
+                            enum: ['start', 'center', 'end'],
+                          },
+                          footerLayout: {
+                            type: 'string',
+                            description: "Arrangement of the step's buttons.",
+                            enum: ['classic', 'split', 'centered', 'stacked'],
+                          },
                         },
                       },
                       {
@@ -5924,6 +8381,22 @@ export const CLI_OPERATIONS = [
                             description:
                               'Keep the banner on screen while the page scrolls.',
                           },
+                          layout: {
+                            type: 'string',
+                            enum: ['classic', 'vertical'],
+                          },
+                          footerLayout: {
+                            type: 'string',
+                            const: 'classic',
+                          },
+                          contentAlignment: {
+                            type: 'string',
+                            enum: ['start', 'center', 'end'],
+                          },
+                          titleAlignment: {
+                            type: 'string',
+                            enum: ['start', 'center', 'end'],
+                          },
                         },
                       },
                       {
@@ -5938,9 +8411,90 @@ export const CLI_OPERATIONS = [
                             type: 'string',
                             description: 'CSS selector the pin attaches to.',
                           },
+                          anchorSelector: {
+                            type: 'object',
+                            description:
+                              'Richer element match used alongside `anchor`.',
+                            required: ['selector', 'text', 'tag', 'attributes'],
+                            properties: {
+                              selector: {
+                                type: 'string',
+                              },
+                              text: {
+                                type: 'string',
+                                description: 'Visible text of the element.',
+                              },
+                              tag: {
+                                type: 'string',
+                                description: 'HTML tag name.',
+                              },
+                              attributes: {
+                                type: 'object',
+                              },
+                              strategy: {
+                                type: 'string',
+                                enum: ['strict', 'fallback', 'selector_only'],
+                              },
+                            },
+                          },
                           position: {
                             type: 'string',
                             enum: ['auto', 'top', 'bottom', 'left', 'right'],
+                          },
+                          alignment: {
+                            type: 'string',
+                            enum: ['center', 'top', 'bottom', 'left', 'right'],
+                          },
+                          offset: {
+                            type: 'object',
+                            description: 'Both `x` and `y` are required.',
+                            required: ['x', 'y'],
+                            properties: {
+                              x: {
+                                type: 'string',
+                                description: 'CSS length, for example `0px`.',
+                              },
+                              y: {
+                                type: 'string',
+                                description: 'CSS length, for example `0px`.',
+                              },
+                            },
+                          },
+                          pointer: {
+                            type: 'object',
+                            required: ['type'],
+                            properties: {
+                              type: {
+                                type: 'string',
+                                enum: ['beacon', 'arrow'],
+                              },
+                            },
+                          },
+                          isOpenByDefault: {
+                            type: 'boolean',
+                          },
+                          openOnHover: {
+                            type: 'boolean',
+                          },
+                          isShowingMask: {
+                            type: 'boolean',
+                            description: 'Dim the rest of the page.',
+                          },
+                          canClickOutsideToClose: {
+                            type: 'boolean',
+                          },
+                          advanceTrigger: {
+                            type: 'string',
+                            description:
+                              'CSS selector whose click advances to the next step.',
+                          },
+                          disableAutoAdvanceOnClick: {
+                            type: 'boolean',
+                          },
+                          skipIfNotFound: {
+                            type: 'boolean',
+                            description:
+                              'Skip the step when the anchor is missing.',
                           },
                         },
                       },
@@ -5962,6 +8516,8 @@ export const CLI_OPERATIONS = [
                             enum: ['hover', 'click'],
                           },
                           marker: {
+                            description:
+                              'The marker users hover or click to open the tooltip. Every marker type\nalso accepts `width` (number) and `elementIsMarker` (boolean).\n',
                             oneOf: [
                               {
                                 type: 'object',
@@ -5986,13 +8542,19 @@ export const CLI_OPERATIONS = [
                                       },
                                       offset: {
                                         type: 'object',
+                                        description:
+                                          'Both `x` and `y` are required.',
                                         required: ['x', 'y'],
                                         properties: {
                                           x: {
                                             type: 'string',
+                                            description:
+                                              'CSS length, for example `0px`.',
                                           },
                                           y: {
                                             type: 'string',
+                                            description:
+                                              'CSS length, for example `0px`.',
                                           },
                                         },
                                       },
@@ -6034,13 +8596,19 @@ export const CLI_OPERATIONS = [
                                       },
                                       offset: {
                                         type: 'object',
+                                        description:
+                                          'Both `x` and `y` are required.',
                                         required: ['x', 'y'],
                                         properties: {
                                           x: {
                                             type: 'string',
+                                            description:
+                                              'CSS length, for example `0px`.',
                                           },
                                           y: {
                                             type: 'string',
+                                            description:
+                                              'CSS length, for example `0px`.',
                                           },
                                         },
                                       },
@@ -6075,13 +8643,19 @@ export const CLI_OPERATIONS = [
                                       },
                                       offset: {
                                         type: 'object',
+                                        description:
+                                          'Both `x` and `y` are required.',
                                         required: ['x', 'y'],
                                         properties: {
                                           x: {
                                             type: 'string',
+                                            description:
+                                              'CSS length, for example `0px`.',
                                           },
                                           y: {
                                             type: 'string',
+                                            description:
+                                              'CSS length, for example `0px`.',
                                           },
                                         },
                                       },
@@ -6090,6 +8664,42 @@ export const CLI_OPERATIONS = [
                                 },
                               },
                             ],
+                          },
+                          anchorSelector: {
+                            type: 'object',
+                            description:
+                              'Richer element match used alongside `anchor`.',
+                            required: ['selector', 'text', 'tag', 'attributes'],
+                            properties: {
+                              selector: {
+                                type: 'string',
+                              },
+                              text: {
+                                type: 'string',
+                                description: 'Visible text of the element.',
+                              },
+                              tag: {
+                                type: 'string',
+                                description: 'HTML tag name.',
+                              },
+                              attributes: {
+                                type: 'object',
+                              },
+                              strategy: {
+                                type: 'string',
+                                enum: ['strict', 'fallback', 'selector_only'],
+                              },
+                            },
+                          },
+                          pointer: {
+                            type: 'object',
+                            required: ['type'],
+                            properties: {
+                              type: {
+                                type: 'string',
+                                enum: ['arrow', 'none'],
+                              },
+                            },
                           },
                         },
                       },
@@ -6115,6 +8725,82 @@ export const CLI_OPERATIONS = [
                               'after',
                             ],
                           },
+                          anchorSelector: {
+                            type: 'object',
+                            description:
+                              'Richer element match used alongside `anchor`.',
+                            required: ['selector', 'text', 'tag', 'attributes'],
+                            properties: {
+                              selector: {
+                                type: 'string',
+                              },
+                              text: {
+                                type: 'string',
+                                description: 'Visible text of the element.',
+                              },
+                              tag: {
+                                type: 'string',
+                                description: 'HTML tag name.',
+                              },
+                              attributes: {
+                                type: 'object',
+                              },
+                              strategy: {
+                                type: 'string',
+                                enum: ['strict', 'fallback', 'selector_only'],
+                              },
+                            },
+                          },
+                          alignment: {
+                            type: 'string',
+                            enum: ['start', 'center', 'end'],
+                          },
+                          cardWidth: {
+                            type: 'object',
+                            required: ['type'],
+                            properties: {
+                              type: {
+                                type: 'string',
+                                enum: ['auto', 'fixed', 'full'],
+                              },
+                              value: {
+                                type: 'number',
+                                description: 'Pixels, used with `fixed`.',
+                              },
+                            },
+                          },
+                          cardHeight: {
+                            type: 'object',
+                            required: ['type'],
+                            properties: {
+                              type: {
+                                type: 'string',
+                                enum: ['auto', 'fixed', 'full'],
+                              },
+                              value: {
+                                type: 'number',
+                                description: 'Pixels, used with `fixed`.',
+                              },
+                            },
+                          },
+                          cardMargin: {
+                            type: 'object',
+                            required: ['top', 'right', 'bottom', 'left'],
+                            properties: {
+                              top: {
+                                type: 'number',
+                              },
+                              right: {
+                                type: 'number',
+                              },
+                              bottom: {
+                                type: 'number',
+                              },
+                              left: {
+                                type: 'number',
+                              },
+                            },
+                          },
                         },
                       },
                       {
@@ -6125,6 +8811,14 @@ export const CLI_OPERATIONS = [
                             type: 'string',
                             const: 'checklist',
                           },
+                          layout: {
+                            type: 'string',
+                            const: 'classic',
+                          },
+                          footerLayout: {
+                            type: 'string',
+                            const: 'classic',
+                          },
                         },
                       },
                     ],
@@ -6132,7 +8826,7 @@ export const CLI_OPERATIONS = [
                   content: {
                     type: 'array',
                     description:
-                      "The step body: content blocks rendered top to bottom, below the step\n`title`. `meta` keys are camelCase. Give each new block a unique `uuid`\n(a v4 UUID) and keep the existing `uuid` when you edit a block, because\nsurvey responses are keyed by it. To change one block, send the step's\nwhole `content` array back with that block edited.\n",
+                      "The step body: content blocks rendered top to bottom, below the step\n`title`. `meta` keys are camelCase. Keep a block's existing `uuid` when\nyou edit it, because survey responses are keyed by it; a block sent\nwithout one (or with `null`) is given one on save. To change one block,\nsend the step's whole `content` array back with that block edited. Send\n`[]` for an empty step, not `null`.\n\nA step can have at most one `markdown` block, one `image` or one `video`\n(not both), two buttons, ten survey questions, and ten `survey_hidden`\nfields. Survey question blocks are only allowed in surveys, and only on\nsteps with the `classic` or `vertical` layout. A checklist item can have\nat most one button. A snooze button needs the variant's `snooze_label`.\n",
                     items: {
                       description:
                         'One content block. `type` selects the block and the shape of `meta`.',
@@ -6140,10 +8834,10 @@ export const CLI_OPERATIONS = [
                         {
                           type: 'object',
                           description: 'Body text.',
-                          required: ['uuid', 'type', 'meta'],
+                          required: ['type', 'meta'],
                           properties: {
                             uuid: {
-                              type: 'string',
+                              type: ['string', 'null'],
                             },
                             type: {
                               type: 'string',
@@ -6162,16 +8856,20 @@ export const CLI_OPERATIONS = [
                                   type: 'string',
                                   enum: ['start', 'center', 'end'],
                                 },
+                                textAnimation: {
+                                  type: 'string',
+                                  const: 'typewriter',
+                                },
                               },
                             },
                           },
                         },
                         {
                           type: 'object',
-                          required: ['uuid', 'type', 'meta'],
+                          required: ['type', 'meta'],
                           properties: {
                             uuid: {
-                              type: 'string',
+                              type: ['string', 'null'],
                             },
                             type: {
                               type: 'string',
@@ -6215,7 +8913,22 @@ export const CLI_OPERATIONS = [
                                 action: {
                                   type: 'object',
                                   description:
-                                    'Optional `link` action opened when the image is clicked.',
+                                    'Optional link opened when the image is clicked. No other action type is allowed.',
+                                  required: ['type', 'value'],
+                                  properties: {
+                                    type: {
+                                      type: 'string',
+                                      const: 'link',
+                                    },
+                                    value: {
+                                      type: 'string',
+                                      description: 'URL to open.',
+                                    },
+                                    operation: {
+                                      type: 'string',
+                                      enum: ['self', 'blank', 'router'],
+                                    },
+                                  },
                                 },
                               },
                             },
@@ -6223,10 +8936,10 @@ export const CLI_OPERATIONS = [
                         },
                         {
                           type: 'object',
-                          required: ['uuid', 'type', 'meta'],
+                          required: ['type', 'meta'],
                           properties: {
                             uuid: {
-                              type: 'string',
+                              type: ['string', 'null'],
                             },
                             type: {
                               type: 'string',
@@ -6259,10 +8972,10 @@ export const CLI_OPERATIONS = [
                         },
                         {
                           type: 'object',
-                          required: ['uuid', 'type', 'meta'],
+                          required: ['type', 'meta'],
                           properties: {
                             uuid: {
-                              type: 'string',
+                              type: ['string', 'null'],
                             },
                             type: {
                               type: 'string',
@@ -6285,9 +8998,18 @@ export const CLI_OPERATIONS = [
                                     type: {
                                       type: 'string',
                                       description:
-                                        'Common actions:\n- `step_forward`, `step_back`: go to the next or previous step.\n- `complete`: finish the guide or survey.\n- `dismiss`: close it.\n- `snooze`: hide it for a while, with optional `interval` (`hour`, `day`, `week`) and `value`.\n- `go_to_step`: jump to the step whose id is in `value`.\n- `link`: open the URL in `value`; `operation` is `self` (same tab), `blank` (new tab) or `router`.\n- `nudge`: start the guide or survey whose id is in `value`.\n- `no_action`: do nothing.\n\nButtons built in the dashboard can use other action types. Send those\nback unchanged.\n',
+                                        "Common actions:\n- `step_forward`, `step_back`: go to the next or previous step.\n- `complete`: finish the guide or survey.\n- `dismiss`: close it.\n- `snooze`: hide it for a while, with optional `interval` (`hour`, `day`, `week`) and `value`.\n- `go_to_step`: jump to a step. `value` is the 0-based position of the step in the variant's `steps`, not its id.\n- `link`: open the URL in `value`; `operation` is `self` (same tab), `blank` (new tab) or `router`.\n- `nudge`: start another guide or survey. `value` is its numeric id, and `productType` is `guide` or `survey`.\n- `no_action`: no action of its own. The button still advances: to the next step, or on the last step it finishes the guide or survey. The dashboard's survey templates use it for the submit button. It does not keep the user on the step; `stay_on_step` does.\n\nButtons built in the dashboard can also use `stay_on_step`,\n`click` (`value` is a CSS selector), `callback`, `app_review`,\n`open_resource_center`, `open_ai_assistant`, `open_chat`, `document`,\n`video`, and `use_conditional_logic`. Send those back unchanged.\n",
                                     },
                                   },
+                                },
+                                grow: {
+                                  type: 'boolean',
+                                  description:
+                                    'Stretch the button to fill the footer row.',
+                                },
+                                width: {
+                                  type: 'string',
+                                  description: 'CSS width, for example `100%`.',
                                 },
                                 actions: {
                                   type: 'object',
@@ -6302,10 +9024,10 @@ export const CLI_OPERATIONS = [
                           type: 'object',
                           description:
                             'Free-text survey question. Put the question itself in a `markdown` block or the step `title`.',
-                          required: ['uuid', 'type', 'meta'],
+                          required: ['type', 'meta'],
                           properties: {
                             uuid: {
-                              type: 'string',
+                              type: ['string', 'null'],
                             },
                             type: {
                               type: 'string',
@@ -6320,10 +9042,28 @@ export const CLI_OPERATIONS = [
                                 prompt: {
                                   type: 'string',
                                   description:
-                                    'Placeholder shown in the empty answer field.',
+                                    'Placeholder shown in the empty answer field. Required; send `""` for none.',
                                 },
                                 label: {
                                   type: 'string',
+                                },
+                                ariaLabel: {
+                                  type: 'string',
+                                },
+                                prefill: {
+                                  type: 'object',
+                                  description: '`survey_text_short` only.',
+                                  required: ['enabled', 'userProperty'],
+                                  properties: {
+                                    enabled: {
+                                      type: 'boolean',
+                                    },
+                                    userProperty: {
+                                      type: 'string',
+                                      description:
+                                        'User property whose value fills the answer.',
+                                    },
+                                  },
                                 },
                                 validation: {
                                   type: 'object',
@@ -6351,10 +9091,10 @@ export const CLI_OPERATIONS = [
                         {
                           type: 'object',
                           description: 'Multiple-choice survey question.',
-                          required: ['uuid', 'type', 'meta'],
+                          required: ['type', 'meta'],
                           properties: {
                             uuid: {
-                              type: 'string',
+                              type: ['string', 'null'],
                             },
                             type: {
                               type: 'string',
@@ -6429,10 +9169,10 @@ export const CLI_OPERATIONS = [
                         {
                           type: 'object',
                           description: 'Rating survey question.',
-                          required: ['uuid', 'type', 'meta'],
+                          required: ['type', 'meta'],
                           properties: {
                             uuid: {
-                              type: 'string',
+                              type: ['string', 'null'],
                             },
                             type: {
                               type: 'string',
@@ -6449,18 +9189,19 @@ export const CLI_OPERATIONS = [
                               properties: {
                                 type: {
                                   type: 'string',
-                                  description: '`nps` is a 0–10 scale.',
+                                  description:
+                                    '`nps` is a 0–10 scale and takes `options: 10`.',
                                   enum: ['stars', 'numbers', 'emojis', 'nps'],
                                 },
                                 options: {
                                   type: 'integer',
                                   description:
-                                    'Number of choices on the scale.',
+                                    'Number of choices on the scale. Allowed values depend on `type`:\n`stars` 3 or 5, `numbers` 3, 5, 7 or 10, `emojis` 2, 3 or 5, and\n`nps` 10.\n',
                                 },
                                 emojis: {
                                   type: 'array',
                                   description:
-                                    'One emoji per option. Required when `type` is `emojis`.',
+                                    'Exactly one emoji per option. Required when `type` is `emojis`.',
                                   items: {
                                     type: 'string',
                                   },
@@ -6501,10 +9242,10 @@ export const CLI_OPERATIONS = [
                           type: 'object',
                           description:
                             'Not shown to the user. Adds a value to each survey response.',
-                          required: ['uuid', 'type', 'meta'],
+                          required: ['type', 'meta'],
                           properties: {
                             uuid: {
-                              type: 'string',
+                              type: ['string', 'null'],
                             },
                             type: {
                               type: 'string',
@@ -6518,24 +9259,37 @@ export const CLI_OPERATIONS = [
                                   type: 'string',
                                 },
                                 source: {
-                                  type: 'object',
-                                  required: ['type'],
-                                  properties: {
-                                    type: {
-                                      type: 'string',
-                                      enum: ['static', 'event_property'],
+                                  oneOf: [
+                                    {
+                                      type: 'object',
+                                      required: ['type', 'value'],
+                                      properties: {
+                                        type: {
+                                          type: 'string',
+                                          const: 'static',
+                                        },
+                                        value: {
+                                          type: 'string',
+                                          description: 'The value to record.',
+                                        },
+                                      },
                                     },
-                                    value: {
-                                      type: 'string',
-                                      description:
-                                        'The value to record. Used when `type` is `static`.',
+                                    {
+                                      type: 'object',
+                                      required: ['type', 'property'],
+                                      properties: {
+                                        type: {
+                                          type: 'string',
+                                          const: 'event_property',
+                                        },
+                                        property: {
+                                          type: 'string',
+                                          description:
+                                            'Property of the event that triggered the survey.',
+                                        },
+                                      },
                                     },
-                                    property: {
-                                      type: 'string',
-                                      description:
-                                        'Property of the event that triggered the survey. Used when `type` is `event_property`.',
-                                    },
-                                  },
+                                  ],
                                 },
                               },
                             },
@@ -6545,18 +9299,696 @@ export const CLI_OPERATIONS = [
                     },
                   },
                   content_v2: {
-                    type: ['object', 'null'],
                     description:
                       "Block-builder layout: a tree of `layout` containers whose `children`\nare containers or content blocks, including the step's `title` block.\nReturned only on steps built in the block builder; when present, the\ndashboard and SDK render this tree, not `title` and `content`.\n\nOn update, only accepted on resources that already have a step with a\ntree; a flat-only guide or survey can't be converted through the API.\nOn create, any step may take one, so a resource read with `content_v2`\ncan be copied. Block `uuid`s must be unique within the step. Keep a block's\nexisting `uuid` when you edit it, because survey responses are keyed by\nit; a block sent without one is given one on save. The saved tree is\nnormalized to the shape the block builder saves, and the step title is\ntaken from its `title` block. On a step with a tree, send `title` and\n`content` only together with `content_v2`. Not supported on banner or\nchecklist steps or on mobile platforms. `null` switches the step back\nto `content`.\n",
+                    oneOf: [
+                      {
+                        type: 'object',
+                        description:
+                          'A block-builder container. `children` are containers or content blocks,\nplus the `title` and `step_counter` blocks that only exist in trees.\n',
+                        required: ['type', 'children'],
+                        properties: {
+                          type: {
+                            type: 'string',
+                            const: 'layout',
+                          },
+                          children: {
+                            type: 'array',
+                            items: {
+                              oneOf: [
+                                {
+                                  type: 'object',
+                                  description:
+                                    'A block-builder container. `children` are containers or content blocks,\nplus the `title` and `step_counter` blocks that only exist in trees.\n',
+                                },
+                                {
+                                  description:
+                                    'One content block. `type` selects the block and the shape of `meta`.',
+                                  oneOf: [
+                                    {
+                                      type: 'object',
+                                      description: 'Body text.',
+                                      required: ['type', 'meta'],
+                                      properties: {
+                                        uuid: {
+                                          type: ['string', 'null'],
+                                        },
+                                        type: {
+                                          type: 'string',
+                                          const: 'markdown',
+                                        },
+                                        meta: {
+                                          type: 'object',
+                                          required: ['value'],
+                                          properties: {
+                                            value: {
+                                              type: 'string',
+                                              description:
+                                                'Markdown text. Inline HTML is allowed and is sanitized on save.',
+                                            },
+                                            alignment: {
+                                              type: 'string',
+                                              enum: ['start', 'center', 'end'],
+                                            },
+                                            textAnimation: {
+                                              type: 'string',
+                                              const: 'typewriter',
+                                            },
+                                          },
+                                        },
+                                      },
+                                    },
+                                    {
+                                      type: 'object',
+                                      required: ['type', 'meta'],
+                                      properties: {
+                                        uuid: {
+                                          type: ['string', 'null'],
+                                        },
+                                        type: {
+                                          type: 'string',
+                                          const: 'image',
+                                        },
+                                        meta: {
+                                          type: 'object',
+                                          required: ['src', 'filename', 'size'],
+                                          properties: {
+                                            src: {
+                                              type: 'string',
+                                              description: 'Image URL.',
+                                            },
+                                            filename: {
+                                              type: 'string',
+                                            },
+                                            size: {
+                                              type: 'string',
+                                            },
+                                            altText: {
+                                              type: 'string',
+                                            },
+                                            style: {
+                                              type: 'object',
+                                              properties: {
+                                                scale: {
+                                                  type: 'string',
+                                                },
+                                                radius: {
+                                                  type: 'string',
+                                                },
+                                                fit: {
+                                                  type: 'string',
+                                                  enum: ['cover', 'contain'],
+                                                },
+                                                height: {
+                                                  type: 'string',
+                                                },
+                                              },
+                                            },
+                                            action: {
+                                              type: 'object',
+                                              description:
+                                                'Optional link opened when the image is clicked. No other action type is allowed.',
+                                              required: ['type', 'value'],
+                                              properties: {
+                                                type: {
+                                                  type: 'string',
+                                                  const: 'link',
+                                                },
+                                                value: {
+                                                  type: 'string',
+                                                  description: 'URL to open.',
+                                                },
+                                                operation: {
+                                                  type: 'string',
+                                                  enum: [
+                                                    'self',
+                                                    'blank',
+                                                    'router',
+                                                  ],
+                                                },
+                                              },
+                                            },
+                                          },
+                                        },
+                                      },
+                                    },
+                                    {
+                                      type: 'object',
+                                      required: ['type', 'meta'],
+                                      properties: {
+                                        uuid: {
+                                          type: ['string', 'null'],
+                                        },
+                                        type: {
+                                          type: 'string',
+                                          const: 'video',
+                                        },
+                                        meta: {
+                                          type: 'object',
+                                          required: ['type', 'src'],
+                                          properties: {
+                                            type: {
+                                              type: 'string',
+                                              const: 'url',
+                                            },
+                                            src: {
+                                              type: 'string',
+                                              description:
+                                                'Video URL, for example a YouTube, Vimeo or Loom link.',
+                                            },
+                                            style: {
+                                              type: 'object',
+                                              properties: {
+                                                radius: {
+                                                  type: 'string',
+                                                },
+                                              },
+                                            },
+                                          },
+                                        },
+                                      },
+                                    },
+                                    {
+                                      type: 'object',
+                                      required: ['type', 'meta'],
+                                      properties: {
+                                        uuid: {
+                                          type: ['string', 'null'],
+                                        },
+                                        type: {
+                                          type: 'string',
+                                          const: 'button',
+                                        },
+                                        meta: {
+                                          type: 'object',
+                                          properties: {
+                                            label: {
+                                              type: 'string',
+                                            },
+                                            buttonType: {
+                                              type: 'string',
+                                              enum: [
+                                                'primary',
+                                                'secondary',
+                                                'snooze',
+                                              ],
+                                            },
+                                            action: {
+                                              type: 'object',
+                                              required: ['type'],
+                                              properties: {
+                                                type: {
+                                                  type: 'string',
+                                                  description:
+                                                    "Common actions:\n- `step_forward`, `step_back`: go to the next or previous step.\n- `complete`: finish the guide or survey.\n- `dismiss`: close it.\n- `snooze`: hide it for a while, with optional `interval` (`hour`, `day`, `week`) and `value`.\n- `go_to_step`: jump to a step. `value` is the 0-based position of the step in the variant's `steps`, not its id.\n- `link`: open the URL in `value`; `operation` is `self` (same tab), `blank` (new tab) or `router`.\n- `nudge`: start another guide or survey. `value` is its numeric id, and `productType` is `guide` or `survey`.\n- `no_action`: no action of its own. The button still advances: to the next step, or on the last step it finishes the guide or survey. The dashboard's survey templates use it for the submit button. It does not keep the user on the step; `stay_on_step` does.\n\nButtons built in the dashboard can also use `stay_on_step`,\n`click` (`value` is a CSS selector), `callback`, `app_review`,\n`open_resource_center`, `open_ai_assistant`, `open_chat`, `document`,\n`video`, and `use_conditional_logic`. Send those back unchanged.\n",
+                                                },
+                                              },
+                                            },
+                                            grow: {
+                                              type: 'boolean',
+                                              description:
+                                                'Stretch the button to fill the footer row.',
+                                            },
+                                            width: {
+                                              type: 'string',
+                                              description:
+                                                'CSS width, for example `100%`.',
+                                            },
+                                            actions: {
+                                              type: 'object',
+                                              description:
+                                                'Optional action sequence the dashboard writes for buttons with side\neffects: `{type: "action_sequence", navigation: <action>, effects: [<action>]}`.\nWhen present, the SDK runs it instead of `action`, so update both or\nneither.\n',
+                                            },
+                                          },
+                                        },
+                                      },
+                                    },
+                                    {
+                                      type: 'object',
+                                      description:
+                                        'Free-text survey question. Put the question itself in a `markdown` block or the step `title`.',
+                                      required: ['type', 'meta'],
+                                      properties: {
+                                        uuid: {
+                                          type: ['string', 'null'],
+                                        },
+                                        type: {
+                                          type: 'string',
+                                          description:
+                                            '`survey_text` is a multi-line answer; `survey_text_short` is a single line.',
+                                          enum: [
+                                            'survey_text',
+                                            'survey_text_short',
+                                          ],
+                                        },
+                                        meta: {
+                                          type: 'object',
+                                          required: ['prompt'],
+                                          properties: {
+                                            prompt: {
+                                              type: 'string',
+                                              description:
+                                                'Placeholder shown in the empty answer field. Required; send `""` for none.',
+                                            },
+                                            label: {
+                                              type: 'string',
+                                            },
+                                            ariaLabel: {
+                                              type: 'string',
+                                            },
+                                            prefill: {
+                                              type: 'object',
+                                              description:
+                                                '`survey_text_short` only.',
+                                              required: [
+                                                'enabled',
+                                                'userProperty',
+                                              ],
+                                              properties: {
+                                                enabled: {
+                                                  type: 'boolean',
+                                                },
+                                                userProperty: {
+                                                  type: 'string',
+                                                  description:
+                                                    'User property whose value fills the answer.',
+                                                },
+                                              },
+                                            },
+                                            validation: {
+                                              type: 'object',
+                                              properties: {
+                                                required: {
+                                                  type: 'object',
+                                                  required: ['value'],
+                                                  properties: {
+                                                    value: {
+                                                      type: 'boolean',
+                                                    },
+                                                    message: {
+                                                      type: ['string', 'null'],
+                                                      description:
+                                                        'Error shown when a required question is left empty. Required when `value` is `true`.',
+                                                    },
+                                                  },
+                                                },
+                                              },
+                                            },
+                                          },
+                                        },
+                                      },
+                                    },
+                                    {
+                                      type: 'object',
+                                      description:
+                                        'Multiple-choice survey question.',
+                                      required: ['type', 'meta'],
+                                      properties: {
+                                        uuid: {
+                                          type: ['string', 'null'],
+                                        },
+                                        type: {
+                                          type: 'string',
+                                          const: 'survey_list',
+                                        },
+                                        meta: {
+                                          type: 'object',
+                                          required: [
+                                            'options',
+                                            'listType',
+                                            'displayType',
+                                          ],
+                                          properties: {
+                                            options: {
+                                              type: 'array',
+                                              items: {
+                                                type: 'string',
+                                              },
+                                            },
+                                            listType: {
+                                              type: 'string',
+                                              enum: ['single', 'multiple'],
+                                            },
+                                            displayType: {
+                                              type: 'string',
+                                              enum: [
+                                                'list',
+                                                'dropdown',
+                                                'grid',
+                                              ],
+                                            },
+                                            isOrderRandom: {
+                                              type: 'boolean',
+                                            },
+                                            otherOption: {
+                                              type: 'object',
+                                              required: [
+                                                'enabled',
+                                                'label',
+                                                'placeholderLabel',
+                                              ],
+                                              properties: {
+                                                enabled: {
+                                                  type: 'boolean',
+                                                },
+                                                label: {
+                                                  type: 'string',
+                                                },
+                                                placeholderLabel: {
+                                                  type: 'string',
+                                                },
+                                              },
+                                            },
+                                            label: {
+                                              type: 'string',
+                                            },
+                                            validation: {
+                                              type: 'object',
+                                              properties: {
+                                                required: {
+                                                  type: 'object',
+                                                  required: ['value'],
+                                                  properties: {
+                                                    value: {
+                                                      type: 'boolean',
+                                                    },
+                                                    message: {
+                                                      type: ['string', 'null'],
+                                                      description:
+                                                        'Error shown when a required question is left empty. Required when `value` is `true`.',
+                                                    },
+                                                  },
+                                                },
+                                              },
+                                            },
+                                          },
+                                        },
+                                      },
+                                    },
+                                    {
+                                      type: 'object',
+                                      description: 'Rating survey question.',
+                                      required: ['type', 'meta'],
+                                      properties: {
+                                        uuid: {
+                                          type: ['string', 'null'],
+                                        },
+                                        type: {
+                                          type: 'string',
+                                          const: 'survey_rating',
+                                        },
+                                        meta: {
+                                          type: 'object',
+                                          required: [
+                                            'type',
+                                            'options',
+                                            'lowerLabel',
+                                            'upperLabel',
+                                          ],
+                                          properties: {
+                                            type: {
+                                              type: 'string',
+                                              description:
+                                                '`nps` is a 0–10 scale and takes `options: 10`.',
+                                              enum: [
+                                                'stars',
+                                                'numbers',
+                                                'emojis',
+                                                'nps',
+                                              ],
+                                            },
+                                            options: {
+                                              type: 'integer',
+                                              description:
+                                                'Number of choices on the scale. Allowed values depend on `type`:\n`stars` 3 or 5, `numbers` 3, 5, 7 or 10, `emojis` 2, 3 or 5, and\n`nps` 10.\n',
+                                            },
+                                            emojis: {
+                                              type: 'array',
+                                              description:
+                                                'Exactly one emoji per option. Required when `type` is `emojis`.',
+                                              items: {
+                                                type: 'string',
+                                              },
+                                            },
+                                            lowerLabel: {
+                                              type: 'string',
+                                            },
+                                            upperLabel: {
+                                              type: 'string',
+                                            },
+                                            label: {
+                                              type: 'string',
+                                            },
+                                            validation: {
+                                              type: 'object',
+                                              properties: {
+                                                required: {
+                                                  type: 'object',
+                                                  required: ['value'],
+                                                  properties: {
+                                                    value: {
+                                                      type: 'boolean',
+                                                    },
+                                                    message: {
+                                                      type: ['string', 'null'],
+                                                      description:
+                                                        'Error shown when a required question is left empty. Required when `value` is `true`.',
+                                                    },
+                                                  },
+                                                },
+                                              },
+                                            },
+                                          },
+                                        },
+                                      },
+                                    },
+                                    {
+                                      type: 'object',
+                                      description:
+                                        'Not shown to the user. Adds a value to each survey response.',
+                                      required: ['type', 'meta'],
+                                      properties: {
+                                        uuid: {
+                                          type: ['string', 'null'],
+                                        },
+                                        type: {
+                                          type: 'string',
+                                          const: 'survey_hidden',
+                                        },
+                                        meta: {
+                                          type: 'object',
+                                          required: ['label', 'source'],
+                                          properties: {
+                                            label: {
+                                              type: 'string',
+                                            },
+                                            source: {
+                                              oneOf: [
+                                                {
+                                                  type: 'object',
+                                                  required: ['type', 'value'],
+                                                  properties: {
+                                                    type: {
+                                                      type: 'string',
+                                                      const: 'static',
+                                                    },
+                                                    value: {
+                                                      type: 'string',
+                                                      description:
+                                                        'The value to record.',
+                                                    },
+                                                  },
+                                                },
+                                                {
+                                                  type: 'object',
+                                                  required: [
+                                                    'type',
+                                                    'property',
+                                                  ],
+                                                  properties: {
+                                                    type: {
+                                                      type: 'string',
+                                                      const: 'event_property',
+                                                    },
+                                                    property: {
+                                                      type: 'string',
+                                                      description:
+                                                        'Property of the event that triggered the survey.',
+                                                    },
+                                                  },
+                                                },
+                                              ],
+                                            },
+                                          },
+                                        },
+                                      },
+                                    },
+                                  ],
+                                },
+                                {
+                                  type: 'object',
+                                  description:
+                                    'The step title inside a block-builder tree.',
+                                  required: ['type', 'meta'],
+                                  properties: {
+                                    uuid: {
+                                      type: ['string', 'null'],
+                                    },
+                                    type: {
+                                      type: 'string',
+                                      const: 'title',
+                                    },
+                                    meta: {
+                                      type: 'object',
+                                      required: ['value'],
+                                      properties: {
+                                        value: {
+                                          type: 'string',
+                                        },
+                                        alignment: {
+                                          type: 'string',
+                                          enum: ['start', 'center', 'end'],
+                                        },
+                                        textAnimation: {
+                                          type: 'string',
+                                          const: 'typewriter',
+                                        },
+                                      },
+                                    },
+                                  },
+                                },
+                                {
+                                  type: 'object',
+                                  description:
+                                    'Shows the step number inside a block-builder tree.',
+                                  required: ['type', 'meta'],
+                                  properties: {
+                                    uuid: {
+                                      type: ['string', 'null'],
+                                    },
+                                    type: {
+                                      type: 'string',
+                                      const: 'step_counter',
+                                    },
+                                    meta: {
+                                      type: 'object',
+                                      properties: {
+                                        format: {
+                                          type: 'string',
+                                          enum: ['numeric', 'verbose'],
+                                        },
+                                      },
+                                    },
+                                  },
+                                },
+                              ],
+                            },
+                          },
+                          id: {
+                            type: 'string',
+                            description:
+                              'Container id, unique within the step.',
+                          },
+                          direction: {
+                            type: 'string',
+                            enum: ['row', 'column'],
+                          },
+                          justify: {
+                            type: 'string',
+                            enum: [
+                              'start',
+                              'center',
+                              'end',
+                              'space-between',
+                              'space-around',
+                            ],
+                          },
+                          align: {
+                            type: 'string',
+                            enum: ['start', 'center', 'end'],
+                          },
+                          gap: {
+                            type: 'string',
+                            description: 'CSS length, for example `8px`.',
+                          },
+                          padding: {
+                            type: 'string',
+                          },
+                          margin: {
+                            type: 'string',
+                          },
+                          pinned: {
+                            type: 'boolean',
+                          },
+                          wrap: {
+                            type: 'boolean',
+                          },
+                          overflow: {
+                            type: 'string',
+                            enum: ['auto', 'hidden'],
+                          },
+                          minHeight: {
+                            type: 'string',
+                          },
+                          width: {
+                            type: 'string',
+                          },
+                        },
+                      },
+                      {
+                        type: 'null',
+                      },
+                    ],
                   },
                   sort_key: {
                     type: ['integer', 'null'],
+                    description:
+                      'Ignored on input. Steps are shown in the order of `steps`.',
                   },
                 },
               },
             },
           },
         },
+        example: [
+          {
+            variant: 'treatment-nps',
+            steps: [
+              {
+                title:
+                  'How likely are you to recommend us to a friend or colleague?',
+                form_factor: {
+                  type: 'popover',
+                  position: 'center',
+                  footerLayout: 'split',
+                  titleAlignment: 'start',
+                  contentAlignment: 'start',
+                },
+                content: [
+                  {
+                    type: 'survey_rating',
+                    meta: {
+                      type: 'nps',
+                      options: 10,
+                      lowerLabel: 'Not likely at all',
+                      upperLabel: 'Extremely likely',
+                    },
+                  },
+                  {
+                    type: 'button',
+                    meta: {
+                      label: 'Submit',
+                      buttonType: 'primary',
+                      action: {
+                        type: 'no_action',
+                      },
+                    },
+                  },
+                ],
+              },
+            ],
+          },
+        ],
       },
     ],
   },
@@ -6643,6 +10075,15 @@ export const CLI_OPERATIONS = [
         description:
           'When true, return the latest draft (unpublished edits) when one exists.\nDefault false returns the live published survey.\n',
       },
+      {
+        name: 'include_translations',
+        in: 'query',
+        required: false,
+        aliases: ['include-translations', 'include_translations'],
+        type: 'boolean',
+        description:
+          "When true, add `localization` (the project's default locale and other\nlocales) and each variant's `translations` and `translation_status`.\nRead with `include_unpublished_changes=true` before writing\ntranslations, so keys and `latest_version` match the draft. When\nlocalization is disabled in the project settings, only\n`localization: {enabled: false}` is added.\n",
+      },
     ],
     body: [],
   },
@@ -6654,7 +10095,7 @@ export const CLI_OPERATIONS = [
     requiredScopes: ['surveys:write'],
     summary: 'Update survey',
     description:
-      'Updates metadata, targeting, and content variants. For published surveys,\nchanges apply to a draft until publish in the UI. `latest_version` is\nrequired and must match the current draft, otherwise the update returns\n`409`. The check runs before the write rather than atomically with it, so it\nreduces but does not fully prevent lost updates from concurrent writers.\nPublish, schedule, and test instrumentation are not\navailable via API in v1. Status fields on the response are derived read-only.\nWhen `variants` is sent, it must list every existing variant by `id` with\nits unchanged `variant` key; steps within a variant can be added, edited,\nreordered, or removed. `tags` is not writable in v1 and returns `400`.\n',
+      'Updates metadata, targeting, and content variants. For published surveys,\nchanges apply to a draft until publish in the UI. `latest_version` is\nrequired and must match the current draft, otherwise the update returns\n`409`. The check runs before the write rather than atomically with it, so it\nreduces but does not fully prevent lost updates from concurrent writers.\nPublish, schedule, and test instrumentation are not\navailable via API in v1. Status fields on the response are derived read-only.\nWhen `variants` is sent, it must list every existing variant by `id` with\nits unchanged `variant` key; steps within a variant can be added, edited,\nreordered, or removed. `tags` is not writable in v1 and returns `400`.\n\nTo add, change, or clear translations, send\n`variants: [{"id": "<variant id>", "translations": {...}}]`. Entries\nthat carry only `id` and `translations` may name a subset of the variants\nand need no `variant` key. `translations` maps locale to translation key to\ntext. Take the keys and their default-locale text from\n`translation_status.sources` on a `GET` with\n`include_translations=true&include_unpublished_changes=true`. Translations\nmerge into what is stored: keys you leave out keep their text, `null`\nclears a key, and `null` for a locale clears every key in it. Only steps\nand blocks that already exist can be translated, so add new content\nfirst, then translate it in a later request. The default locale is edited\nthrough the survey content, not `translations`. When the request sends\ntranslations, the response includes `localization`, `translations`, and\n`translation_status`. Translations return `400` when localization is\ndisabled in the project settings or the locale isn\'t one of the\nproject\'s locales.\n',
     successStatus: 200,
     parameters: [
       {
@@ -6727,7 +10168,7 @@ export const CLI_OPERATIONS = [
         items: {
           type: 'object',
           description:
-            'One page rule. An empty list means every page. Keys stay camelCase, and\nno other keys are allowed.\n',
+            'One page rule. An empty list means every page. Keys stay camelCase, and\nno other keys are allowed. Send `url: ""` with `domSelector`.\n',
           required: ['url', 'matchType', 'isExclude'],
           properties: {
             url: {
@@ -6744,8 +10185,6 @@ export const CLI_OPERATIONS = [
                 'startsWith',
                 'endsWith',
                 'regex',
-                'domId',
-                'domClassname',
                 'domSelector',
               ],
             },
@@ -6761,7 +10200,7 @@ export const CLI_OPERATIONS = [
             value: {
               type: 'string',
               description:
-                'Element ID, class name, or selector. Required for `domId`,\n`domClassname`, and `domSelector`, which are web only.\n',
+                'CSS selector of an element that must be on the page. Required for\n`domSelector`, which is web only.\n',
             },
           },
         },
@@ -6779,7 +10218,7 @@ export const CLI_OPERATIONS = [
         items: {
           type: 'object',
           description:
-            'One page rule. An empty list means every page. Keys stay camelCase, and\nno other keys are allowed.\n',
+            'One page rule. An empty list means every page. Keys stay camelCase, and\nno other keys are allowed. Send `url: ""` with `domSelector`.\n',
           required: ['url', 'matchType', 'isExclude'],
           properties: {
             url: {
@@ -6796,8 +10235,6 @@ export const CLI_OPERATIONS = [
                 'startsWith',
                 'endsWith',
                 'regex',
-                'domId',
-                'domClassname',
                 'domSelector',
               ],
             },
@@ -6813,7 +10250,7 @@ export const CLI_OPERATIONS = [
             value: {
               type: 'string',
               description:
-                'Element ID, class name, or selector. Required for `domId`,\n`domClassname`, and `domSelector`, which are web only.\n',
+                'CSS selector of an element that must be on the page. Required for\n`domSelector`, which is web only.\n',
             },
           },
         },
@@ -6835,7 +10272,7 @@ export const CLI_OPERATIONS = [
         type: 'object',
         nullable: false,
         description:
-          'When the guide or survey appears. One trigger, or an array of triggers\nwhere any match fires it. Nested keys keep their stored names (`selector`,\n`event`, `event_count`, `delay`). Optional `filters` and\n`sessionPropertyFilters` are accepted and passed through.\n',
+          'When the guide or survey appears. One trigger, or an array of triggers\nwhere any match fires it. Nested keys keep their stored names (`selector`,\n`event`, `event_count`, `delay`, `filters`). Don\'t send `null`: the dashboard can\'t open a\nguide or survey without a trigger. Send `{"type": "immediately"}` to\nshow right away.\n',
         schema: {
           oneOf: [
             {
@@ -6875,7 +10312,53 @@ export const CLI_OPERATIONS = [
                         delay: {
                           type: 'number',
                           description:
-                            'Milliseconds to wait after the trigger fires.',
+                            'Milliseconds to wait after the trigger fires. Omit it rather than sending null.',
+                          minimum: 0,
+                        },
+                        sessionPropertyFilters: {
+                          type: 'array',
+                          description:
+                            'Session property conditions. The inner arrays are AND groups, and\nthe outer array ORs them.\n',
+                          items: {
+                            type: 'array',
+                            items: {
+                              type: 'object',
+                              description: 'One property condition.',
+                              required: [
+                                'subprop_key',
+                                'subprop_op',
+                                'subprop_value',
+                              ],
+                              properties: {
+                                subprop_key: {
+                                  type: 'string',
+                                  description: 'Property name.',
+                                  minLength: 1,
+                                },
+                                subprop_op: {
+                                  type: 'string',
+                                  description:
+                                    'Comparison operator, for example `is`, `is not`, or `contains`.',
+                                },
+                                subprop_value: {
+                                  type: 'array',
+                                  description: 'Values to compare against.',
+                                  minItems: 1,
+                                  items: {
+                                    type: 'string',
+                                  },
+                                },
+                                subprop_type: {
+                                  type: ['string', 'null'],
+                                  description:
+                                    'Property type, for example `event` or `user`.',
+                                },
+                                group_type: {
+                                  type: ['string', 'null'],
+                                },
+                              },
+                            },
+                          },
                         },
                       },
                     },
@@ -6903,6 +10386,7 @@ export const CLI_OPERATIONS = [
                           type: 'number',
                           description:
                             'Milliseconds to wait after the element appears or is clicked.',
+                          minimum: 0,
                         },
                       },
                     },
@@ -6930,11 +10414,55 @@ export const CLI_OPERATIONS = [
                           type: 'integer',
                           description:
                             'Times the event must occur. Omitted means once.',
+                          minimum: 1,
                         },
                         delay: {
                           type: 'number',
                           description:
                             'Milliseconds to wait after the event count is reached.',
+                          minimum: 0,
+                        },
+                        filters: {
+                          type: 'array',
+                          description:
+                            'Event property conditions. Every condition must match.',
+                          items: {
+                            type: 'object',
+                            description: 'One property condition.',
+                            required: [
+                              'subprop_key',
+                              'subprop_op',
+                              'subprop_value',
+                            ],
+                            properties: {
+                              subprop_key: {
+                                type: 'string',
+                                description: 'Property name.',
+                                minLength: 1,
+                              },
+                              subprop_op: {
+                                type: 'string',
+                                description:
+                                  'Comparison operator, for example `is`, `is not`, or `contains`.',
+                              },
+                              subprop_value: {
+                                type: 'array',
+                                description: 'Values to compare against.',
+                                minItems: 1,
+                                items: {
+                                  type: 'string',
+                                },
+                              },
+                              subprop_type: {
+                                type: ['string', 'null'],
+                                description:
+                                  'Property type, for example `event` or `user`.',
+                              },
+                              group_type: {
+                                type: ['string', 'null'],
+                              },
+                            },
+                          },
                         },
                       },
                     },
@@ -6971,6 +10499,7 @@ export const CLI_OPERATIONS = [
             },
             {
               type: 'array',
+              minItems: 1,
               items: {
                 description:
                   'One trigger. `type` selects which fields `data` uses.',
@@ -7008,7 +10537,53 @@ export const CLI_OPERATIONS = [
                           delay: {
                             type: 'number',
                             description:
-                              'Milliseconds to wait after the trigger fires.',
+                              'Milliseconds to wait after the trigger fires. Omit it rather than sending null.',
+                            minimum: 0,
+                          },
+                          sessionPropertyFilters: {
+                            type: 'array',
+                            description:
+                              'Session property conditions. The inner arrays are AND groups, and\nthe outer array ORs them.\n',
+                            items: {
+                              type: 'array',
+                              items: {
+                                type: 'object',
+                                description: 'One property condition.',
+                                required: [
+                                  'subprop_key',
+                                  'subprop_op',
+                                  'subprop_value',
+                                ],
+                                properties: {
+                                  subprop_key: {
+                                    type: 'string',
+                                    description: 'Property name.',
+                                    minLength: 1,
+                                  },
+                                  subprop_op: {
+                                    type: 'string',
+                                    description:
+                                      'Comparison operator, for example `is`, `is not`, or `contains`.',
+                                  },
+                                  subprop_value: {
+                                    type: 'array',
+                                    description: 'Values to compare against.',
+                                    minItems: 1,
+                                    items: {
+                                      type: 'string',
+                                    },
+                                  },
+                                  subprop_type: {
+                                    type: ['string', 'null'],
+                                    description:
+                                      'Property type, for example `event` or `user`.',
+                                  },
+                                  group_type: {
+                                    type: ['string', 'null'],
+                                  },
+                                },
+                              },
+                            },
                           },
                         },
                       },
@@ -7036,6 +10611,7 @@ export const CLI_OPERATIONS = [
                             type: 'number',
                             description:
                               'Milliseconds to wait after the element appears or is clicked.',
+                            minimum: 0,
                           },
                         },
                       },
@@ -7063,11 +10639,55 @@ export const CLI_OPERATIONS = [
                             type: 'integer',
                             description:
                               'Times the event must occur. Omitted means once.',
+                            minimum: 1,
                           },
                           delay: {
                             type: 'number',
                             description:
                               'Milliseconds to wait after the event count is reached.',
+                            minimum: 0,
+                          },
+                          filters: {
+                            type: 'array',
+                            description:
+                              'Event property conditions. Every condition must match.',
+                            items: {
+                              type: 'object',
+                              description: 'One property condition.',
+                              required: [
+                                'subprop_key',
+                                'subprop_op',
+                                'subprop_value',
+                              ],
+                              properties: {
+                                subprop_key: {
+                                  type: 'string',
+                                  description: 'Property name.',
+                                  minLength: 1,
+                                },
+                                subprop_op: {
+                                  type: 'string',
+                                  description:
+                                    'Comparison operator, for example `is`, `is not`, or `contains`.',
+                                },
+                                subprop_value: {
+                                  type: 'array',
+                                  description: 'Values to compare against.',
+                                  minItems: 1,
+                                  items: {
+                                    type: 'string',
+                                  },
+                                },
+                                subprop_type: {
+                                  type: ['string', 'null'],
+                                  description:
+                                    'Property type, for example `event` or `user`.',
+                                },
+                                group_type: {
+                                  type: ['string', 'null'],
+                                },
+                              },
+                            },
                           },
                         },
                       },
@@ -7113,7 +10733,7 @@ export const CLI_OPERATIONS = [
         type: 'object',
         nullable: false,
         description:
-          'How often the guide or survey may show again. `periodCount` is camelCase;\nthe other keys are snake_case.\n',
+          'How often the guide or survey may show again. `periodCount` is camelCase;\nthe other keys are snake_case. Send the whole object, not `null`.\n',
         schema: {
           type: 'object',
           required: [
@@ -7135,8 +10755,10 @@ export const CLI_OPERATIONS = [
                   type: 'boolean',
                 },
                 value: {
-                  type: 'number',
-                  description: 'Stop after this many survey responses.',
+                  type: 'integer',
+                  description:
+                    'Stop after this many survey responses. Required when `enabled` is true.',
+                  minimum: 1,
                 },
               },
             },
@@ -7147,12 +10769,15 @@ export const CLI_OPERATIONS = [
                 required: ['max', 'period'],
                 properties: {
                   max: {
-                    type: 'number',
+                    type: 'integer',
                     description: 'Maximum impressions in the period.',
+                    minimum: 1,
                   },
                   periodCount: {
-                    type: 'number',
-                    description: 'How many `period`s the limit covers.',
+                    type: 'integer',
+                    description:
+                      'How many `period`s the limit covers. Omitted means 1.',
+                    minimum: 1,
                   },
                   period: {
                     type: 'string',
@@ -7163,12 +10788,16 @@ export const CLI_OPERATIONS = [
             },
             even_distribution: {
               type: 'object',
+              required: ['enabled', 'recurrence_period_days'],
               properties: {
                 enabled: {
                   type: 'boolean',
                 },
                 recurrence_period_days: {
-                  type: 'number',
+                  type: 'integer',
+                  description:
+                    'Days over which impressions are spread evenly. Always required when `even_distribution` is sent.',
+                  minimum: 1,
                 },
               },
             },
@@ -7214,6 +10843,7 @@ export const CLI_OPERATIONS = [
             value: {
               type: 'number',
               description: 'Number of intervals.',
+              exclusiveMinimum: 0,
             },
           },
         },
@@ -7223,14 +10853,15 @@ export const CLI_OPERATIONS = [
         required: false,
         aliases: ['snooze-label', 'snooze_label'],
         type: 'string',
-        nullable: true,
+        nullable: false,
+        description: 'Snooze button label.',
       },
       {
         name: 'template_source',
         required: false,
         aliases: ['template-source', 'template_source'],
         type: 'string',
-        nullable: true,
+        nullable: false,
       },
       {
         name: 'show_step_counter',
@@ -7244,7 +10875,9 @@ export const CLI_OPERATIONS = [
         required: false,
         aliases: ['step-counter-format', 'step_counter_format'],
         type: 'string',
-        nullable: true,
+        nullable: false,
+        enum: ['numeric', 'verbose'],
+        description: '`numeric` shows "1/3"; `verbose` shows "Step 1 of 3".',
       },
       {
         name: 'tags',
@@ -7265,30 +10898,40 @@ export const CLI_OPERATIONS = [
         items: {
           type: 'object',
           description:
-            "Variant payload on create/update. `id` is optional — omit for new variants;\ninclude when updating an existing variant row. A negative `id` is a variant\nadded to a published guide or survey's draft that has not been published yet.\n`variant` key is required.\n",
-          required: ['variant'],
+            'Variant payload on update. `id` names an existing variant. `variant` may be\nomitted; when sent it must equal the stored key. An entry that carries only\n`id` and `translations` is translation-only: a list made of\ntranslation-only entries may name a subset of the variants. Any other\nfield on any entry makes it a content update, which must list every\nvariant.\n',
           properties: {
             id: {
               type: 'string',
             },
             variant: {
               type: 'string',
-              description: 'Variant key within the nudge.',
+              description:
+                "Variant key within the nudge: lowercase letters, digits, `-` and `_`.\nKeys must be unique. `off` is reserved, and `control` can't be given to\na new variant.\n",
+              pattern: '^[a-z0-9_-]+$',
             },
             display_title: {
-              type: ['string', 'null'],
+              type: 'string',
+              description:
+                'Variant title. Omit it to leave it unchanged; `null` is rejected.',
             },
             display_description: {
               type: ['string', 'null'],
             },
             snooze_label: {
-              type: ['string', 'null'],
+              type: 'string',
+              description:
+                'Snooze button label for this variant. Omit it to leave it unchanged; `null` is rejected.',
+              maxLength: 255,
             },
             done_label: {
-              type: ['string', 'null'],
+              type: 'string',
+              description:
+                "Label of the last step's button. Omit it to leave it unchanged; `null` is rejected.",
+              maxLength: 255,
             },
             steps: {
               type: 'array',
+              minItems: 1,
               items: {
                 type: 'object',
                 description:
@@ -7298,11 +10941,14 @@ export const CLI_OPERATIONS = [
                     type: 'string',
                   },
                   title: {
-                    type: ['string', 'null'],
+                    type: 'string',
+                    description:
+                      'Step title. Omit it to leave it unchanged; `null` is rejected.',
+                    maxLength: 255,
                   },
                   form_factor: {
                     description:
-                      'Step layout. `type` selects it. Other layout keys, including `layout`,\n`footerLayout`, `contentAlignment`, and `titleAlignment`, are accepted\nand passed through.\n',
+                      "Step layout. `type` selects it. Every form factor also accepts\n`zIndexOverride` (number or null) and `textAnimation` (`typewriter`).\nModal, popover, pin, tooltip, and card accept the step layout keys\n`layout`, `mediaPosition`, `contentAlignment`, `titleAlignment`, and\n`footerLayout`; banner and checklist accept a narrower set. Tooltips and cards can't be snoozed.\n",
                     oneOf: [
                       {
                         type: 'object',
@@ -7334,6 +10980,36 @@ export const CLI_OPERATIONS = [
                           fullWidthModal: {
                             type: 'boolean',
                           },
+                          layout: {
+                            type: 'string',
+                            description:
+                              'Arrangement of media and text in the step.',
+                            enum: [
+                              'classic',
+                              'vertical',
+                              'showcase',
+                              'horizontal',
+                            ],
+                          },
+                          mediaPosition: {
+                            type: 'string',
+                            description:
+                              'Media side for the `horizontal` layout.',
+                            enum: ['left', 'right'],
+                          },
+                          contentAlignment: {
+                            type: 'string',
+                            enum: ['start', 'center', 'end'],
+                          },
+                          titleAlignment: {
+                            type: 'string',
+                            enum: ['start', 'center', 'end'],
+                          },
+                          footerLayout: {
+                            type: 'string',
+                            description: "Arrangement of the step's buttons.",
+                            enum: ['classic', 'split', 'centered', 'stacked'],
+                          },
                         },
                       },
                       {
@@ -7360,6 +11036,36 @@ export const CLI_OPERATIONS = [
                               'center',
                             ],
                           },
+                          layout: {
+                            type: 'string',
+                            description:
+                              'Arrangement of media and text in the step.',
+                            enum: [
+                              'classic',
+                              'vertical',
+                              'showcase',
+                              'horizontal',
+                            ],
+                          },
+                          mediaPosition: {
+                            type: 'string',
+                            description:
+                              'Media side for the `horizontal` layout.',
+                            enum: ['left', 'right'],
+                          },
+                          contentAlignment: {
+                            type: 'string',
+                            enum: ['start', 'center', 'end'],
+                          },
+                          titleAlignment: {
+                            type: 'string',
+                            enum: ['start', 'center', 'end'],
+                          },
+                          footerLayout: {
+                            type: 'string',
+                            description: "Arrangement of the step's buttons.",
+                            enum: ['classic', 'split', 'centered', 'stacked'],
+                          },
                         },
                       },
                       {
@@ -7383,6 +11089,22 @@ export const CLI_OPERATIONS = [
                             description:
                               'Keep the banner on screen while the page scrolls.',
                           },
+                          layout: {
+                            type: 'string',
+                            enum: ['classic', 'vertical'],
+                          },
+                          footerLayout: {
+                            type: 'string',
+                            const: 'classic',
+                          },
+                          contentAlignment: {
+                            type: 'string',
+                            enum: ['start', 'center', 'end'],
+                          },
+                          titleAlignment: {
+                            type: 'string',
+                            enum: ['start', 'center', 'end'],
+                          },
                         },
                       },
                       {
@@ -7397,9 +11119,90 @@ export const CLI_OPERATIONS = [
                             type: 'string',
                             description: 'CSS selector the pin attaches to.',
                           },
+                          anchorSelector: {
+                            type: 'object',
+                            description:
+                              'Richer element match used alongside `anchor`.',
+                            required: ['selector', 'text', 'tag', 'attributes'],
+                            properties: {
+                              selector: {
+                                type: 'string',
+                              },
+                              text: {
+                                type: 'string',
+                                description: 'Visible text of the element.',
+                              },
+                              tag: {
+                                type: 'string',
+                                description: 'HTML tag name.',
+                              },
+                              attributes: {
+                                type: 'object',
+                              },
+                              strategy: {
+                                type: 'string',
+                                enum: ['strict', 'fallback', 'selector_only'],
+                              },
+                            },
+                          },
                           position: {
                             type: 'string',
                             enum: ['auto', 'top', 'bottom', 'left', 'right'],
+                          },
+                          alignment: {
+                            type: 'string',
+                            enum: ['center', 'top', 'bottom', 'left', 'right'],
+                          },
+                          offset: {
+                            type: 'object',
+                            description: 'Both `x` and `y` are required.',
+                            required: ['x', 'y'],
+                            properties: {
+                              x: {
+                                type: 'string',
+                                description: 'CSS length, for example `0px`.',
+                              },
+                              y: {
+                                type: 'string',
+                                description: 'CSS length, for example `0px`.',
+                              },
+                            },
+                          },
+                          pointer: {
+                            type: 'object',
+                            required: ['type'],
+                            properties: {
+                              type: {
+                                type: 'string',
+                                enum: ['beacon', 'arrow'],
+                              },
+                            },
+                          },
+                          isOpenByDefault: {
+                            type: 'boolean',
+                          },
+                          openOnHover: {
+                            type: 'boolean',
+                          },
+                          isShowingMask: {
+                            type: 'boolean',
+                            description: 'Dim the rest of the page.',
+                          },
+                          canClickOutsideToClose: {
+                            type: 'boolean',
+                          },
+                          advanceTrigger: {
+                            type: 'string',
+                            description:
+                              'CSS selector whose click advances to the next step.',
+                          },
+                          disableAutoAdvanceOnClick: {
+                            type: 'boolean',
+                          },
+                          skipIfNotFound: {
+                            type: 'boolean',
+                            description:
+                              'Skip the step when the anchor is missing.',
                           },
                         },
                       },
@@ -7421,6 +11224,8 @@ export const CLI_OPERATIONS = [
                             enum: ['hover', 'click'],
                           },
                           marker: {
+                            description:
+                              'The marker users hover or click to open the tooltip. Every marker type\nalso accepts `width` (number) and `elementIsMarker` (boolean).\n',
                             oneOf: [
                               {
                                 type: 'object',
@@ -7445,13 +11250,19 @@ export const CLI_OPERATIONS = [
                                       },
                                       offset: {
                                         type: 'object',
+                                        description:
+                                          'Both `x` and `y` are required.',
                                         required: ['x', 'y'],
                                         properties: {
                                           x: {
                                             type: 'string',
+                                            description:
+                                              'CSS length, for example `0px`.',
                                           },
                                           y: {
                                             type: 'string',
+                                            description:
+                                              'CSS length, for example `0px`.',
                                           },
                                         },
                                       },
@@ -7493,13 +11304,19 @@ export const CLI_OPERATIONS = [
                                       },
                                       offset: {
                                         type: 'object',
+                                        description:
+                                          'Both `x` and `y` are required.',
                                         required: ['x', 'y'],
                                         properties: {
                                           x: {
                                             type: 'string',
+                                            description:
+                                              'CSS length, for example `0px`.',
                                           },
                                           y: {
                                             type: 'string',
+                                            description:
+                                              'CSS length, for example `0px`.',
                                           },
                                         },
                                       },
@@ -7534,13 +11351,19 @@ export const CLI_OPERATIONS = [
                                       },
                                       offset: {
                                         type: 'object',
+                                        description:
+                                          'Both `x` and `y` are required.',
                                         required: ['x', 'y'],
                                         properties: {
                                           x: {
                                             type: 'string',
+                                            description:
+                                              'CSS length, for example `0px`.',
                                           },
                                           y: {
                                             type: 'string',
+                                            description:
+                                              'CSS length, for example `0px`.',
                                           },
                                         },
                                       },
@@ -7549,6 +11372,42 @@ export const CLI_OPERATIONS = [
                                 },
                               },
                             ],
+                          },
+                          anchorSelector: {
+                            type: 'object',
+                            description:
+                              'Richer element match used alongside `anchor`.',
+                            required: ['selector', 'text', 'tag', 'attributes'],
+                            properties: {
+                              selector: {
+                                type: 'string',
+                              },
+                              text: {
+                                type: 'string',
+                                description: 'Visible text of the element.',
+                              },
+                              tag: {
+                                type: 'string',
+                                description: 'HTML tag name.',
+                              },
+                              attributes: {
+                                type: 'object',
+                              },
+                              strategy: {
+                                type: 'string',
+                                enum: ['strict', 'fallback', 'selector_only'],
+                              },
+                            },
+                          },
+                          pointer: {
+                            type: 'object',
+                            required: ['type'],
+                            properties: {
+                              type: {
+                                type: 'string',
+                                enum: ['arrow', 'none'],
+                              },
+                            },
                           },
                         },
                       },
@@ -7574,6 +11433,82 @@ export const CLI_OPERATIONS = [
                               'after',
                             ],
                           },
+                          anchorSelector: {
+                            type: 'object',
+                            description:
+                              'Richer element match used alongside `anchor`.',
+                            required: ['selector', 'text', 'tag', 'attributes'],
+                            properties: {
+                              selector: {
+                                type: 'string',
+                              },
+                              text: {
+                                type: 'string',
+                                description: 'Visible text of the element.',
+                              },
+                              tag: {
+                                type: 'string',
+                                description: 'HTML tag name.',
+                              },
+                              attributes: {
+                                type: 'object',
+                              },
+                              strategy: {
+                                type: 'string',
+                                enum: ['strict', 'fallback', 'selector_only'],
+                              },
+                            },
+                          },
+                          alignment: {
+                            type: 'string',
+                            enum: ['start', 'center', 'end'],
+                          },
+                          cardWidth: {
+                            type: 'object',
+                            required: ['type'],
+                            properties: {
+                              type: {
+                                type: 'string',
+                                enum: ['auto', 'fixed', 'full'],
+                              },
+                              value: {
+                                type: 'number',
+                                description: 'Pixels, used with `fixed`.',
+                              },
+                            },
+                          },
+                          cardHeight: {
+                            type: 'object',
+                            required: ['type'],
+                            properties: {
+                              type: {
+                                type: 'string',
+                                enum: ['auto', 'fixed', 'full'],
+                              },
+                              value: {
+                                type: 'number',
+                                description: 'Pixels, used with `fixed`.',
+                              },
+                            },
+                          },
+                          cardMargin: {
+                            type: 'object',
+                            required: ['top', 'right', 'bottom', 'left'],
+                            properties: {
+                              top: {
+                                type: 'number',
+                              },
+                              right: {
+                                type: 'number',
+                              },
+                              bottom: {
+                                type: 'number',
+                              },
+                              left: {
+                                type: 'number',
+                              },
+                            },
+                          },
                         },
                       },
                       {
@@ -7584,6 +11519,14 @@ export const CLI_OPERATIONS = [
                             type: 'string',
                             const: 'checklist',
                           },
+                          layout: {
+                            type: 'string',
+                            const: 'classic',
+                          },
+                          footerLayout: {
+                            type: 'string',
+                            const: 'classic',
+                          },
                         },
                       },
                     ],
@@ -7591,7 +11534,7 @@ export const CLI_OPERATIONS = [
                   content: {
                     type: 'array',
                     description:
-                      "The step body: content blocks rendered top to bottom, below the step\n`title`. `meta` keys are camelCase. Give each new block a unique `uuid`\n(a v4 UUID) and keep the existing `uuid` when you edit a block, because\nsurvey responses are keyed by it. To change one block, send the step's\nwhole `content` array back with that block edited.\n",
+                      "The step body: content blocks rendered top to bottom, below the step\n`title`. `meta` keys are camelCase. Keep a block's existing `uuid` when\nyou edit it, because survey responses are keyed by it; a block sent\nwithout one (or with `null`) is given one on save. To change one block,\nsend the step's whole `content` array back with that block edited. Send\n`[]` for an empty step, not `null`.\n\nA step can have at most one `markdown` block, one `image` or one `video`\n(not both), two buttons, ten survey questions, and ten `survey_hidden`\nfields. Survey question blocks are only allowed in surveys, and only on\nsteps with the `classic` or `vertical` layout. A checklist item can have\nat most one button. A snooze button needs the variant's `snooze_label`.\n",
                     items: {
                       description:
                         'One content block. `type` selects the block and the shape of `meta`.',
@@ -7599,10 +11542,10 @@ export const CLI_OPERATIONS = [
                         {
                           type: 'object',
                           description: 'Body text.',
-                          required: ['uuid', 'type', 'meta'],
+                          required: ['type', 'meta'],
                           properties: {
                             uuid: {
-                              type: 'string',
+                              type: ['string', 'null'],
                             },
                             type: {
                               type: 'string',
@@ -7621,16 +11564,20 @@ export const CLI_OPERATIONS = [
                                   type: 'string',
                                   enum: ['start', 'center', 'end'],
                                 },
+                                textAnimation: {
+                                  type: 'string',
+                                  const: 'typewriter',
+                                },
                               },
                             },
                           },
                         },
                         {
                           type: 'object',
-                          required: ['uuid', 'type', 'meta'],
+                          required: ['type', 'meta'],
                           properties: {
                             uuid: {
-                              type: 'string',
+                              type: ['string', 'null'],
                             },
                             type: {
                               type: 'string',
@@ -7674,7 +11621,22 @@ export const CLI_OPERATIONS = [
                                 action: {
                                   type: 'object',
                                   description:
-                                    'Optional `link` action opened when the image is clicked.',
+                                    'Optional link opened when the image is clicked. No other action type is allowed.',
+                                  required: ['type', 'value'],
+                                  properties: {
+                                    type: {
+                                      type: 'string',
+                                      const: 'link',
+                                    },
+                                    value: {
+                                      type: 'string',
+                                      description: 'URL to open.',
+                                    },
+                                    operation: {
+                                      type: 'string',
+                                      enum: ['self', 'blank', 'router'],
+                                    },
+                                  },
                                 },
                               },
                             },
@@ -7682,10 +11644,10 @@ export const CLI_OPERATIONS = [
                         },
                         {
                           type: 'object',
-                          required: ['uuid', 'type', 'meta'],
+                          required: ['type', 'meta'],
                           properties: {
                             uuid: {
-                              type: 'string',
+                              type: ['string', 'null'],
                             },
                             type: {
                               type: 'string',
@@ -7718,10 +11680,10 @@ export const CLI_OPERATIONS = [
                         },
                         {
                           type: 'object',
-                          required: ['uuid', 'type', 'meta'],
+                          required: ['type', 'meta'],
                           properties: {
                             uuid: {
-                              type: 'string',
+                              type: ['string', 'null'],
                             },
                             type: {
                               type: 'string',
@@ -7744,9 +11706,18 @@ export const CLI_OPERATIONS = [
                                     type: {
                                       type: 'string',
                                       description:
-                                        'Common actions:\n- `step_forward`, `step_back`: go to the next or previous step.\n- `complete`: finish the guide or survey.\n- `dismiss`: close it.\n- `snooze`: hide it for a while, with optional `interval` (`hour`, `day`, `week`) and `value`.\n- `go_to_step`: jump to the step whose id is in `value`.\n- `link`: open the URL in `value`; `operation` is `self` (same tab), `blank` (new tab) or `router`.\n- `nudge`: start the guide or survey whose id is in `value`.\n- `no_action`: do nothing.\n\nButtons built in the dashboard can use other action types. Send those\nback unchanged.\n',
+                                        "Common actions:\n- `step_forward`, `step_back`: go to the next or previous step.\n- `complete`: finish the guide or survey.\n- `dismiss`: close it.\n- `snooze`: hide it for a while, with optional `interval` (`hour`, `day`, `week`) and `value`.\n- `go_to_step`: jump to a step. `value` is the 0-based position of the step in the variant's `steps`, not its id.\n- `link`: open the URL in `value`; `operation` is `self` (same tab), `blank` (new tab) or `router`.\n- `nudge`: start another guide or survey. `value` is its numeric id, and `productType` is `guide` or `survey`.\n- `no_action`: no action of its own. The button still advances: to the next step, or on the last step it finishes the guide or survey. The dashboard's survey templates use it for the submit button. It does not keep the user on the step; `stay_on_step` does.\n\nButtons built in the dashboard can also use `stay_on_step`,\n`click` (`value` is a CSS selector), `callback`, `app_review`,\n`open_resource_center`, `open_ai_assistant`, `open_chat`, `document`,\n`video`, and `use_conditional_logic`. Send those back unchanged.\n",
                                     },
                                   },
+                                },
+                                grow: {
+                                  type: 'boolean',
+                                  description:
+                                    'Stretch the button to fill the footer row.',
+                                },
+                                width: {
+                                  type: 'string',
+                                  description: 'CSS width, for example `100%`.',
                                 },
                                 actions: {
                                   type: 'object',
@@ -7761,10 +11732,10 @@ export const CLI_OPERATIONS = [
                           type: 'object',
                           description:
                             'Free-text survey question. Put the question itself in a `markdown` block or the step `title`.',
-                          required: ['uuid', 'type', 'meta'],
+                          required: ['type', 'meta'],
                           properties: {
                             uuid: {
-                              type: 'string',
+                              type: ['string', 'null'],
                             },
                             type: {
                               type: 'string',
@@ -7779,10 +11750,28 @@ export const CLI_OPERATIONS = [
                                 prompt: {
                                   type: 'string',
                                   description:
-                                    'Placeholder shown in the empty answer field.',
+                                    'Placeholder shown in the empty answer field. Required; send `""` for none.',
                                 },
                                 label: {
                                   type: 'string',
+                                },
+                                ariaLabel: {
+                                  type: 'string',
+                                },
+                                prefill: {
+                                  type: 'object',
+                                  description: '`survey_text_short` only.',
+                                  required: ['enabled', 'userProperty'],
+                                  properties: {
+                                    enabled: {
+                                      type: 'boolean',
+                                    },
+                                    userProperty: {
+                                      type: 'string',
+                                      description:
+                                        'User property whose value fills the answer.',
+                                    },
+                                  },
                                 },
                                 validation: {
                                   type: 'object',
@@ -7810,10 +11799,10 @@ export const CLI_OPERATIONS = [
                         {
                           type: 'object',
                           description: 'Multiple-choice survey question.',
-                          required: ['uuid', 'type', 'meta'],
+                          required: ['type', 'meta'],
                           properties: {
                             uuid: {
-                              type: 'string',
+                              type: ['string', 'null'],
                             },
                             type: {
                               type: 'string',
@@ -7888,10 +11877,10 @@ export const CLI_OPERATIONS = [
                         {
                           type: 'object',
                           description: 'Rating survey question.',
-                          required: ['uuid', 'type', 'meta'],
+                          required: ['type', 'meta'],
                           properties: {
                             uuid: {
-                              type: 'string',
+                              type: ['string', 'null'],
                             },
                             type: {
                               type: 'string',
@@ -7908,18 +11897,19 @@ export const CLI_OPERATIONS = [
                               properties: {
                                 type: {
                                   type: 'string',
-                                  description: '`nps` is a 0–10 scale.',
+                                  description:
+                                    '`nps` is a 0–10 scale and takes `options: 10`.',
                                   enum: ['stars', 'numbers', 'emojis', 'nps'],
                                 },
                                 options: {
                                   type: 'integer',
                                   description:
-                                    'Number of choices on the scale.',
+                                    'Number of choices on the scale. Allowed values depend on `type`:\n`stars` 3 or 5, `numbers` 3, 5, 7 or 10, `emojis` 2, 3 or 5, and\n`nps` 10.\n',
                                 },
                                 emojis: {
                                   type: 'array',
                                   description:
-                                    'One emoji per option. Required when `type` is `emojis`.',
+                                    'Exactly one emoji per option. Required when `type` is `emojis`.',
                                   items: {
                                     type: 'string',
                                   },
@@ -7960,10 +11950,10 @@ export const CLI_OPERATIONS = [
                           type: 'object',
                           description:
                             'Not shown to the user. Adds a value to each survey response.',
-                          required: ['uuid', 'type', 'meta'],
+                          required: ['type', 'meta'],
                           properties: {
                             uuid: {
-                              type: 'string',
+                              type: ['string', 'null'],
                             },
                             type: {
                               type: 'string',
@@ -7977,24 +11967,37 @@ export const CLI_OPERATIONS = [
                                   type: 'string',
                                 },
                                 source: {
-                                  type: 'object',
-                                  required: ['type'],
-                                  properties: {
-                                    type: {
-                                      type: 'string',
-                                      enum: ['static', 'event_property'],
+                                  oneOf: [
+                                    {
+                                      type: 'object',
+                                      required: ['type', 'value'],
+                                      properties: {
+                                        type: {
+                                          type: 'string',
+                                          const: 'static',
+                                        },
+                                        value: {
+                                          type: 'string',
+                                          description: 'The value to record.',
+                                        },
+                                      },
                                     },
-                                    value: {
-                                      type: 'string',
-                                      description:
-                                        'The value to record. Used when `type` is `static`.',
+                                    {
+                                      type: 'object',
+                                      required: ['type', 'property'],
+                                      properties: {
+                                        type: {
+                                          type: 'string',
+                                          const: 'event_property',
+                                        },
+                                        property: {
+                                          type: 'string',
+                                          description:
+                                            'Property of the event that triggered the survey.',
+                                        },
+                                      },
                                     },
-                                    property: {
-                                      type: 'string',
-                                      description:
-                                        'Property of the event that triggered the survey. Used when `type` is `event_property`.',
-                                    },
-                                  },
+                                  ],
                                 },
                               },
                             },
@@ -8004,15 +12007,659 @@ export const CLI_OPERATIONS = [
                     },
                   },
                   content_v2: {
-                    type: ['object', 'null'],
                     description:
                       "Block-builder layout: a tree of `layout` containers whose `children`\nare containers or content blocks, including the step's `title` block.\nReturned only on steps built in the block builder; when present, the\ndashboard and SDK render this tree, not `title` and `content`.\n\nOn update, only accepted on resources that already have a step with a\ntree; a flat-only guide or survey can't be converted through the API.\nOn create, any step may take one, so a resource read with `content_v2`\ncan be copied. Block `uuid`s must be unique within the step. Keep a block's\nexisting `uuid` when you edit it, because survey responses are keyed by\nit; a block sent without one is given one on save. The saved tree is\nnormalized to the shape the block builder saves, and the step title is\ntaken from its `title` block. On a step with a tree, send `title` and\n`content` only together with `content_v2`. Not supported on banner or\nchecklist steps or on mobile platforms. `null` switches the step back\nto `content`.\n",
+                    oneOf: [
+                      {
+                        type: 'object',
+                        description:
+                          'A block-builder container. `children` are containers or content blocks,\nplus the `title` and `step_counter` blocks that only exist in trees.\n',
+                        required: ['type', 'children'],
+                        properties: {
+                          type: {
+                            type: 'string',
+                            const: 'layout',
+                          },
+                          children: {
+                            type: 'array',
+                            items: {
+                              oneOf: [
+                                {
+                                  type: 'object',
+                                  description:
+                                    'A block-builder container. `children` are containers or content blocks,\nplus the `title` and `step_counter` blocks that only exist in trees.\n',
+                                },
+                                {
+                                  description:
+                                    'One content block. `type` selects the block and the shape of `meta`.',
+                                  oneOf: [
+                                    {
+                                      type: 'object',
+                                      description: 'Body text.',
+                                      required: ['type', 'meta'],
+                                      properties: {
+                                        uuid: {
+                                          type: ['string', 'null'],
+                                        },
+                                        type: {
+                                          type: 'string',
+                                          const: 'markdown',
+                                        },
+                                        meta: {
+                                          type: 'object',
+                                          required: ['value'],
+                                          properties: {
+                                            value: {
+                                              type: 'string',
+                                              description:
+                                                'Markdown text. Inline HTML is allowed and is sanitized on save.',
+                                            },
+                                            alignment: {
+                                              type: 'string',
+                                              enum: ['start', 'center', 'end'],
+                                            },
+                                            textAnimation: {
+                                              type: 'string',
+                                              const: 'typewriter',
+                                            },
+                                          },
+                                        },
+                                      },
+                                    },
+                                    {
+                                      type: 'object',
+                                      required: ['type', 'meta'],
+                                      properties: {
+                                        uuid: {
+                                          type: ['string', 'null'],
+                                        },
+                                        type: {
+                                          type: 'string',
+                                          const: 'image',
+                                        },
+                                        meta: {
+                                          type: 'object',
+                                          required: ['src', 'filename', 'size'],
+                                          properties: {
+                                            src: {
+                                              type: 'string',
+                                              description: 'Image URL.',
+                                            },
+                                            filename: {
+                                              type: 'string',
+                                            },
+                                            size: {
+                                              type: 'string',
+                                            },
+                                            altText: {
+                                              type: 'string',
+                                            },
+                                            style: {
+                                              type: 'object',
+                                              properties: {
+                                                scale: {
+                                                  type: 'string',
+                                                },
+                                                radius: {
+                                                  type: 'string',
+                                                },
+                                                fit: {
+                                                  type: 'string',
+                                                  enum: ['cover', 'contain'],
+                                                },
+                                                height: {
+                                                  type: 'string',
+                                                },
+                                              },
+                                            },
+                                            action: {
+                                              type: 'object',
+                                              description:
+                                                'Optional link opened when the image is clicked. No other action type is allowed.',
+                                              required: ['type', 'value'],
+                                              properties: {
+                                                type: {
+                                                  type: 'string',
+                                                  const: 'link',
+                                                },
+                                                value: {
+                                                  type: 'string',
+                                                  description: 'URL to open.',
+                                                },
+                                                operation: {
+                                                  type: 'string',
+                                                  enum: [
+                                                    'self',
+                                                    'blank',
+                                                    'router',
+                                                  ],
+                                                },
+                                              },
+                                            },
+                                          },
+                                        },
+                                      },
+                                    },
+                                    {
+                                      type: 'object',
+                                      required: ['type', 'meta'],
+                                      properties: {
+                                        uuid: {
+                                          type: ['string', 'null'],
+                                        },
+                                        type: {
+                                          type: 'string',
+                                          const: 'video',
+                                        },
+                                        meta: {
+                                          type: 'object',
+                                          required: ['type', 'src'],
+                                          properties: {
+                                            type: {
+                                              type: 'string',
+                                              const: 'url',
+                                            },
+                                            src: {
+                                              type: 'string',
+                                              description:
+                                                'Video URL, for example a YouTube, Vimeo or Loom link.',
+                                            },
+                                            style: {
+                                              type: 'object',
+                                              properties: {
+                                                radius: {
+                                                  type: 'string',
+                                                },
+                                              },
+                                            },
+                                          },
+                                        },
+                                      },
+                                    },
+                                    {
+                                      type: 'object',
+                                      required: ['type', 'meta'],
+                                      properties: {
+                                        uuid: {
+                                          type: ['string', 'null'],
+                                        },
+                                        type: {
+                                          type: 'string',
+                                          const: 'button',
+                                        },
+                                        meta: {
+                                          type: 'object',
+                                          properties: {
+                                            label: {
+                                              type: 'string',
+                                            },
+                                            buttonType: {
+                                              type: 'string',
+                                              enum: [
+                                                'primary',
+                                                'secondary',
+                                                'snooze',
+                                              ],
+                                            },
+                                            action: {
+                                              type: 'object',
+                                              required: ['type'],
+                                              properties: {
+                                                type: {
+                                                  type: 'string',
+                                                  description:
+                                                    "Common actions:\n- `step_forward`, `step_back`: go to the next or previous step.\n- `complete`: finish the guide or survey.\n- `dismiss`: close it.\n- `snooze`: hide it for a while, with optional `interval` (`hour`, `day`, `week`) and `value`.\n- `go_to_step`: jump to a step. `value` is the 0-based position of the step in the variant's `steps`, not its id.\n- `link`: open the URL in `value`; `operation` is `self` (same tab), `blank` (new tab) or `router`.\n- `nudge`: start another guide or survey. `value` is its numeric id, and `productType` is `guide` or `survey`.\n- `no_action`: no action of its own. The button still advances: to the next step, or on the last step it finishes the guide or survey. The dashboard's survey templates use it for the submit button. It does not keep the user on the step; `stay_on_step` does.\n\nButtons built in the dashboard can also use `stay_on_step`,\n`click` (`value` is a CSS selector), `callback`, `app_review`,\n`open_resource_center`, `open_ai_assistant`, `open_chat`, `document`,\n`video`, and `use_conditional_logic`. Send those back unchanged.\n",
+                                                },
+                                              },
+                                            },
+                                            grow: {
+                                              type: 'boolean',
+                                              description:
+                                                'Stretch the button to fill the footer row.',
+                                            },
+                                            width: {
+                                              type: 'string',
+                                              description:
+                                                'CSS width, for example `100%`.',
+                                            },
+                                            actions: {
+                                              type: 'object',
+                                              description:
+                                                'Optional action sequence the dashboard writes for buttons with side\neffects: `{type: "action_sequence", navigation: <action>, effects: [<action>]}`.\nWhen present, the SDK runs it instead of `action`, so update both or\nneither.\n',
+                                            },
+                                          },
+                                        },
+                                      },
+                                    },
+                                    {
+                                      type: 'object',
+                                      description:
+                                        'Free-text survey question. Put the question itself in a `markdown` block or the step `title`.',
+                                      required: ['type', 'meta'],
+                                      properties: {
+                                        uuid: {
+                                          type: ['string', 'null'],
+                                        },
+                                        type: {
+                                          type: 'string',
+                                          description:
+                                            '`survey_text` is a multi-line answer; `survey_text_short` is a single line.',
+                                          enum: [
+                                            'survey_text',
+                                            'survey_text_short',
+                                          ],
+                                        },
+                                        meta: {
+                                          type: 'object',
+                                          required: ['prompt'],
+                                          properties: {
+                                            prompt: {
+                                              type: 'string',
+                                              description:
+                                                'Placeholder shown in the empty answer field. Required; send `""` for none.',
+                                            },
+                                            label: {
+                                              type: 'string',
+                                            },
+                                            ariaLabel: {
+                                              type: 'string',
+                                            },
+                                            prefill: {
+                                              type: 'object',
+                                              description:
+                                                '`survey_text_short` only.',
+                                              required: [
+                                                'enabled',
+                                                'userProperty',
+                                              ],
+                                              properties: {
+                                                enabled: {
+                                                  type: 'boolean',
+                                                },
+                                                userProperty: {
+                                                  type: 'string',
+                                                  description:
+                                                    'User property whose value fills the answer.',
+                                                },
+                                              },
+                                            },
+                                            validation: {
+                                              type: 'object',
+                                              properties: {
+                                                required: {
+                                                  type: 'object',
+                                                  required: ['value'],
+                                                  properties: {
+                                                    value: {
+                                                      type: 'boolean',
+                                                    },
+                                                    message: {
+                                                      type: ['string', 'null'],
+                                                      description:
+                                                        'Error shown when a required question is left empty. Required when `value` is `true`.',
+                                                    },
+                                                  },
+                                                },
+                                              },
+                                            },
+                                          },
+                                        },
+                                      },
+                                    },
+                                    {
+                                      type: 'object',
+                                      description:
+                                        'Multiple-choice survey question.',
+                                      required: ['type', 'meta'],
+                                      properties: {
+                                        uuid: {
+                                          type: ['string', 'null'],
+                                        },
+                                        type: {
+                                          type: 'string',
+                                          const: 'survey_list',
+                                        },
+                                        meta: {
+                                          type: 'object',
+                                          required: [
+                                            'options',
+                                            'listType',
+                                            'displayType',
+                                          ],
+                                          properties: {
+                                            options: {
+                                              type: 'array',
+                                              items: {
+                                                type: 'string',
+                                              },
+                                            },
+                                            listType: {
+                                              type: 'string',
+                                              enum: ['single', 'multiple'],
+                                            },
+                                            displayType: {
+                                              type: 'string',
+                                              enum: [
+                                                'list',
+                                                'dropdown',
+                                                'grid',
+                                              ],
+                                            },
+                                            isOrderRandom: {
+                                              type: 'boolean',
+                                            },
+                                            otherOption: {
+                                              type: 'object',
+                                              required: [
+                                                'enabled',
+                                                'label',
+                                                'placeholderLabel',
+                                              ],
+                                              properties: {
+                                                enabled: {
+                                                  type: 'boolean',
+                                                },
+                                                label: {
+                                                  type: 'string',
+                                                },
+                                                placeholderLabel: {
+                                                  type: 'string',
+                                                },
+                                              },
+                                            },
+                                            label: {
+                                              type: 'string',
+                                            },
+                                            validation: {
+                                              type: 'object',
+                                              properties: {
+                                                required: {
+                                                  type: 'object',
+                                                  required: ['value'],
+                                                  properties: {
+                                                    value: {
+                                                      type: 'boolean',
+                                                    },
+                                                    message: {
+                                                      type: ['string', 'null'],
+                                                      description:
+                                                        'Error shown when a required question is left empty. Required when `value` is `true`.',
+                                                    },
+                                                  },
+                                                },
+                                              },
+                                            },
+                                          },
+                                        },
+                                      },
+                                    },
+                                    {
+                                      type: 'object',
+                                      description: 'Rating survey question.',
+                                      required: ['type', 'meta'],
+                                      properties: {
+                                        uuid: {
+                                          type: ['string', 'null'],
+                                        },
+                                        type: {
+                                          type: 'string',
+                                          const: 'survey_rating',
+                                        },
+                                        meta: {
+                                          type: 'object',
+                                          required: [
+                                            'type',
+                                            'options',
+                                            'lowerLabel',
+                                            'upperLabel',
+                                          ],
+                                          properties: {
+                                            type: {
+                                              type: 'string',
+                                              description:
+                                                '`nps` is a 0–10 scale and takes `options: 10`.',
+                                              enum: [
+                                                'stars',
+                                                'numbers',
+                                                'emojis',
+                                                'nps',
+                                              ],
+                                            },
+                                            options: {
+                                              type: 'integer',
+                                              description:
+                                                'Number of choices on the scale. Allowed values depend on `type`:\n`stars` 3 or 5, `numbers` 3, 5, 7 or 10, `emojis` 2, 3 or 5, and\n`nps` 10.\n',
+                                            },
+                                            emojis: {
+                                              type: 'array',
+                                              description:
+                                                'Exactly one emoji per option. Required when `type` is `emojis`.',
+                                              items: {
+                                                type: 'string',
+                                              },
+                                            },
+                                            lowerLabel: {
+                                              type: 'string',
+                                            },
+                                            upperLabel: {
+                                              type: 'string',
+                                            },
+                                            label: {
+                                              type: 'string',
+                                            },
+                                            validation: {
+                                              type: 'object',
+                                              properties: {
+                                                required: {
+                                                  type: 'object',
+                                                  required: ['value'],
+                                                  properties: {
+                                                    value: {
+                                                      type: 'boolean',
+                                                    },
+                                                    message: {
+                                                      type: ['string', 'null'],
+                                                      description:
+                                                        'Error shown when a required question is left empty. Required when `value` is `true`.',
+                                                    },
+                                                  },
+                                                },
+                                              },
+                                            },
+                                          },
+                                        },
+                                      },
+                                    },
+                                    {
+                                      type: 'object',
+                                      description:
+                                        'Not shown to the user. Adds a value to each survey response.',
+                                      required: ['type', 'meta'],
+                                      properties: {
+                                        uuid: {
+                                          type: ['string', 'null'],
+                                        },
+                                        type: {
+                                          type: 'string',
+                                          const: 'survey_hidden',
+                                        },
+                                        meta: {
+                                          type: 'object',
+                                          required: ['label', 'source'],
+                                          properties: {
+                                            label: {
+                                              type: 'string',
+                                            },
+                                            source: {
+                                              oneOf: [
+                                                {
+                                                  type: 'object',
+                                                  required: ['type', 'value'],
+                                                  properties: {
+                                                    type: {
+                                                      type: 'string',
+                                                      const: 'static',
+                                                    },
+                                                    value: {
+                                                      type: 'string',
+                                                      description:
+                                                        'The value to record.',
+                                                    },
+                                                  },
+                                                },
+                                                {
+                                                  type: 'object',
+                                                  required: [
+                                                    'type',
+                                                    'property',
+                                                  ],
+                                                  properties: {
+                                                    type: {
+                                                      type: 'string',
+                                                      const: 'event_property',
+                                                    },
+                                                    property: {
+                                                      type: 'string',
+                                                      description:
+                                                        'Property of the event that triggered the survey.',
+                                                    },
+                                                  },
+                                                },
+                                              ],
+                                            },
+                                          },
+                                        },
+                                      },
+                                    },
+                                  ],
+                                },
+                                {
+                                  type: 'object',
+                                  description:
+                                    'The step title inside a block-builder tree.',
+                                  required: ['type', 'meta'],
+                                  properties: {
+                                    uuid: {
+                                      type: ['string', 'null'],
+                                    },
+                                    type: {
+                                      type: 'string',
+                                      const: 'title',
+                                    },
+                                    meta: {
+                                      type: 'object',
+                                      required: ['value'],
+                                      properties: {
+                                        value: {
+                                          type: 'string',
+                                        },
+                                        alignment: {
+                                          type: 'string',
+                                          enum: ['start', 'center', 'end'],
+                                        },
+                                        textAnimation: {
+                                          type: 'string',
+                                          const: 'typewriter',
+                                        },
+                                      },
+                                    },
+                                  },
+                                },
+                                {
+                                  type: 'object',
+                                  description:
+                                    'Shows the step number inside a block-builder tree.',
+                                  required: ['type', 'meta'],
+                                  properties: {
+                                    uuid: {
+                                      type: ['string', 'null'],
+                                    },
+                                    type: {
+                                      type: 'string',
+                                      const: 'step_counter',
+                                    },
+                                    meta: {
+                                      type: 'object',
+                                      properties: {
+                                        format: {
+                                          type: 'string',
+                                          enum: ['numeric', 'verbose'],
+                                        },
+                                      },
+                                    },
+                                  },
+                                },
+                              ],
+                            },
+                          },
+                          id: {
+                            type: 'string',
+                            description:
+                              'Container id, unique within the step.',
+                          },
+                          direction: {
+                            type: 'string',
+                            enum: ['row', 'column'],
+                          },
+                          justify: {
+                            type: 'string',
+                            enum: [
+                              'start',
+                              'center',
+                              'end',
+                              'space-between',
+                              'space-around',
+                            ],
+                          },
+                          align: {
+                            type: 'string',
+                            enum: ['start', 'center', 'end'],
+                          },
+                          gap: {
+                            type: 'string',
+                            description: 'CSS length, for example `8px`.',
+                          },
+                          padding: {
+                            type: 'string',
+                          },
+                          margin: {
+                            type: 'string',
+                          },
+                          pinned: {
+                            type: 'boolean',
+                          },
+                          wrap: {
+                            type: 'boolean',
+                          },
+                          overflow: {
+                            type: 'string',
+                            enum: ['auto', 'hidden'],
+                          },
+                          minHeight: {
+                            type: 'string',
+                          },
+                          width: {
+                            type: 'string',
+                          },
+                        },
+                      },
+                      {
+                        type: 'null',
+                      },
+                    ],
                   },
                   sort_key: {
                     type: ['integer', 'null'],
+                    description:
+                      'Ignored on input. Steps are shown in the order of `steps`.',
                   },
                 },
               },
+            },
+            translations: {
+              type: 'object',
+              description:
+                'Locale (one of `localization.locales`) to translation key to text.\nMerged into the stored translations: keys you leave out are kept, `null`\nclears a key, and `null` for a locale clears every key in it.\n\nKeys name a field by where it sits in the variant: `display_title`,\n`display_description`, `snooze_label`, `done_label`;\n`steps[<step id>].title`; and block fields as\n`steps[<step id>].blocks[<block uuid>].<field>`, for example\n`content.markdown`, `content.title`, `content.button[primary]`,\n`content.survey_rating.lowerLabel`, or `content.survey_list`. Copy keys\nfrom `translation_status.sources` instead of building them. A key must\nname a field that has default-locale text.\n',
             },
           },
         },
@@ -8138,6 +12785,18 @@ export const CLI_OPERATIONS = [
         nullable: false,
         description:
           "Partial `ThemeConfig`, merged like a JSON merge patch (RFC 7396): objects\nmerge key by key, and any other value replaces what's there. Unlike RFC\n7396, `null` resets a value to Amplitude's built-in default theme, or\nremoves it where the default has none (for example a component override\nor `customCss`). That works at any level, from one variable up to a whole\nmode.\n",
+        example: {
+          lightMode: {
+            varDefaults: {
+              '--base-accent': 'rgb(120, 86, 255)',
+            },
+          },
+          darkMode: {
+            varDefaults: {
+              '--base-accent': null,
+            },
+          },
+        },
       },
     ],
   },
@@ -8235,6 +12894,18 @@ export const CLI_OPERATIONS = [
         nullable: false,
         description:
           "Partial `ThemeConfig`, merged like a JSON merge patch (RFC 7396): objects\nmerge key by key, and any other value replaces what's there. Unlike RFC\n7396, `null` resets a value to Amplitude's built-in default theme, or\nremoves it where the default has none (for example a component override\nor `customCss`). That works at any level, from one variable up to a whole\nmode.\n",
+        example: {
+          lightMode: {
+            varDefaults: {
+              '--base-accent': 'rgb(120, 86, 255)',
+            },
+          },
+          darkMode: {
+            varDefaults: {
+              '--base-accent': null,
+            },
+          },
+        },
       },
       {
         name: 'updated_at',
@@ -8326,7 +12997,7 @@ export const CLI_OPERATIONS = [
     requiredScopes: ['destinations:write'],
     summary: 'Create a destination',
     description:
-      'Always creates a new destination; the server assigns the `id` used for\nevery subsequent lookup. `display_name` is not an identity key, so\nrepeating a create makes another destination. When `dry_run=true`, returns\na plan envelope without mutating. SECRET/OAUTH config values are\nwrite-only.\n',
+      'Always creates a new destination; the server assigns the `id` used for\nevery subsequent lookup. `display_name` is not an identity key, so\nrepeating a create makes another destination. When `dry_run=true`, returns\na plan envelope without mutating. Credential config (secret, OAuth,\nservice account, custom HTTP header, ads account, and encrypted text)\nis write-only and omitted from the response.\n',
     successStatus: 200,
     parameters: [
       {

@@ -176,6 +176,16 @@ const AUTH_SIGNUP_OPTIONS: ParseableOption[] = [
   { aliases: ['non-interactive'], valueRequirement: 'optional' },
 ];
 
+// `--project` is already declared by the generated operations, so only the
+// flags unique to the hand-written tracking-plan commands are listed here.
+const TRACKING_PLAN_OPTIONS: ParseableOption[] = [
+  { aliases: ['branch-name'], valueRequirement: 'required' },
+  { aliases: ['file'], valueRequirement: 'required' },
+  { aliases: ['type'], valueRequirement: 'required' },
+  { aliases: ['include-deleted'], valueRequirement: 'optional' },
+  { aliases: ['out'], valueRequirement: 'required' },
+];
+
 /** Every alias any global flag answers to. */
 export type GlobalOptionAlias =
   (typeof GLOBAL_OPTIONS)[number]['aliases'][number];
@@ -257,6 +267,7 @@ function optionDefinitions(): ParseableOption[] {
   for (const option of [
     ...GLOBAL_OPTIONS,
     ...AUTH_SIGNUP_OPTIONS,
+    ...TRACKING_PLAN_OPTIONS,
     { aliases: PROJECT_API_KEY_RAW_FLAG.aliases, valueRequirement: 'optional' },
   ] satisfies ParseableOption[]) {
     for (const alias of option.aliases) {

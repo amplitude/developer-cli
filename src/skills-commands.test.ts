@@ -40,7 +40,7 @@ describe('assertSkillsFlags', () => {
   });
 
   it.each(['profile', 'base-url'])('rejects --%s on list', (alias) => {
-    expect(() => assertSkillsFlags('list', { [alias]: 'x' })).toThrowError(
+    expect(() => assertSkillsFlags('list', { [alias]: 'x' })).toThrow(
       /unknown|unrecognized|not supported/i,
     );
   });
@@ -56,7 +56,7 @@ describe('assertSkillsFlags', () => {
   it.each(['token', 'yes', 'dry-run', 'body-json', 'with-token', 'timeout'])(
     'rejects --%s, which this path ignores',
     (alias) => {
-      expect(() => assertSkillsFlags('list', { [alias]: 'x' })).toThrowError(
+      expect(() => assertSkillsFlags('list', { [alias]: 'x' })).toThrow(
         /unknown|unrecognized|not supported/i,
       );
     },
@@ -84,13 +84,13 @@ describe('assertSkillsFlags', () => {
   });
 
   it.each(['profile', 'base-url'])('rejects --%s on get', (alias) => {
-    expect(() => assertSkillsFlags('get', { [alias]: 'x' })).toThrowError(
+    expect(() => assertSkillsFlags('get', { [alias]: 'x' })).toThrow(
       /unknown|unrecognized|not supported/i,
     );
   });
 
   it('rejects --save on list', () => {
-    expect(() => assertSkillsFlags('list', { save: true })).toThrowError(
+    expect(() => assertSkillsFlags('list', { save: true })).toThrow(
       /unknown|unrecognized|not supported/i,
     );
   });

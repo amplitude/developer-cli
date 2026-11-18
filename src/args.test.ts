@@ -125,7 +125,7 @@ describe('parseArgs', () => {
   });
 
   it('does not suggest the hidden --env flag for a typo', () => {
-    expect(() => parseArgs(['skills', 'get', '--enx'])).toThrowError(
+    expect(() => parseArgs(['skills', 'get', '--enx'])).toThrow(
       /^unknown option '--enx'$/,
     );
   });
@@ -142,7 +142,7 @@ describe('parseArgs', () => {
   });
 
   it('throws when a string option is passed without a value', () => {
-    expect(() => parseArgs(['context', '--token'])).toThrowError(
+    expect(() => parseArgs(['context', '--token'])).toThrow(
       "option '--token <value>' argument missing",
     );
   });
@@ -159,6 +159,51 @@ describe('parseArgs', () => {
 
     expect(command).toEqual(['events', 'list']);
     expect(flags).toMatchObject({ project: '187520', limit: '10' });
+  });
+
+  it('parses bespoke tracking-plan export options', () => {
+    const { command, flags } = parseArgs([
+      'tracking-plan',
+      'export',
+      '--project',
+      '187520',
+      '--branch-name',
+      'import-1',
+      '--type',
+      'events',
+      '--include-deleted',
+      '--out',
+      'plan.csv',
+    ]);
+
+    expect(command).toEqual(['tracking-plan', 'export']);
+    expect(flags).toMatchObject({
+      project: '187520',
+      'branch-name': 'import-1',
+      type: 'events',
+      'include-deleted': true,
+      out: 'plan.csv',
+    });
+  });
+
+  it('parses bespoke tracking-plan import options', () => {
+    const { command, flags } = parseArgs([
+      'tracking-plan',
+      'import',
+      '--project',
+      '187520',
+      '--file',
+      'plan.csv',
+      '--branch-name',
+      'import-branch',
+    ]);
+
+    expect(command).toEqual(['tracking-plan', 'import']);
+    expect(flags).toMatchObject({
+      project: '187520',
+      file: 'plan.csv',
+      'branch-name': 'import-branch',
+    });
   });
 
   it('parses the ingestion check timeout option', () => {

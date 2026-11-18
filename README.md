@@ -144,6 +144,32 @@ amp heatmaps click-map --project <project_id> --page-url https://example.com/pri
 amp zoning zone-metrics --project <project_id> --page-url https://example.com/pricing --metric click_rate_pageview
 ```
 
+## Guide and survey translations
+
+Read the draft with its translations first. Each variant's
+`translation_status.sources` lists the keys to translate with their
+default-locale text, and `missing` and `outdated` list what is left per locale:
+
+```bash
+amp guides get --project <project_id> --guide <guide_id> \
+  --include-unpublished-changes --include-translations --json
+```
+
+Then send only the translations. Copy keys from `sources`; `null` clears a key
+or a whole locale, and keys you leave out are kept:
+
+```bash
+amp guides update --project <project_id> --guide <guide_id> \
+  --latest-version <latest_version> \
+  --variants '[{"id": "<variant_id>", "translations": {
+    "fr": {"steps[<step_id>].title": "Bienvenue"},
+    "de": null
+  }}]'
+```
+
+Translations can't be sent on create, and only existing steps and blocks can be
+translated: create or edit the content first, then translate it.
+
 ## Project ingestion API key
 
 Explore the project API-key commands with `amp projects api-keys --help`, or add

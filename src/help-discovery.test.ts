@@ -9,7 +9,13 @@ describe('write discovery', () => {
   it('accepts every advertised API flag name', () => {
     for (const operation of CLI_OPERATIONS) {
       const entry = findCatalogCommand(operation.command)!;
-      for (const flag of entry.flags) {
+      const advertisedFlags =
+        operation.operationId === 'getOrgAiContext'
+          ? []
+          : operation.operationId === 'setOrgAiContext'
+            ? entry.flags.filter((flag) => flag.name !== 'project_id')
+            : entry.flags;
+      for (const flag of advertisedFlags) {
         expect(
           () => assertKnownFlags(operation, { [flag.name]: 'value' }),
           `${entry.command.join(' ')} --${flag.name}`,

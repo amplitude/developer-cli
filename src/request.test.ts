@@ -49,6 +49,18 @@ describe('manifest invariants', () => {
     },
   );
 
+  it('builds an episode calls request without pagination flags', () => {
+    const command = ['mcp-analytics', 'calls', 'list'];
+    expect(operation(command).requiredScopes).toEqual(['analytics:read']);
+    expect(
+      request(command, ['--project', '12345', '--episode-id', 'ep/1']).path,
+    ).toBe('/v1/projects/12345/mcp-analytics/episodes/ep%2F1/calls');
+    expect(operation(command).parameters.map(({ name }) => name)).toEqual([
+      'project_id',
+      'episode_id',
+    ]);
+  });
+
   it('delegates omitted project-key selection to the API', () => {
     expect(request(['projects', 'api-keys', 'get'], []).path).toBe(
       '/v1/projects/api-key',
@@ -111,11 +123,28 @@ describe('manifest invariants', () => {
   });
 
   it('does not expose duplicate public commands', () => {
-    const commands = CLI_OPERATIONS.map((cliOperation) =>
-      cliOperation.command.join(' '),
-    );
+    const DISAMBIGUATED_COMMANDS = new Set([
+      'ai-context get',
+      'ai-context set',
+    ]);
+    const commands = CLI_OPERATIONS.filter(
+      (cliOperation) =>
+        !DISAMBIGUATED_COMMANDS.has(cliOperation.command.join(' ')),
+    ).map((cliOperation) => cliOperation.command.join(' '));
 
     expect(new Set(commands).size).toBe(commands.length);
+
+    for (const [command, operationIds] of [
+      ['ai-context get', ['getOrgAiContext', 'getProjectAiContext']],
+      ['ai-context set', ['setOrgAiContext', 'setProjectAiContext']],
+    ] as const) {
+      const operations = CLI_OPERATIONS.filter(
+        (cliOperation) => cliOperation.command.join(' ') === command,
+      );
+      expect(operations.map((op) => op.operationId).sort()).toEqual([
+        ...operationIds,
+      ]);
+    }
   });
 
   it('excludes Auth-tagged operations from the generated manifest', () => {
@@ -213,7 +242,7 @@ describe('buildRequest', () => {
         ['events', 'check-ingestion-by-api-key'],
         ['--api-key', 'project-api-key', `--${flag}`, value],
       ),
-    ).toThrowError(
+    ).toThrow(
       `Unknown flag --${flag} for \`amp events check-ingestion-by-api-key\`.`,
     );
   });
@@ -325,7 +354,7 @@ describe('buildRequest', () => {
         project: '187520',
         'body-json': true,
       }),
-    ).toThrowError('Expected --body-json to have a value.');
+    ).toThrow('Expected --body-json to have a value.');
   });
 
   it('accepts a JSON object for --body-json and merges it', () => {
@@ -340,7 +369,7 @@ describe('buildRequest', () => {
   it('rejects --body-json for operations without request bodies', () => {
     expect(() =>
       request(['context'], ['--body-json', '{"unexpected":true}']),
-    ).toThrowError('`amp context` does not accept a request body.');
+    ).toThrow('`amp context` does not accept a request body.');
   });
 
   it('rejects non-object --body-json values', () => {
@@ -349,22 +378,22 @@ describe('buildRequest', () => {
         ['events', 'create'],
         ['--project', '187520', '--body-json=[1,2]'],
       ),
-    ).toThrowError('--body-json must be a JSON object.');
+    ).toThrow('--body-json must be a JSON object.');
 
     expect(() =>
       request(
         ['events', 'create'],
         ['--project', '187520', '--body-json=null'],
       ),
-    ).toThrowError('--body-json must be a JSON object.');
+    ).toThrow('--body-json must be a JSON object.');
 
     expect(() =>
       request(['events', 'create'], ['--project', '187520', '--body-json=42']),
-    ).toThrowError('--body-json must be a JSON object.');
+    ).toThrow('--body-json must be a JSON object.');
 
     expect(() =>
       request(['events', 'create'], ['--project', '187520', '--body-json=']),
-    ).toThrowError('--body-json must be a JSON object.');
+    ).toThrow('--body-json must be a JSON object.');
   });
 
   it('rejects malformed JSON as a usage error naming the flag, not a raw SyntaxError', () => {
@@ -401,7 +430,7 @@ describe('buildRequest', () => {
           '{bad',
         ],
       ),
-    ).toThrowError('--rollout-weights must be valid JSON.');
+    ).toThrow('--rollout-weights must be valid JSON.');
 
     expect(() =>
       request(
@@ -417,11 +446,11 @@ describe('buildRequest', () => {
           '[bad',
         ],
       ),
-    ).toThrowError('--target-segments must be valid JSON.');
+    ).toThrow('--target-segments must be valid JSON.');
   });
 
   it('rejects empty required path and body flags', () => {
-    expect(() => request(['events', 'list'], ['--project='])).toThrowError(
+    expect(() => request(['events', 'list'], ['--project='])).toThrow(
       'Missing --project <project_id>.',
     );
 
@@ -430,7 +459,7 @@ describe('buildRequest', () => {
         ['events', 'create'],
         ['--project', '187520', '--event-type', ''],
       ),
-    ).toThrowError('Missing --event-type <event_type>.');
+    ).toThrow('Missing --event-type <event_type>.');
   });
 
   it('throws a CliError with errorCode usage_error for a missing required flag', () => {
@@ -453,7 +482,7 @@ describe('buildRequest', () => {
 
 describe('assertKnownFlags (via buildRequest)', () => {
   it('rejects a flag that is valid for another command but not this one', () => {
-    expect(() => request(['flags', 'list'], ['--flag', 'foo'])).toThrowError(
+    expect(() => request(['flags', 'list'], ['--flag', 'foo'])).toThrow(
       'Unknown flag --flag for `amp flags list`.',
     );
   });
@@ -475,7 +504,7 @@ describe('assertKnownFlags (via buildRequest)', () => {
   });
 
   it('suggests the nearest valid alias for a near-miss flag on this command', () => {
-    expect(() => request(['flags', 'list'], ['--porject', '1'])).toThrowError(
+    expect(() => request(['flags', 'list'], ['--porject', '1'])).toThrow(
       /Did you mean --project\?/,
     );
   });
@@ -509,7 +538,7 @@ describe('assertKnownFlags (via buildRequest)', () => {
       expect(
         () => request(['events', 'list'], ['--project', '187520', ...argv]),
         `--${flag} should be rejected on an API command`,
-      ).toThrowError(`Unknown flag --${flag} for \`amp events list\`.`);
+      ).toThrow(`Unknown flag --${flag} for \`amp events list\`.`);
     }
   });
 });

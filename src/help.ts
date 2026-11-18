@@ -1,7 +1,13 @@
 import packageJson from '../package.json';
-import type { GlobalOptionAlias } from './args';
-import { buildCatalog, catalogGroups, findCatalogCommand } from './catalog';
-import type { CatalogCommand, CatalogPositional } from './catalog';
+import type { FlagValue, GlobalOptionAlias } from './args';
+import { stringFlag } from './args';
+import {
+  buildCatalog,
+  catalogGroups,
+  findCatalogCommand,
+  type CatalogCommand,
+  type CatalogPositional,
+} from './catalog';
 import { usageError } from './cli-error';
 import type { CliOperation } from './generated/cli-manifest';
 import { API_SPEC_VERSION, CLI_OPERATIONS } from './generated/cli-manifest';
@@ -147,7 +153,34 @@ export function operationsMatchingPrefix(command: string[]): CliOperation[] {
   );
 }
 
-export function findOperation(command: string[]): CliOperation | undefined {
+export function findOperation(
+  command: string[],
+  flags?: Record<string, FlagValue>,
+): CliOperation | undefined {
+  if (
+    command[0] === 'ai-context' &&
+    (command[1] === 'get' || command[1] === 'set')
+  ) {
+    if (command.length !== 2) {
+      return undefined;
+    }
+    const projectId =
+      flags !== undefined &&
+      stringFlag(flags, ['project', 'project-id', 'project_id']);
+    const verb = command[1];
+    const operationId =
+      verb === 'get'
+        ? projectId
+          ? 'getProjectAiContext'
+          : 'getOrgAiContext'
+        : projectId
+          ? 'setProjectAiContext'
+          : 'setOrgAiContext';
+    return CLI_OPERATIONS.find(
+      (operation) => operation.operationId === operationId,
+    );
+  }
+
   return CLI_OPERATIONS.find(
     (operation) =>
       operation.command.length === command.length &&
@@ -359,10 +392,19 @@ function printCatalogCommandHelp(entry: CatalogCommand): void {
         lines.push(`    Array item schema: ${JSON.stringify(f.items)}`);
       if (f.schema)
         lines.push(`    Object schema: ${JSON.stringify(f.schema)}`);
+      if (f.example !== undefined)
+        lines.push(
+          `    Example value: ${typeof f.example === 'string' ? f.example : JSON.stringify(f.example)}`,
+        );
     }
   }
   if (entry.example) {
-    lines.push('', 'Example:', `  ${entry.example}`);
+    const exampleLabel =
+      (entry.additionalExamples?.length ?? 0) > 0 ? 'Examples:' : 'Example:';
+    lines.push('', exampleLabel, `  ${entry.example}`);
+    for (const example of entry.additionalExamples ?? []) {
+      lines.push(`  ${example}`);
+    }
   }
   if (entry.requiredScopes.length > 0) {
     lines.push('', 'Required scopes:', `  ${entry.requiredScopes.join(', ')}`);
@@ -403,11 +445,21 @@ function printGroupHelp(command: string[], rows: GroupHelpRow[]): void {
 }
 
 function operationGroupRows(operations: CliOperation[]): GroupHelpRow[] {
-  return operations.map((operation) => ({
-    command: operation.command,
-    summary: operation.summary ?? '',
-    example: findCatalogCommand(operation.command)?.example,
-  }));
+  const seen = new Set<string>();
+  const rows: GroupHelpRow[] = [];
+  for (const operation of operations) {
+    const key = operation.command.join(' ');
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    rows.push({
+      command: operation.command,
+      summary: operation.summary ?? '',
+      example: findCatalogCommand(operation.command)?.example,
+    });
+  }
+  return rows;
 }
 
 function catalogGroupRows(commands: CatalogCommand[]): GroupHelpRow[] {

@@ -337,8 +337,8 @@ describe('credential-store', () => {
 
       const text = formatErrorText(caught);
       expect(text).toContain('Invalid profile name "bad^[[31mname^G"');
-      expect(text.includes('\u001b')).toBe(false);
-      expect(text.includes('\u0007')).toBe(false);
+      expect(text).not.toContain('\x1B');
+      expect(text).not.toContain('\x07');
 
       expect(JSON.parse(formatErrorEnvelope(caught, false))).toMatchObject({
         message: expect.stringContaining(name),

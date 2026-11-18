@@ -660,7 +660,7 @@ describe('refreshProfileTokenLocked (double-checked)', () => {
       staleAccessToken: 'the-401-token',
       deps: { request },
     });
-    expect(request).toHaveBeenCalledOnce();
+    expect(request).toHaveBeenCalledTimes(1);
     expect(result.credential.access_token).toBe('new-at');
     expect(result.rotated).toBe(true);
   });

@@ -259,7 +259,7 @@ describe('formatErrorText', () => {
       'Check permissions for the skill cache.\n\nAlternatively, omit `--save`.',
     );
     expect(text).toContain('line^[[31m');
-    expect(text.includes('\u001b')).toBe(false);
+    expect(text).not.toContain('\x1B');
   });
 
   it('gives a transport failure an actionable hint', () => {
