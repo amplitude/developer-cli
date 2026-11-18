@@ -8783,6 +8783,7 @@ components:
       properties:
         context:
           type: string
+          minLength: 0
           description: |
             Full customer-managed context to store. Replaces the existing value;
             send an empty string to clear.

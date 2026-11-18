@@ -462,6 +462,25 @@ describe('buildRequest', () => {
     ).toThrow('Missing --event-type <event_type>.');
   });
 
+  it('sends an empty string for a required body flag that allows it', () => {
+    const parsed = parseArgs([
+      'ai-context',
+      'set',
+      '--project',
+      '187520',
+      '--idempotency-key',
+      'key-1',
+      '--context',
+      '',
+    ]);
+    const found = findOperation(['ai-context', 'set'], parsed.flags);
+    if (!found) {
+      throw new Error('Missing CLI operation ai-context set.');
+    }
+
+    expect(buildRequest(found, parsed.flags).body).toEqual({ context: '' });
+  });
+
   it('throws a CliError with errorCode usage_error for a missing required flag', () => {
     let caught: unknown;
     try {

@@ -22,6 +22,7 @@ export interface CliBodyProperty {
   aliases: string[];
   type: string;
   nullable: boolean;
+  allowEmptyValue?: boolean;
   enum?: string[];
   description?: string;
   items?: Record<string, unknown>;
@@ -2564,6 +2565,7 @@ export const CLI_OPERATIONS = [
         aliases: ['context'],
         type: 'string',
         nullable: false,
+        allowEmptyValue: true,
         description:
           'Full customer-managed context to store. Replaces the existing value;\nsend an empty string to clear.\n',
       },
@@ -2629,6 +2631,7 @@ export const CLI_OPERATIONS = [
         aliases: ['context'],
         type: 'string',
         nullable: false,
+        allowEmptyValue: true,
         description:
           'Full customer-managed context to store. Replaces the existing value;\nsend an empty string to clear.\n',
       },

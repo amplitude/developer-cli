@@ -45,6 +45,7 @@ function authFixture(
 
 describe('tracking-plan export', () => {
   beforeEach(() => {
+    vi.clearAllMocks();
     resolveAuthWithRefreshMock.mockResolvedValue(authFixture());
     refreshProfileTokenLockedMock.mockResolvedValue({
       credential: { access_token: 'new-token-123' },
@@ -83,6 +84,23 @@ describe('tracking-plan export', () => {
 
     expect(fetchImpl).toHaveBeenCalledTimes(1);
     expect(await readFile(out, 'utf8')).toBe('a,b\n1,2\n');
+  });
+
+  it('rejects --json with --out - before requesting the export', async () => {
+    const fetchImpl = vi.fn();
+    await expect(
+      runTrackingPlanExport(
+        { project: '123', out: '-', json: true },
+        { fetchImpl },
+      ),
+    ).rejects.toMatchObject({
+      errorCode: 'usage_error',
+      exitCode: 2,
+      message:
+        '--out - cannot be combined with --json. Pass --out <path> to get a JSON summary.',
+    });
+
+    expect(fetchImpl).not.toHaveBeenCalled();
   });
 
   it('prints CSV bytes to stdout when --out - is used', async () => {
@@ -366,6 +384,7 @@ describe('tracking-plan export', () => {
 
 describe('tracking-plan import', () => {
   beforeEach(() => {
+    vi.clearAllMocks();
     resolveAuthWithRefreshMock.mockResolvedValue(authFixture());
     refreshProfileTokenLockedMock.mockResolvedValue({
       credential: { access_token: 'new-token-123' },

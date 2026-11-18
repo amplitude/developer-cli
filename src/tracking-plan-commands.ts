@@ -509,6 +509,11 @@ export async function runTrackingPlanExport(
       'Missing --out <path>. Pass --out - to print CSV to stdout.',
     );
   }
+  if (out === '-' && isFlagEnabled(flags.json)) {
+    throw usageError(
+      '--out - cannot be combined with --json. Pass --out <path> to get a JSON summary.',
+    );
+  }
 
   const exportType = parseExportType(stringFlag(flags, ['type']));
   const branchName = stringFlag(flags, ['branch-name']);

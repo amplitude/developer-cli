@@ -1220,6 +1220,58 @@ describe('runOperation', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it.each([
+    [['events', 'create'], { project: '187520', 'event-type': 'Signup' }],
+    [['flags', 'update'], { project: '187520', flag: 'f_1', name: 'n' }],
+    [['projects', 'list'], {}],
+  ])(
+    'refuses --dry-run on %j, which cannot honor it, instead of sending the request',
+    async (command, commandFlags) => {
+      await expect(
+        runOperation(operation(command), {
+          token: 'amp_test',
+          ...commandFlags,
+          'dry-run': true,
+        }),
+      ).rejects.toThrow(
+        `\`amp ${command.join(' ')}\` does not support --dry-run. Drop --dry-run to run it for real.`,
+      );
+      expect(fetchMock).not.toHaveBeenCalled();
+    },
+  );
+
+  it('refuses --dry-run on ai-context set instead of replacing the stored context', async () => {
+    const flags = {
+      token: 'amp_test',
+      context: 'new',
+      'dry-run': true,
+    };
+    const found = findOperation(['ai-context', 'set'], flags);
+    if (!found) {
+      throw new Error('Missing CLI operation ai-context set.');
+    }
+
+    await expect(runOperation(found, flags)).rejects.toThrow(
+      'does not support --dry-run',
+    );
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('sends dry_run=true for a write that declares it', async () => {
+    fetchMock.mockResolvedValue(jsonResponse(200, { data: { ok: true } }));
+
+    await runOperation(operation(['destinations', 'create']), {
+      token: 'amp_test',
+      project: '187520',
+      partner: 'p',
+      'display-name': 'd',
+      'dry-run': true,
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(String(fetchMock.mock.calls[0][0])).toContain('dry_run=true');
+  });
+
   it('refuses --dry-run --yes on unsupported DELETE instead of silently deleting', async () => {
     await expect(
       runOperation(deleteWithoutDryRun, {
