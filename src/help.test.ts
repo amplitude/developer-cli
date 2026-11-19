@@ -333,6 +333,20 @@ describe('help', () => {
     },
   );
 
+  it('summarizes ai-context commands for both scopes in prose group help', () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    try {
+      printCommandHelp(['ai-context']);
+      const output = log.mock.calls.map((c) => String(c[0])).join('\n');
+      expect(output).toContain('Get organization or project AI context');
+      expect(output).toContain('Set organization or project AI context');
+      expect(output).not.toContain('Get organization AI context');
+      expect(output).not.toContain('Set organization AI context');
+    } finally {
+      log.mockRestore();
+    }
+  });
+
   it('documents context body on ai-context set help', () => {
     const log = vi.spyOn(console, 'log').mockImplementation(() => undefined);
     try {

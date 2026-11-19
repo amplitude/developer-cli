@@ -453,10 +453,11 @@ function operationGroupRows(operations: CliOperation[]): GroupHelpRow[] {
       continue;
     }
     seen.add(key);
+    const entry = findCatalogCommand(operation.command);
     rows.push({
       command: operation.command,
-      summary: operation.summary ?? '',
-      example: findCatalogCommand(operation.command)?.example,
+      summary: entry?.summary ?? operation.summary ?? '',
+      example: entry?.example,
     });
   }
   return rows;

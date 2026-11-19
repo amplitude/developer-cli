@@ -186,6 +186,36 @@ describe('parseArgs', () => {
     });
   });
 
+  it('collects repeatable --event values for tracking-plan export', () => {
+    const { flags } = parseArgs([
+      'tracking-plan',
+      'export',
+      '--project',
+      '187520',
+      '--event',
+      'Signup Completed',
+      '--event=Purchase Completed',
+      '--out',
+      'plan.csv',
+    ]);
+
+    expect(flags.event).toBe('Signup Completed\u0000Purchase Completed');
+  });
+
+  it('does not treat the next flag as a repeatable --event value', () => {
+    expect(() =>
+      parseArgs([
+        'tracking-plan',
+        'export',
+        '--project',
+        '187520',
+        '--event',
+        '--out',
+        'plan.csv',
+      ]),
+    ).toThrow('Expected --event to have a value.');
+  });
+
   it('parses bespoke tracking-plan import options', () => {
     const { command, flags } = parseArgs([
       'tracking-plan',

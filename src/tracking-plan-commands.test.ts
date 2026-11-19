@@ -86,6 +86,240 @@ describe('tracking-plan export', () => {
     expect(await readFile(out, 'utf8')).toBe('a,b\n1,2\n');
   });
 
+  it('sends POST export with event_names when --event is provided', async () => {
+    const fetchImpl = vi.fn(
+      async (input: URL | RequestInfo, init?: RequestInit) => {
+        const url = new URL(String(input));
+        expect(url.pathname).toBe('/v1/projects/123/tracking-plan/export');
+        expect(url.search).toBe('');
+        expect(init?.method).toBe('POST');
+        const headers = new Headers(init?.headers);
+        expect(headers.get('Content-Type')).toBe('application/json');
+        expect(headers.get('Accept')).toBe('text/csv');
+        expect(String(init?.body)).toContain(
+          '"event_names":["Signup Completed","Purchase Completed"]',
+        );
+        return new Response('a,b\n1,2\n', { status: 200 });
+      },
+    );
+
+    const dir = mkdtempSync(join(tmpdir(), 'tp-export-events-'));
+    const out = join(dir, 'plan.csv');
+
+    await runTrackingPlanExport(
+      {
+        project: '123',
+        event: 'Signup Completed\u0000Purchase Completed',
+        out,
+      },
+      { fetchImpl, write: () => undefined },
+    );
+
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(await readFile(out, 'utf8')).toBe('a,b\n1,2\n');
+  });
+
+  it('loads additional event names from --events-file and writes unmatched names to stderr', async () => {
+    const writesErr: string[] = [];
+    const fetchImpl = vi.fn(
+      async (_input: URL | RequestInfo, init?: RequestInit) => {
+        expect(String(init?.body)).toContain(
+          '"event_names":["Signup Completed","Missing Name"]',
+        );
+        return new Response('a,b\n1,2\n', {
+          status: 200,
+          headers: {
+            'x-unmatched-event-names': 'Missing%20Name',
+            'x-unmatched-event-count': '1',
+          },
+        });
+      },
+    );
+    const dir = mkdtempSync(join(tmpdir(), 'tp-export-events-file-'));
+    const out = join(dir, 'plan.csv');
+
+    await runTrackingPlanExport(
+      {
+        project: '123',
+        event: 'Signup Completed',
+        'events-file': 'events.txt',
+        out,
+      },
+      {
+        fetchImpl,
+        readFileImpl: vi.fn(async () => Buffer.from('Missing Name\n')),
+        write: () => undefined,
+        writeErr: (chunk) => {
+          writesErr.push(chunk);
+        },
+      },
+    );
+
+    expect(writesErr.join('')).toContain('Unmatched event names: Missing Name');
+  });
+
+  it('prints a truncation notice when unmatched-name headers are truncated', async () => {
+    const writesErr: string[] = [];
+    const fetchImpl = vi.fn(async () => {
+      return new Response('a,b\n1,2\n', {
+        status: 200,
+        headers: {
+          'x-unmatched-event-count': '45',
+          'x-unmatched-event-names-truncated': 'true',
+        },
+      });
+    });
+    const dir = mkdtempSync(join(tmpdir(), 'tp-export-truncated-unmatched-'));
+    const out = join(dir, 'plan.csv');
+
+    await runTrackingPlanExport(
+      {
+        project: '123',
+        event: 'Signup Completed',
+        out,
+      },
+      {
+        fetchImpl,
+        write: () => undefined,
+        writeErr: (chunk) => {
+          writesErr.push(chunk);
+        },
+      },
+    );
+
+    const rendered = writesErr.join('');
+    expect(rendered).toContain(
+      'Unmatched event names: 45 total (header list omitted)',
+    );
+    expect(rendered).toContain(
+      'Unmatched event names list truncated (45 total).',
+    );
+  });
+
+  it('preserves commas inside a literal --event value', async () => {
+    const fetchImpl = vi.fn(
+      async (_input: URL | RequestInfo, init?: RequestInit) => {
+        expect(String(init?.body)).toContain(
+          '"event_names":["Checkout, Step 2"]',
+        );
+        return new Response('a,b\n1,2\n', { status: 200 });
+      },
+    );
+    const dir = mkdtempSync(join(tmpdir(), 'tp-export-event-comma-'));
+    const out = join(dir, 'plan.csv');
+
+    await runTrackingPlanExport(
+      {
+        project: '123',
+        event: 'Checkout, Step 2',
+        out,
+      },
+      { fetchImpl, write: () => undefined },
+    );
+
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects --event/--events-file when exporting user_properties', async () => {
+    await expect(
+      runTrackingPlanExport(
+        {
+          project: '123',
+          type: 'user_properties',
+          event: 'Signup Completed',
+          out: '/tmp/plan.csv',
+        },
+        { fetchImpl: vi.fn() },
+      ),
+    ).rejects.toMatchObject({
+      errorCode: 'usage_error',
+      message: expect.stringContaining('only supported with --type events'),
+    });
+  });
+
+  it('rejects empty event filters from --event/--events-file', async () => {
+    await expect(
+      runTrackingPlanExport(
+        {
+          project: '123',
+          event: '',
+          out: '/tmp/plan.csv',
+        },
+        { fetchImpl: vi.fn() },
+      ),
+    ).rejects.toMatchObject({
+      errorCode: 'usage_error',
+      message: expect.stringContaining('must include at least one non-empty'),
+    });
+
+    await expect(
+      runTrackingPlanExport(
+        {
+          project: '123',
+          'events-file': 'events.txt',
+          out: '/tmp/plan.csv',
+        },
+        {
+          fetchImpl: vi.fn(),
+          readFileImpl: vi.fn(async () => Buffer.from('\n\r\n')),
+        },
+      ),
+    ).rejects.toMatchObject({
+      errorCode: 'usage_error',
+      message: expect.stringContaining('must include at least one non-empty'),
+    });
+  });
+
+  it('maps --events-file read failures to file_read_failed', async () => {
+    await expect(
+      runTrackingPlanExport(
+        {
+          project: '123',
+          'events-file': 'events.txt',
+          out: '/tmp/plan.csv',
+        },
+        {
+          fetchImpl: vi.fn(),
+          readFileImpl: vi.fn(async () => {
+            throw new Error('ENOENT');
+          }),
+        },
+      ),
+    ).rejects.toMatchObject({
+      errorCode: 'file_read_failed',
+    });
+  });
+
+  it('strips UTF-8 BOM in --events-file', async () => {
+    const fetchImpl = vi.fn(
+      async (_input: URL | RequestInfo, init?: RequestInit) => {
+        expect(String(init?.body)).toContain(
+          '"event_names":["Signup Completed"]',
+        );
+        return new Response('a,b\n1,2\n', { status: 200 });
+      },
+    );
+    await runTrackingPlanExport(
+      {
+        project: '123',
+        'events-file': 'events.txt',
+        out: '-',
+      },
+      {
+        fetchImpl,
+        readFileImpl: vi.fn(async () =>
+          Buffer.from('\uFEFFSignup Completed\n'),
+        ),
+        stdoutStream: new Writable({
+          write(_chunk, _encoding, callback) {
+            callback();
+          },
+        }),
+        write: () => undefined,
+      },
+    );
+  });
+
   it.each(['project-id', 'project_id'])(
     'accepts --%s as the project selector',
     async (alias) => {
@@ -849,6 +1083,8 @@ describe('assertTrackingPlanFlags', () => {
         project: '123',
         out: 'plan.csv',
         'branch-name': 'b',
+        event: 'Signup Completed',
+        'events-file': 'events.txt',
         type: 'events',
         'include-deleted': true,
       }),

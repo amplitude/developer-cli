@@ -3131,7 +3131,7 @@
         "tags": ["Taxonomy Events"],
         "operationId": "exportTrackingPlanCsv",
         "summary": "Export a tracking plan as CSV",
-        "description": "Streams a CSV export of the project tracking plan, in the same format as\nthe Events and User Properties downloads in Data. Exports the default\nbranch unless `branch_id` or `branch_name` selects another one, and\nincludes that branch's unpublished changes.\n",
+        "description": "Streams a CSV export of the project tracking plan, in the same format as\nthe Events and User Properties downloads in Data. Exports the default\nbranch unless `branch_id` or `branch_name` selects another one, and\nincludes that branch's unpublished changes.\n\nWhen `type=events`, optional `event_names` filters rows to exactly matching\nevent names (case-sensitive). Matching event rows and their event-property rows\nplus referenced property-group definition rows are returned, preserving the CSV\nformat and headers expected by import.\n`event_names` is not accepted with `type=user_properties`.\n\nUnknown names are returned in `X-Unmatched-Event-Names` as URL-encoded,\ncomma-separated names. Set `strict=true` to fail with 422 instead when any\nrequested event name is unknown. Deleted events count as unknown when\n`include_deleted=false`.\n",
         "x-required-scopes": ["taxonomy:read"],
         "parameters": [
           {
@@ -3186,6 +3186,34 @@
               "maximum": 365,
               "default": 30
             }
+          },
+          {
+            "name": "event_names",
+            "in": "query",
+            "required": false,
+            "description": "Optional event-name filter for `type=events`. Repeat this parameter\n(`event_names=a&event_names=b`) and/or pass comma-separated values\n(`event_names=a,b`). GET comma-separated values trim surrounding\nwhitespace from each split segment. Matches are otherwise exact and\ncase-sensitive.\n",
+            "schema": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 1000,
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 1024
+              }
+            },
+            "style": "form",
+            "explode": true
+          },
+          {
+            "name": "strict",
+            "in": "query",
+            "required": false,
+            "description": "When true, return 422 if any requested `event_names` are unknown.\nWhen false (default), unknown names are reported in\n`X-Unmatched-Event-Names`.\n",
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
           }
         ],
         "responses": {
@@ -3196,6 +3224,25 @@
                 "description": "Suggested attachment filename.",
                 "schema": {
                   "type": "string"
+                }
+              },
+              "X-Unmatched-Event-Names": {
+                "description": "URL-encoded, comma-separated unknown event names from `event_names` (present only when `strict=false` and unknown names exist).\n",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Unmatched-Event-Count": {
+                "description": "Total number of unknown event names, including names omitted from the header when truncated.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "X-Unmatched-Event-Names-Truncated": {
+                "description": "True when `X-Unmatched-Event-Names` was truncated to stay within header size limits.",
+                "schema": {
+                  "type": "boolean"
                 }
               }
             },
@@ -3217,6 +3264,155 @@
             "$ref": "#/components/responses/Problem"
           },
           "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimitProblem"
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "502": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "503": {
+            "$ref": "#/components/responses/AvailabilityUnavailableProblem"
+          },
+          "504": {
+            "description": "The export did not start in time.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": ["Taxonomy Events"],
+        "operationId": "exportTrackingPlanCsvBody",
+        "summary": "Export a tracking plan as CSV (JSON body variant)",
+        "description": "Exports tracking-plan CSV with the same response semantics as `GET` export.\nUse this variant when `event_names` is long and would exceed URL limits.\nRequest `Content-Type` must be `application/json`.\n",
+        "x-required-scopes": ["taxonomy:read"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": ["events", "user_properties"],
+                    "default": "events",
+                    "description": "Export format."
+                  },
+                  "branch_name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Optional branch name. Omit for default branch."
+                  },
+                  "branch_id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Optional branch identifier. Mutually exclusive with `branch_name`."
+                  },
+                  "include_deleted": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Include deleted events or properties."
+                  },
+                  "lookback_days": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 365,
+                    "default": 30,
+                    "description": "Lookback window in days for `events` volume/query columns. Ignored for `user_properties`.\n"
+                  },
+                  "event_names": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 1000,
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 1024
+                    },
+                    "description": "Optional event-name filter for `type=events`. Matches are exact and case-sensitive. Not accepted with `type=user_properties`.\n"
+                  },
+                  "strict": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "When true, return 422 if any requested `event_names` are unknown.\n"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "CSV response body.",
+            "headers": {
+              "Content-Disposition": {
+                "description": "Suggested attachment filename.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Unmatched-Event-Names": {
+                "description": "URL-encoded, comma-separated unknown event names from `event_names` (present only when `strict=false` and unknown names exist).\n",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Unmatched-Event-Count": {
+                "description": "Total number of unknown event names, including names omitted from the header when truncated.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "X-Unmatched-Event-Names-Truncated": {
+                "description": "True when `X-Unmatched-Event-Names` was truncated to stay within header size limits.",
+                "schema": {
+                  "type": "boolean"
+                }
+              }
+            },
+            "content": {
+              "text/csv": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationProblem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "413": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "415": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "422": {
             "$ref": "#/components/responses/Problem"
           },
           "429": {

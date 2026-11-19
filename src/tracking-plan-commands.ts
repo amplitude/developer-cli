@@ -2,7 +2,12 @@ import { createWriteStream } from 'node:fs';
 import type { PathLike } from 'node:fs';
 import { readFile, rename, stat, unlink } from 'node:fs/promises';
 
-import { type FlagValue, isFlagEnabled, stringFlag } from './args';
+import {
+  REPEATABLE_OPTION_VALUE_DELIMITER,
+  type FlagValue,
+  isFlagEnabled,
+  stringFlag,
+} from './args';
 import {
   CliError,
   cliErrorFromResponse,
@@ -41,6 +46,8 @@ const TRACKING_PLAN_EXPORT_FLAGS = [
   ...TRACKING_PLAN_COMMON_FLAGS,
   ...PROJECT_ALIASES,
   'branch-name',
+  'event',
+  'events-file',
   'type',
   'include-deleted',
   'out',
@@ -85,6 +92,7 @@ export interface TrackingPlanCommandDeps {
   fetchImpl?: typeof fetch;
   isTTY?: boolean;
   write?: (chunk: string) => void;
+  writeErr?: (chunk: string) => void;
   stdoutStream?: EventedWritable;
   createWriteStreamImpl?: (path: string) => EventedWritable;
   readFileImpl?: (path: PathLike) => Promise<Buffer>;
@@ -243,6 +251,7 @@ async function sendAuthenticatedRequest(options: {
   method: 'GET' | 'POST';
   accept: string;
   body?: string | Buffer;
+  contentType?: string;
   fetchImpl: typeof fetch;
   importSafeRetryHint?: boolean;
 }): Promise<Response> {
@@ -264,7 +273,9 @@ async function sendAuthenticatedRequest(options: {
           ...deviceIdHeader(),
           Authorization: authorizationHeaderForToken(token),
           'User-Agent': cliUserAgent(),
-          ...(options.body === undefined ? {} : { 'Content-Type': 'text/csv' }),
+          ...(options.body === undefined
+            ? {}
+            : { 'Content-Type': options.contentType ?? 'text/csv' }),
         },
         body: requestBody,
       });
@@ -496,6 +507,84 @@ export function assertTrackingPlanFlags(
   assertFlagsAllowed(allowed, `amp tracking-plan ${verb}`, flags);
 }
 
+function parseEventNamesFlag(raw: string | undefined): string[] {
+  if (raw === undefined || raw === '') {
+    return [];
+  }
+  return raw
+    .split(REPEATABLE_OPTION_VALUE_DELIMITER)
+    .filter((value) => value.length > 0);
+}
+
+async function readEventNamesFile(
+  path: string | undefined,
+  readFileImpl: (path: PathLike) => Promise<Buffer>,
+): Promise<string[]> {
+  if (path === undefined || path === '') {
+    return [];
+  }
+  let contents: Buffer;
+  try {
+    contents = await readFileImpl(path);
+  } catch (error) {
+    throw new CliError({
+      message: `Could not read events file ${path}: ${error instanceof Error ? error.message : String(error)}`,
+      errorCode: 'file_read_failed',
+      exitCode: 1,
+    });
+  }
+  const lines = contents.toString('utf8').split(/\r?\n/u);
+  if (lines.length > 0 && lines[0]?.startsWith('\uFEFF')) {
+    lines[0] = lines[0].slice(1);
+  }
+  return lines.filter((line) => line !== '');
+}
+
+function uniqueEventNames(names: string[]): string[] {
+  const seen = new Set<string>();
+  const unique: string[] = [];
+  for (const name of names) {
+    if (seen.has(name)) {
+      continue;
+    }
+    seen.add(name);
+    unique.push(name);
+  }
+  return unique;
+}
+
+function parseUnmatchedEventNamesHeader(value: string | null): string[] {
+  if (!value) {
+    return [];
+  }
+  const names: string[] = [];
+  for (const chunk of value.split(',')) {
+    const trimmed = chunk.trim();
+    if (trimmed === '') {
+      continue;
+    }
+    try {
+      names.push(decodeURIComponent(trimmed));
+    } catch {
+      names.push(trimmed);
+    }
+  }
+  return names;
+}
+
+function parseUnmatchedEventNamesCountHeader(
+  value: string | null,
+): number | null {
+  if (!value) {
+    return null;
+  }
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    return null;
+  }
+  return parsed;
+}
+
 export async function runTrackingPlanExport(
   flags: Record<string, FlagValue>,
   deps: TrackingPlanCommandDeps = {},
@@ -526,38 +615,98 @@ export async function runTrackingPlanExport(
   }
   const includeDeleted = isFlagEnabled(flags['include-deleted']);
   const write = deps.write ?? writeStdout;
+  const writeErr =
+    deps.writeErr ?? ((chunk: string) => process.stderr.write(chunk));
   const fetchImpl = deps.fetchImpl ?? fetch;
   const isTTY = deps.isTTY ?? Boolean(process.stdout.isTTY);
   const renameImpl = deps.renameImpl ?? rename;
   const unlinkImpl = deps.unlinkImpl ?? unlink;
+  const readFileImpl =
+    deps.readFileImpl ??
+    (async (path: PathLike): Promise<Buffer> => readFile(path));
   const createWriteStreamImpl =
     deps.createWriteStreamImpl ??
     ((path: string): EventedWritable =>
       createWriteStream(path, { flags: 'wx' }));
   const stdoutStream = deps.stdoutStream ?? process.stdout;
-
-  const query = new URLSearchParams();
-  query.set('type', exportType);
-  if (branchName !== undefined) {
-    query.set('branch_name', branchName);
+  const rawEventFlag = stringFlag(flags, ['event']);
+  const eventsFilePath = stringFlag(flags, ['events-file']);
+  const eventNamesFromFlags = parseEventNamesFlag(rawEventFlag);
+  const eventNamesFromFile = await readEventNamesFile(
+    eventsFilePath,
+    readFileImpl,
+  );
+  const eventNames = uniqueEventNames([
+    ...eventNamesFromFlags,
+    ...eventNamesFromFile,
+  ]);
+  if (
+    (rawEventFlag !== undefined || eventsFilePath !== undefined) &&
+    eventNames.length === 0
+  ) {
+    throw usageError(
+      '--event/--events-file must include at least one non-empty event name.',
+    );
   }
-  if (includeDeleted) {
-    query.set('include_deleted', 'true');
+  if (exportType === 'user_properties' && eventNames.length > 0) {
+    throw usageError(
+      '--event and --events-file are only supported with --type events.',
+    );
   }
 
   const auth = await resolveAuthWithRefresh(flags);
-  const url = `${auth.baseUrl}/v1/projects/${encodeURIComponent(projectId)}/tracking-plan/export?${query.toString()}`;
-  const response = await sendAuthenticatedRequest({
-    auth,
-    url,
-    method: 'GET',
-    accept: 'text/csv',
-    fetchImpl,
-  });
+  const baseUrl = `${auth.baseUrl}/v1/projects/${encodeURIComponent(projectId)}/tracking-plan/export`;
+  const response =
+    eventNames.length > 0
+      ? await sendAuthenticatedRequest({
+          auth,
+          url: baseUrl,
+          method: 'POST',
+          accept: 'text/csv',
+          body: JSON.stringify({
+            type: exportType,
+            branch_name: branchName,
+            include_deleted: includeDeleted,
+            event_names: eventNames,
+            strict: false,
+          }),
+          contentType: 'application/json',
+          fetchImpl,
+        })
+      : await sendAuthenticatedRequest({
+          auth,
+          url: `${baseUrl}?${new URLSearchParams({
+            type: exportType,
+            ...(branchName ? { branch_name: branchName } : {}),
+            ...(includeDeleted ? { include_deleted: 'true' } : {}),
+          }).toString()}`,
+          method: 'GET',
+          accept: 'text/csv',
+          fetchImpl,
+        });
 
   if (!response.ok) {
     const responseBody = parseResponseBody(await response.text());
     throw parseExportError(response, responseBody, projectId);
+  }
+  const unmatchedEventNames = parseUnmatchedEventNamesHeader(
+    response.headers.get('x-unmatched-event-names'),
+  );
+  const unmatchedEventNameCount = parseUnmatchedEventNamesCountHeader(
+    response.headers.get('x-unmatched-event-count'),
+  );
+  const unmatchedEventNamesTruncated =
+    response.headers.get('x-unmatched-event-names-truncated') === 'true';
+  if (unmatchedEventNames.length > 0) {
+    writeErr(`Unmatched event names: ${unmatchedEventNames.join(', ')}\n`);
+  } else if ((unmatchedEventNameCount ?? 0) > 0) {
+    writeErr(
+      `Unmatched event names: ${unmatchedEventNameCount} total (header list omitted)\n`,
+    );
+  }
+  if (unmatchedEventNamesTruncated) {
+    const total = unmatchedEventNameCount ?? unmatchedEventNames.length;
+    writeErr(`Unmatched event names list truncated (${total} total).\n`);
   }
 
   if (out === '-') {
@@ -849,6 +998,7 @@ export async function runTrackingPlanImport(
     method: 'POST',
     accept: 'application/json',
     body: csvBody,
+    contentType: 'text/csv',
     fetchImpl,
     importSafeRetryHint: true,
   });

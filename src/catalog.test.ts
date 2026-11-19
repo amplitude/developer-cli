@@ -115,7 +115,8 @@ describe('buildCatalog — API operations', () => {
     expect(exportCommand).toMatchObject({
       group: 'tracking-plan',
       requiredScopes: ['taxonomy:read'],
-      example: 'amp tracking-plan export --project <project_id> --out plan.csv',
+      example:
+        'amp tracking-plan export --project <project_id> --event "Signup Completed" --out plan.csv',
     });
   });
 

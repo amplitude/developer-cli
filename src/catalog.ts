@@ -162,7 +162,7 @@ const EXAMPLES: Partial<Record<string, string>> = {
   'events check-ingestion-by-api-key':
     'amp events check-ingestion-by-api-key --api-key <api_key> --region <us|eu>',
   'tracking-plan export':
-    'amp tracking-plan export --project <project_id> --out plan.csv',
+    'amp tracking-plan export --project <project_id> --event "Signup Completed" --out plan.csv',
   'tracking-plan import':
     'amp tracking-plan import --project <project_id> --file plan.csv',
   'flags list': 'amp flags list --project <project_id> --limit 5',
@@ -728,7 +728,7 @@ const TRACKING_PLAN_COMMANDS: CatalogCommand[] = withGlobalFlags(
       group: 'tracking-plan',
       order: GROUP_ORDER['tracking-plan'],
       description:
-        'Exports the tracking plan as CSV. Writes to --out by default; pass --out - to print CSV to stdout.',
+        'Requires authentication (`amp auth login`, `--token`, or `AMP_TOKEN`). Exports the tracking plan as CSV. Writes to --out by default; pass --out - to print CSV to stdout.',
       flags: [
         {
           name: 'project_id',
@@ -752,6 +752,22 @@ const TRACKING_PLAN_COMMANDS: CatalogCommand[] = withGlobalFlags(
           required: false,
           enum: ['events', 'user_properties'],
           description: 'Export type. Defaults to `events`.',
+        },
+        {
+          name: 'event_names',
+          aliases: ['event'],
+          type: 'string',
+          required: false,
+          description:
+            'Optional event-name filter for events exports. Repeat --event and/or pass --events-file.',
+        },
+        {
+          name: 'events_file',
+          aliases: ['events-file'],
+          type: 'string',
+          required: false,
+          description:
+            'Optional file path with one event name per line. Combined with --event.',
         },
         {
           name: 'include_deleted',
