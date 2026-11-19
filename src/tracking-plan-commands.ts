@@ -697,19 +697,26 @@ export async function runTrackingPlanExport(
   );
   const unmatchedEventNamesTruncated =
     response.headers.get('x-unmatched-event-names-truncated') === 'true';
-  if (unmatchedEventNames.length > 0) {
-    writeErr(`Unmatched event names: ${unmatchedEventNames.join(', ')}\n`);
-  } else if ((unmatchedEventNameCount ?? 0) > 0) {
-    writeErr(
-      `Unmatched event names: ${unmatchedEventNameCount} total (header list omitted)\n`,
-    );
-  }
-  if (unmatchedEventNamesTruncated) {
-    const total = unmatchedEventNameCount ?? unmatchedEventNames.length;
-    writeErr(`Unmatched event names list truncated (${total} total).\n`);
-  }
+  const unmatchedEventTotal =
+    unmatchedEventNameCount ?? unmatchedEventNames.length;
+  const writeUnmatchedWarnings = (): void => {
+    if (unmatchedEventNames.length > 0) {
+      writeErr(`Unmatched event names: ${unmatchedEventNames.join(', ')}\n`);
+    } else if (unmatchedEventTotal > 0) {
+      writeErr(
+        `Unmatched event names: ${unmatchedEventTotal} total (header list omitted)\n`,
+      );
+    }
+    if (unmatchedEventNamesTruncated) {
+      writeErr(
+        `Unmatched event names list truncated (${unmatchedEventTotal} total).\n`,
+      );
+    }
+  };
 
   if (out === '-') {
+    // The CSV owns stdout, so stderr is the only channel for the warning.
+    writeUnmatchedWarnings();
     await streamExportToStdout({ response, stdoutStream });
     return;
   }
@@ -736,6 +743,14 @@ export async function runTrackingPlanExport(
             branch_name: branchName,
             include_deleted: includeDeleted,
             out,
+            ...(eventNames.length > 0
+              ? {
+                  event_names: eventNames,
+                  unmatched_event_names: unmatchedEventNames,
+                  unmatched_event_count: unmatchedEventTotal,
+                  unmatched_event_names_truncated: unmatchedEventNamesTruncated,
+                }
+              : {}),
           },
         },
         isTTY,
@@ -744,6 +759,7 @@ export async function runTrackingPlanExport(
     return;
   }
 
+  writeUnmatchedWarnings();
   write(`Exported tracking-plan CSV to ${out}\n`);
 }
 

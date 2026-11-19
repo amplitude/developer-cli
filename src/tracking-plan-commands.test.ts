@@ -148,6 +148,7 @@ describe('tracking-plan export', () => {
       {
         fetchImpl,
         readFileImpl: vi.fn(async () => Buffer.from('Missing Name\n')),
+        isTTY: true,
         write: () => undefined,
         writeErr: (chunk) => {
           writesErr.push(chunk);
@@ -180,6 +181,7 @@ describe('tracking-plan export', () => {
       },
       {
         fetchImpl,
+        isTTY: true,
         write: () => undefined,
         writeErr: (chunk) => {
           writesErr.push(chunk);
@@ -194,6 +196,50 @@ describe('tracking-plan export', () => {
     expect(rendered).toContain(
       'Unmatched event names list truncated (45 total).',
     );
+  });
+
+  it('reports unmatched event names in the JSON summary instead of stderr prose', async () => {
+    const writes: string[] = [];
+    const writesErr: string[] = [];
+    const dir = mkdtempSync(join(tmpdir(), 'tp-export-unmatched-json-'));
+    const out = join(dir, 'plan.csv');
+
+    await runTrackingPlanExport(
+      { project: '123', event: 'Signup\u0000Missing, Name', out, json: true },
+      {
+        fetchImpl: vi.fn(
+          async () =>
+            new Response('a,b\n1,2\n', {
+              status: 200,
+              headers: {
+                'x-unmatched-event-names': 'Missing%2C%20Name',
+                'x-unmatched-event-count': '1',
+              },
+            }),
+        ),
+        isTTY: false,
+        write: (chunk) => {
+          writes.push(chunk);
+        },
+        writeErr: (chunk) => {
+          writesErr.push(chunk);
+        },
+      },
+    );
+
+    expect(JSON.parse(writes.join(''))).toEqual({
+      data: {
+        project_id: '123',
+        type: 'events',
+        include_deleted: false,
+        out,
+        event_names: ['Signup', 'Missing, Name'],
+        unmatched_event_names: ['Missing, Name'],
+        unmatched_event_count: 1,
+        unmatched_event_names_truncated: false,
+      },
+    });
+    expect(writesErr).toEqual([]);
   });
 
   it('preserves commas inside a literal --event value', async () => {

@@ -7800,8 +7800,8 @@ components:
             non-credential types: string, boolean, enum, mapped field, event
             mapping, and transformation. Secret, OAuth, service-account, custom
             HTTP header, and ads-account values are write-only and never returned.
-            A string flagged shouldEncryptInDb is omitted too. Structured values
-            round-trip as decoded JSON.
+            String values the partner marks as sensitive are omitted too.
+            Structured values round-trip as decoded JSON.
         credential_status:
           $ref: '#/components/schemas/DestinationCredentialStatus'
         version:

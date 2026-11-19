@@ -9838,7 +9838,7 @@
           "config": {
             "type": "object",
             "additionalProperties": true,
-            "description": "Partner config keyed by parameter id. Reads return an allowlist of\nnon-credential types: string, boolean, enum, mapped field, event\nmapping, and transformation. Secret, OAuth, service-account, custom\nHTTP header, and ads-account values are write-only and never returned.\nA string flagged shouldEncryptInDb is omitted too. Structured values\nround-trip as decoded JSON.\n"
+            "description": "Partner config keyed by parameter id. Reads return an allowlist of\nnon-credential types: string, boolean, enum, mapped field, event\nmapping, and transformation. Secret, OAuth, service-account, custom\nHTTP header, and ads-account values are write-only and never returned.\nString values the partner marks as sensitive are omitted too.\nStructured values round-trip as decoded JSON.\n"
           },
           "credential_status": {
             "$ref": "#/components/schemas/DestinationCredentialStatus"
