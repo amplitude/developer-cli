@@ -145,8 +145,8 @@ describe('signup response contract', () => {
     expect(error.message).toBe(message);
     const text = formatErrorText(error);
     expect(text).toBe('Update^[[31m this client^G');
-    expect(text.includes('\u001b')).toBe(false);
-    expect(text.includes('\u0007')).toBe(false);
+    expect(text).not.toContain('\x1B');
+    expect(text).not.toContain('\x07');
 
     expect(JSON.parse(formatErrorEnvelope(error, false))).toMatchObject({
       message,

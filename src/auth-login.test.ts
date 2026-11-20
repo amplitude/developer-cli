@@ -318,7 +318,7 @@ describe('runAuthLogin', () => {
 
     const text = out.join('\n');
     expect(text).toContain('was "old^[[31m"');
-    expect(text.includes('\u001b')).toBe(false);
+    expect(text).not.toContain('\x1B');
   });
 
   it('re-auths the default in place when --profile is omitted', async () => {

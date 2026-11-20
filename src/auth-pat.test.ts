@@ -106,7 +106,7 @@ describe('runAuthPat', () => {
 
     const text = out.join('\n');
     expect(text).toContain('was "old^[[31m"');
-    expect(text.includes('\u001b')).toBe(false);
+    expect(text).not.toContain('\x1B');
   });
 
   it('normalizes a prefixed token before saving', async () => {

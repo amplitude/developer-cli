@@ -102,15 +102,15 @@ letters, digits and `-`) to name itself; the CLI then sends
 
 ## Global flags
 
-| Flag / env                              | Purpose                                    |
-| --------------------------------------- | ------------------------------------------ |
-| `--region <us\|eu>`                     | Data region name → base URL                |
-| `--profile <name>` / `AMP_PROFILE`      | Select a stored profile                    |
-| `--token` / `AMP_TOKEN` / saved profile | Auth token                                 |
-| `--json`                                | Force raw JSON output (default when piped) |
-| `--yes`                                 | Confirm DELETE operations                  |
-| `--dry-run`                             | Preview destructive/query side effects     |
-| `--body-json '{...}'`                   | Merge extra JSON into request bodies       |
+| Flag / env                              | Purpose                                                                  |
+| --------------------------------------- | ------------------------------------------------------------------------ |
+| `--region <us\|eu>`                     | Data region name → base URL                                              |
+| `--profile <name>` / `AMP_PROFILE`      | Select a stored profile                                                  |
+| `--token` / `AMP_TOKEN` / saved profile | Auth token                                                               |
+| `--json`                                | Force raw JSON output (default when piped)                               |
+| `--yes`                                 | Confirm DELETE operations                                                |
+| `--dry-run`                             | Validate without applying, on commands that support it; others reject it |
+| `--body-json '{...}'`                   | Merge extra JSON into request bodies                                     |
 
 ## Help and output
 

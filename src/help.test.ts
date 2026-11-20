@@ -144,11 +144,11 @@ describe('help', () => {
     expect(surfaces).toContain('charts');
     expect(surfaces.slice(0, 6)).toEqual([
       'context',
+      'ai-context',
       'projects',
       'events',
       'event-properties',
       'user-properties',
-      'flags',
     ]);
   });
 
@@ -262,6 +262,103 @@ describe('help', () => {
     );
   });
 
+  it('resolves org vs project ai-context get from --project', () => {
+    expect(findOperation(['ai-context', 'get'])?.operationId).toBe(
+      'getOrgAiContext',
+    );
+    expect(
+      findOperation(['ai-context', 'get'], { project: '850097' })?.operationId,
+    ).toBe('getProjectAiContext');
+    expect(
+      findOperation(['ai-context', 'get'], { 'project-id': '278892' })
+        ?.operationId,
+    ).toBe('getProjectAiContext');
+    expect(findOperation(['ai-context', 'get', '850097'])).toBeUndefined();
+  });
+
+  it('documents project scope on ai-context get help', () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    try {
+      printCommandHelp(['ai-context', 'get']);
+      const output = log.mock.calls.map((c) => String(c[0])).join('\n');
+      expect(output).toContain('--project');
+      expect(output).toContain('amp ai-context get --project');
+      expect(output).toMatch(/\[--project/);
+    } finally {
+      log.mockRestore();
+    }
+  });
+
+  it('resolves org vs project ai-context set from --project', () => {
+    expect(
+      findOperation(['ai-context', 'set'], { context: 'x' })?.operationId,
+    ).toBe('setOrgAiContext');
+    expect(
+      findOperation(['ai-context', 'set'], { project: '850097', context: 'x' })
+        ?.operationId,
+    ).toBe('setProjectAiContext');
+    expect(findOperation(['ai-context', 'set', '850097'])).toBeUndefined();
+  });
+
+  it('routes an empty --project to the project operation so it is reported as missing', () => {
+    expect(
+      findOperation(['ai-context', 'set'], { project: '', context: 'x' })
+        ?.operationId,
+    ).toBe('setProjectAiContext');
+    expect(
+      findOperation(['ai-context', 'get'], { 'project-id': '' })?.operationId,
+    ).toBe('getProjectAiContext');
+  });
+
+  it.each([
+    ['get', 'Returns'],
+    ['set', 'Replaces'],
+  ])(
+    'describes ai-context %s for both organizations and projects',
+    (verb, lead) => {
+      const log = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+      try {
+        printCommandHelp(['ai-context', verb], { json: true, isTTY: false });
+        const help = JSON.parse(String(log.mock.calls[0][0])) as {
+          description: string;
+        };
+        expect(help.description).toMatch(
+          new RegExp(
+            `^${lead} .* for the organization, or for a project with --project\\.`,
+          ),
+        );
+      } finally {
+        log.mockRestore();
+      }
+    },
+  );
+
+  it('summarizes ai-context commands for both scopes in prose group help', () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    try {
+      printCommandHelp(['ai-context']);
+      const output = log.mock.calls.map((c) => String(c[0])).join('\n');
+      expect(output).toContain('Get organization or project AI context');
+      expect(output).toContain('Set organization or project AI context');
+      expect(output).not.toContain('Get organization AI context');
+      expect(output).not.toContain('Set organization AI context');
+    } finally {
+      log.mockRestore();
+    }
+  });
+
+  it('documents context body on ai-context set help', () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    try {
+      printCommandHelp(['ai-context', 'set']);
+      const output = log.mock.calls.map((c) => String(c[0])).join('\n');
+      expect(output).toContain('--context');
+      expect(output).toContain('amp ai-context set --project');
+    } finally {
+      log.mockRestore();
+    }
+  });
+
   it('finds operations under a command prefix', () => {
     const matches = operationsMatchingPrefix(['flags']);
     expect(matches.length).toBeGreaterThan(1);
@@ -327,10 +424,12 @@ describe('help', () => {
     const curated = groups.filter((group) => group !== 'auth');
     expect(curated).toEqual([
       'context',
+      'ai-context',
       'projects',
       'events',
       'event-properties',
       'user-properties',
+      'tracking-plan',
       'flags',
       'charts',
       'metrics',
@@ -461,7 +560,7 @@ describe('help JSON', () => {
     // stay well under half that however many commands exist. Tied to the
     // principle rather than a snapshot: a bump here is only warranted when
     // commands are added, never to accommodate a per-command size regression.
-    expect(out.length).toBeLessThan(12000);
+    expect(out.length).toBeLessThan(13000);
   });
 
   it('exact command + json → full detail, with flags, and no order', () => {
@@ -493,6 +592,27 @@ describe('help JSON', () => {
       true,
     );
     expect(parsed).not.toHaveProperty('order');
+  });
+
+  it("shows the spec's example value for a body flag in JSON and prose help", () => {
+    const parsed = JSON.parse(
+      capture(() =>
+        printCommandHelp(['surveys', 'create'], { json: true, isTTY: false }),
+      ),
+    );
+    const variants = parsed.flags.find(
+      (f: { name: string }) => f.name === 'variants',
+    );
+    const [step] = variants.example[0].steps;
+    expect(step.content).toContainEqual({
+      type: 'survey_rating',
+      meta: expect.objectContaining({ type: 'nps', options: 10 }),
+    });
+
+    const prose = capture(() => printCommandHelp(['surveys', 'create']));
+    expect(prose).toContain(
+      `    Example value: ${JSON.stringify(variants.example)}`,
+    );
   });
 
   it('describes the required visible endpoint selector in API-key ingestion JSON help', () => {

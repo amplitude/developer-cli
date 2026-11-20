@@ -163,14 +163,14 @@ describe('resolveSkillsListBaseUrl', () => {
     (region) => {
       expect(() =>
         resolveSkillsListBaseUrl({ region }, { path: tempStorePath() }),
-      ).toThrowError(`Unknown --region "${region}". Known: us, eu.`);
+      ).toThrow(`Unknown --region "${region}". Known: us, eu.`);
     },
   );
 
   it('keeps the existing unknown-environment usage error', () => {
     expect(() =>
       resolveSkillsListBaseUrl({ env: 'unknown' }, { path: tempStorePath() }),
-    ).toThrowError(/Unknown --env/);
+    ).toThrow(/Unknown --env/);
   });
 });
 
@@ -258,7 +258,7 @@ describe('resolveSkillsGetBaseUrl', () => {
         { region: 'apac' },
         { path: saveDefaultProfile('https://active.example.test') },
       ),
-    ).toThrowError('Unknown --region "apac". Known: us, eu.');
+    ).toThrow('Unknown --region "apac". Known: us, eu.');
   });
 
   it('lets --env local override the default profile', () => {
@@ -276,7 +276,7 @@ describe('resolveSkillsGetBaseUrl', () => {
         { env: 'local', region: 'us' },
         { path: tempStorePath() },
       ),
-    ).toThrowError('Pass either --region or --env, not both.');
+    ).toThrow('Pass either --region or --env, not both.');
   });
 });
 

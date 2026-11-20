@@ -294,7 +294,7 @@ export function buildRequest(
 
   for (const property of operation.body) {
     const raw = flagValue(flags, property.aliases);
-    if (property.required && raw === '') {
+    if (property.required && raw === '' && !property.allowEmptyValue) {
       throw usageError(`Missing --${property.aliases[0]} <${property.name}>.`);
     }
     if (

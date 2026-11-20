@@ -256,6 +256,27 @@ async function ensureDeleteAllowed(
   }
 }
 
+/**
+ * `--dry-run` is parseable on every API command, but only operations that
+ * declare a `dry_run` parameter can honor it. Refuse it elsewhere so it never
+ * silently performs a real write. DELETE commands are handled by
+ * `ensureDeleteAllowed`, which adds confirmation guidance.
+ */
+function assertDryRunSupported(
+  operation: CliOperation,
+  flags: Record<string, FlagValue>,
+): void {
+  if (
+    operation.method !== 'DELETE' &&
+    isFlagEnabled(flags['dry-run'] ?? flags.dry_run) &&
+    !operationSupportsDryRun(operation)
+  ) {
+    throw usageError(
+      `\`amp ${operation.command.join(' ')}\` does not support --dry-run. Drop --dry-run to run it for real.`,
+    );
+  }
+}
+
 export async function runOperation(
   operation: CliOperation,
   flags: Record<string, FlagValue>,
@@ -277,6 +298,7 @@ export async function runOperation(
     operation,
     request.body,
   );
+  assertDryRunSupported(operation, flags);
   await ensureDeleteAllowed(operation, flags);
   const maxRuntimeMs =
     requestPollingDurationSeconds === undefined

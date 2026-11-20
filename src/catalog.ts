@@ -22,6 +22,8 @@ export interface CatalogFlag {
   description?: string;
   items?: Record<string, unknown>;
   schema?: Record<string, unknown>;
+  /** Example value from the OpenAPI spec. */
+  example?: unknown;
 }
 
 export interface CatalogPositional {
@@ -56,6 +58,8 @@ export interface CatalogCommand {
    */
   requiredUsageGlobalFlags?: RequiredUsageGlobalFlag[];
   example?: string;
+  /** Extra usage lines when one public command maps to multiple API operations. */
+  additionalExamples?: string[];
   requiredScopes: string[];
 }
 
@@ -99,30 +103,34 @@ export function findCatalogCommand(
 // present (design rule: generation augments curation, never replaces it).
 const GROUP_ORDER: Partial<Record<string, number>> = {
   context: 0,
-  projects: 1,
-  events: 2,
-  'event-properties': 3,
-  'user-properties': 4,
-  flags: 5,
-  charts: 6,
-  metrics: 7,
-  heatmaps: 8,
-  zoning: 9,
-  'destination-types': 10,
-  destinations: 11,
-  guides: 12,
-  surveys: 13,
-  themes: 14,
-  skills: 15,
+  'ai-context': 1,
+  projects: 2,
+  events: 3,
+  'event-properties': 4,
+  'user-properties': 5,
+  'tracking-plan': 6,
+  flags: 7,
+  charts: 8,
+  metrics: 9,
+  heatmaps: 10,
+  zoning: 11,
+  'destination-types': 12,
+  destinations: 13,
+  guides: 14,
+  surveys: 15,
+  themes: 16,
+  skills: 17,
   auth: 20,
 };
 
 const GROUP_DESCRIPTIONS: Partial<Record<string, string>> = {
   context: 'Authenticated user and org context',
+  'ai-context': 'Organization- and project-level customer AI context',
   projects: 'Projects in your organization',
   events: 'Event taxonomy',
   'event-properties': 'Properties on events',
   'user-properties': 'User properties',
+  'tracking-plan': 'Tracking-plan CSV import and export',
   flags: 'Feature flags',
   charts: 'Saved and ad-hoc charts',
   metrics: 'Saved metric definitions',
@@ -141,6 +149,8 @@ const GROUP_DESCRIPTIONS: Partial<Record<string, string>> = {
 
 const EXAMPLES: Partial<Record<string, string>> = {
   context: 'amp context',
+  'ai-context get': 'amp ai-context get',
+  'ai-context set': 'amp ai-context set --context "Your organization context"',
   'projects list': 'amp projects list --limit 10',
   'projects api-keys get': 'amp projects api-keys get --project <project_id>',
   'events list': 'amp events list --project <project_id> --limit 5',
@@ -151,6 +161,10 @@ const EXAMPLES: Partial<Record<string, string>> = {
     'amp events check-ingestion --project <project_id> --event-type <event_type>',
   'events check-ingestion-by-api-key':
     'amp events check-ingestion-by-api-key --api-key <api_key> --region <us|eu>',
+  'tracking-plan export':
+    'amp tracking-plan export --project <project_id> --event "Signup Completed" --out plan.csv',
+  'tracking-plan import':
+    'amp tracking-plan import --project <project_id> --file plan.csv',
   'flags list': 'amp flags list --project <project_id> --limit 5',
   'flags create':
     'amp flags create --project <project_id> --key my-flag --name "My Flag"',
@@ -226,6 +240,7 @@ function flagsForOperation(operation: CliOperation): CatalogFlag[] {
     enum: property.enum,
     items: property.items,
     ...(property.schema ? { schema: property.schema } : {}),
+    ...(property.example !== undefined ? { example: property.example } : {}),
     description:
       [
         property.description,
@@ -245,33 +260,128 @@ function flagsForOperation(operation: CliOperation): CatalogFlag[] {
   ];
 }
 
+const AI_CONTEXT_PROJECT_SCOPE_NOTE =
+  'Omit --project for organization context; pass --project for a project.';
+
+const DISAMBIGUATED_AI_CONTEXT_COMMANDS: {
+  key: string;
+  orgOperationId: string;
+  projectOperationId: string;
+  summary: string;
+  description: string;
+  projectExample: string;
+}[] = [
+  {
+    key: 'ai-context get',
+    orgOperationId: 'getOrgAiContext',
+    projectOperationId: 'getProjectAiContext',
+    summary: 'Get organization or project AI context',
+    description:
+      'Returns the customer-managed AI context configured in Settings → AI Controls for the organization, or for a project with --project. Empty string when nothing is configured.',
+    projectExample: 'amp ai-context get --project <project_id>',
+  },
+  {
+    key: 'ai-context set',
+    orgOperationId: 'setOrgAiContext',
+    projectOperationId: 'setProjectAiContext',
+    summary: 'Set organization or project AI context',
+    description:
+      'Replaces the customer-managed AI context in Settings → AI Controls for the organization, or for a project with --project. Pass --context "" to clear the stored value.',
+    projectExample:
+      'amp ai-context set --project <project_id> --context "Your project context"',
+  },
+];
+
+function mergeDisambiguatedCommand(
+  commands: CatalogCommand[],
+  config: (typeof DISAMBIGUATED_AI_CONTEXT_COMMANDS)[number],
+): CatalogCommand[] {
+  const duplicates = commands.filter(
+    (entry) => entry.command.join(' ') === config.key,
+  );
+  if (duplicates.length < 2) {
+    return commands;
+  }
+
+  const projectOperation = CLI_OPERATIONS.find(
+    (operation) => operation.operationId === config.projectOperationId,
+  );
+  const orgOperation = CLI_OPERATIONS.find(
+    (operation) => operation.operationId === config.orgOperationId,
+  );
+  if (projectOperation === undefined || orgOperation === undefined) {
+    return commands;
+  }
+
+  const template = duplicates[0];
+  const pathFlags = flagsForOperation(projectOperation)
+    .filter((flag) => flag.name === 'project_id')
+    .map((flag) => ({
+      ...flag,
+      required: false,
+      description: [flag.description, AI_CONTEXT_PROJECT_SCOPE_NOTE]
+        .filter(Boolean)
+        .join(' '),
+    }));
+  const bodyFlags = flagsForOperation(orgOperation).filter(
+    (flag) => flag.name !== 'Idempotency-Key',
+  );
+  const merged: CatalogCommand = {
+    ...template,
+    summary: config.summary,
+    flags: [...pathFlags, ...bodyFlags],
+    description: [config.description, AI_CONTEXT_PROJECT_SCOPE_NOTE].join(
+      '\n\n',
+    ),
+    example: EXAMPLES[config.key] ?? `amp ${config.key}`,
+    additionalExamples: [config.projectExample],
+    requiredScopes: orgOperation.requiredScopes,
+  };
+
+  return [
+    ...commands.filter((entry) => entry.command.join(' ') !== config.key),
+    merged,
+  ];
+}
+
+function collapseDisambiguatedCommands(
+  commands: CatalogCommand[],
+): CatalogCommand[] {
+  return DISAMBIGUATED_AI_CONTEXT_COMMANDS.reduce(
+    (result, config) => mergeDisambiguatedCommand(result, config),
+    commands,
+  );
+}
+
 function apiCommands(): CatalogCommand[] {
-  return CLI_OPERATIONS.map((operation) => {
-    const group = operation.command[0];
-    const key = operation.command.join(' ');
-    return {
-      command: operation.command,
-      summary: operation.summary ?? 'Call the Developer API.',
-      group,
-      order: GROUP_ORDER[group],
-      flags: flagsForOperation(operation),
-      globalFlags: apiGlobalOptionAliases(operation.authentication),
-      requiredUsageGlobalFlags: REQUIRED_USAGE_GLOBAL_FLAGS[key],
-      example: EXAMPLES[key],
-      description:
-        [
-          operation.description,
-          API_COMMAND_DESCRIPTIONS[key],
-          operation.method === 'DELETE'
-            ? 'Requires --yes to apply changes, or --dry-run when supported to validate without applying changes.'
-            : undefined,
-        ]
-          .map((part) => part?.trim())
-          .filter(Boolean)
-          .join('\n\n') || undefined,
-      requiredScopes: operation.requiredScopes,
-    };
-  });
+  return collapseDisambiguatedCommands(
+    CLI_OPERATIONS.map((operation) => {
+      const group = operation.command[0];
+      const key = operation.command.join(' ');
+      return {
+        command: operation.command,
+        summary: operation.summary ?? 'Call the Developer API.',
+        group,
+        order: GROUP_ORDER[group],
+        flags: flagsForOperation(operation),
+        globalFlags: apiGlobalOptionAliases(operation.authentication),
+        requiredUsageGlobalFlags: REQUIRED_USAGE_GLOBAL_FLAGS[key],
+        example: EXAMPLES[key],
+        description:
+          [
+            operation.description,
+            API_COMMAND_DESCRIPTIONS[key],
+            operation.method === 'DELETE'
+              ? 'Requires --yes to apply changes, or --dry-run when supported to validate without applying changes.'
+              : undefined,
+          ]
+            .map((part) => part?.trim())
+            .filter(Boolean)
+            .join('\n\n') || undefined,
+        requiredScopes: operation.requiredScopes,
+      };
+    }),
+  );
 }
 
 // Auth/meta commands are bespoke routing (excluded from the OpenAPI manifest by
@@ -610,9 +720,127 @@ const SKILLS_COMMANDS: CatalogCommand[] = [
   SKILLS_GET_COMMAND,
 ];
 
+const TRACKING_PLAN_COMMANDS: CatalogCommand[] = withGlobalFlags(
+  [
+    {
+      command: ['tracking-plan', 'export'],
+      summary: 'Export a tracking plan as CSV',
+      group: 'tracking-plan',
+      order: GROUP_ORDER['tracking-plan'],
+      description:
+        'Requires authentication (`amp auth login`, `--token`, or `AMP_TOKEN`). Exports the tracking plan as CSV. Writes to --out by default; pass --out - to print CSV to stdout.',
+      flags: [
+        {
+          name: 'project_id',
+          aliases: ['project', 'project-id', 'project_id'],
+          type: 'string',
+          required: true,
+          description: 'Project identifier.',
+        },
+        {
+          name: 'branch_name',
+          aliases: ['branch-name'],
+          type: 'string',
+          required: false,
+          description:
+            'Optional branch name. Omit to export the default branch.',
+        },
+        {
+          name: 'type',
+          aliases: ['type'],
+          type: 'string',
+          required: false,
+          enum: ['events', 'user_properties'],
+          description: 'Export type. Defaults to `events`.',
+        },
+        {
+          name: 'event_names',
+          aliases: ['event'],
+          type: 'string',
+          required: false,
+          description:
+            'Optional event-name filter for events exports. Repeat --event and/or pass --events-file.',
+        },
+        {
+          name: 'events_file',
+          aliases: ['events-file'],
+          type: 'string',
+          required: false,
+          description:
+            'Optional file path with one event name per line. Combined with --event.',
+        },
+        {
+          name: 'include_deleted',
+          aliases: ['include-deleted'],
+          type: 'boolean',
+          required: false,
+          description: 'Include deleted events or properties in the CSV.',
+        },
+        {
+          name: 'out',
+          aliases: ['out'],
+          type: 'string',
+          required: true,
+          description:
+            'Output path for the CSV file. Use `-` to print the CSV to stdout.',
+        },
+      ],
+      example: EXAMPLES['tracking-plan export'],
+      requiredScopes: ['taxonomy:read'],
+    },
+    {
+      command: ['tracking-plan', 'import'],
+      summary: 'Import a tracking plan from CSV into a new branch',
+      group: 'tracking-plan',
+      order: GROUP_ORDER['tracking-plan'],
+      description:
+        'Imports a tracking-plan CSV into a new branch and reports per-type created/updated counts plus removed or unmapped counts from the API response.',
+      flags: [
+        {
+          name: 'project_id',
+          aliases: ['project', 'project-id', 'project_id'],
+          type: 'string',
+          required: true,
+          description: 'Project identifier.',
+        },
+        {
+          name: 'file',
+          aliases: ['file'],
+          type: 'string',
+          required: true,
+          description: 'Path to the CSV file to upload.',
+        },
+        {
+          name: 'branch_name',
+          aliases: ['branch-name'],
+          type: 'string',
+          required: false,
+          description:
+            'Optional branch name for the import. Must be unique in the project.',
+        },
+      ],
+      example: EXAMPLES['tracking-plan import'],
+      requiredScopes: ['taxonomy:write'],
+    },
+  ],
+  [
+    'json',
+    'token',
+    'profile',
+    'region',
+    'env',
+    'base-url',
+    'help',
+    'h',
+    'version',
+    'v',
+  ],
+);
+
 export function buildCatalog(): CatalogCommand[] {
   return [
     ...apiCommands(),
+    ...TRACKING_PLAN_COMMANDS,
     ...withGlobalFlags(AUTH_COMMANDS, authGlobalOptionAliases()),
     ...SKILLS_COMMANDS,
   ];

@@ -167,7 +167,7 @@ describe('formatProfileList', () => {
 
     const out = formatProfileList(store, NOW);
     expect(out).toContain('dev^[[31m');
-    expect(out.includes('\u001b')).toBe(false);
+    expect(out).not.toContain('\x1B');
   });
 
   it('renders a custom host without terminal controls', () => {
@@ -182,8 +182,8 @@ describe('formatProfileList', () => {
 
     const out = formatProfileList(store, NOW);
     expect(out).toContain('https://evil.example/^[]0;owned^G');
-    expect(out.includes('\u001b')).toBe(false);
-    expect(out.includes('\u0007')).toBe(false);
+    expect(out).not.toContain('\x1B');
+    expect(out).not.toContain('\x07');
   });
 });
 

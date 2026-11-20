@@ -37,7 +37,7 @@ describe('resolveBaseUrl', () => {
   });
 
   it('throws when --base-url is passed without a value', () => {
-    expect(() => resolveBaseUrl({ 'base-url': true })).toThrowError(
+    expect(() => resolveBaseUrl({ 'base-url': true })).toThrow(
       'Expected --base-url to have a value.',
     );
   });

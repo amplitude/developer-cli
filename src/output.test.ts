@@ -241,8 +241,8 @@ describe('output formatting', () => {
 
     expect(output).toContain('ok^[[31mred^[[0m^G');
     expect(output).toContain('--cursor next^[]0;title^G');
-    expect(output.includes('\u001b')).toBe(false);
-    expect(output.includes('\u0007')).toBe(false);
+    expect(output).not.toContain('\x1B');
+    expect(output).not.toContain('\x07');
   });
 
   it('keeps collapsing whitespace in table cells that also contain escapes', () => {
@@ -276,9 +276,9 @@ describe('output formatting', () => {
     expect(output).toContain('Org:  Acme^M^[[1AHacked (1\\u009b31m)');
     expect(output).toContain('Auth: pat^M');
     expect(output).toContain('Scopes: read^[[0m:projects');
-    expect(output.includes('\u001b')).toBe(false);
-    expect(output.includes('\u000d')).toBe(false);
-    expect(output.includes('\u009b')).toBe(false);
+    expect(output).not.toContain('\x1B');
+    expect(output).not.toContain('\r');
+    expect(output).not.toContain('');
   });
 
   it('leaves control characters inside JSON serialization', () => {

@@ -41,6 +41,11 @@ import {
   runSkillsList,
 } from './skills-commands';
 import { terminal } from './terminal';
+import {
+  assertTrackingPlanFlags,
+  runTrackingPlanExport,
+  runTrackingPlanImport,
+} from './tracking-plan-commands';
 
 /**
  * Validates flags for a bespoke auth/logout command against globals ∪ that
@@ -154,6 +159,22 @@ export async function main(): Promise<void> {
       );
     }
 
+    if (command[0] === 'tracking-plan') {
+      if (command.length === 2 && command[1] === 'export') {
+        assertTrackingPlanFlags('export', flags);
+        await runTrackingPlanExport(flags);
+        return;
+      }
+      if (command.length === 2 && command[1] === 'import') {
+        assertTrackingPlanFlags('import', flags);
+        await runTrackingPlanImport(flags);
+        return;
+      }
+      throw usageError(
+        `Unknown tracking-plan command: ${command.join(' ')}. Try: amp help tracking-plan`,
+      );
+    }
+
     if (command[0] === 'auth') {
       if (command.length === 2 && command[1] === 'signup') {
         assertKnownAuthFlags(['auth', 'signup'], flags);
@@ -242,7 +263,7 @@ export async function main(): Promise<void> {
       return;
     }
 
-    const operation = findOperation(command);
+    const operation = findOperation(command, flags);
     if (!operation) {
       throw usageError(
         `Unknown command: ${command.join(' ')}. Run \`amp help\` to list commands.`,

@@ -176,6 +176,21 @@ const AUTH_SIGNUP_OPTIONS: ParseableOption[] = [
   { aliases: ['non-interactive'], valueRequirement: 'optional' },
 ];
 
+// `--project` is already declared by the generated operations, so only the
+// flags unique to the hand-written tracking-plan commands are listed here.
+const TRACKING_PLAN_OPTIONS: ParseableOption[] = [
+  { aliases: ['branch-name'], valueRequirement: 'required' },
+  { aliases: ['event'], valueRequirement: 'required' },
+  { aliases: ['events-file'], valueRequirement: 'required' },
+  { aliases: ['file'], valueRequirement: 'required' },
+  { aliases: ['type'], valueRequirement: 'required' },
+  { aliases: ['include-deleted'], valueRequirement: 'optional' },
+  { aliases: ['out'], valueRequirement: 'required' },
+];
+
+const REPEATABLE_REQUIRED_VALUE_ALIASES = new Set(['event']);
+export const REPEATABLE_OPTION_VALUE_DELIMITER = '\u0000';
+
 /** Every alias any global flag answers to. */
 export type GlobalOptionAlias =
   (typeof GLOBAL_OPTIONS)[number]['aliases'][number];
@@ -257,6 +272,7 @@ function optionDefinitions(): ParseableOption[] {
   for (const option of [
     ...GLOBAL_OPTIONS,
     ...AUTH_SIGNUP_OPTIONS,
+    ...TRACKING_PLAN_OPTIONS,
     { aliases: PROJECT_API_KEY_RAW_FLAG.aliases, valueRequirement: 'optional' },
   ] satisfies ParseableOption[]) {
     for (const alias of option.aliases) {
@@ -447,7 +463,47 @@ export function parseArgs(argv: string[]): ParsedArgs {
   }
 
   const command = program.args.filter((arg) => arg !== '--');
+  if (command[0] === 'tracking-plan' && command[1] === 'export') {
+    for (const alias of REPEATABLE_REQUIRED_VALUE_ALIASES) {
+      const values = collectRepeatableRequiredValueOption(
+        normalizedArgv,
+        alias,
+      );
+      if (values.length > 0) {
+        flags[alias] = values.join(REPEATABLE_OPTION_VALUE_DELIMITER);
+      }
+    }
+  }
   return { command, flags };
+}
+
+function collectRepeatableRequiredValueOption(
+  argv: string[],
+  alias: string,
+): string[] {
+  const values: string[] = [];
+  for (let index = 0; index < argv.length; index += 1) {
+    const token = argv[index];
+    if (token === '--') {
+      break;
+    }
+    const prefix = `--${alias}=`;
+    if (token.startsWith(prefix)) {
+      values.push(token.slice(prefix.length));
+      continue;
+    }
+    if (token === `--${alias}`) {
+      const value = argv[index + 1];
+      if (value !== undefined) {
+        if (value.startsWith('--')) {
+          throw usageError(`Expected --${alias} to have a value.`);
+        }
+        values.push(value);
+      }
+      index += 1;
+    }
+  }
+  return values;
 }
 
 export function flagValue(

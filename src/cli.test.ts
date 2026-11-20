@@ -8,8 +8,14 @@ import { CliError, usageError } from './cli-error';
 import * as credentialStore from './credential-store';
 import { formatVersion } from './help';
 import { signupMissingInformationError } from './signup-response';
+import * as trackingPlanCommands from './tracking-plan-commands';
 
 vi.mock('./auth-signup', () => ({ runAuthSignup: vi.fn() }));
+vi.mock('./tracking-plan-commands', () => ({
+  assertTrackingPlanFlags: vi.fn(),
+  runTrackingPlanExport: vi.fn(async () => undefined),
+  runTrackingPlanImport: vi.fn(async () => undefined),
+}));
 
 vi.mock('./auth-commands', async () => {
   const actual =
@@ -98,6 +104,9 @@ describe('main routing', () => {
     vi.mocked(authCommands.runAuthLoginPoll).mockClear();
     vi.mocked(authCommands.runAuthLogin).mockClear();
     vi.mocked(authCommands.runAuthPat).mockClear();
+    vi.mocked(trackingPlanCommands.assertTrackingPlanFlags).mockClear();
+    vi.mocked(trackingPlanCommands.runTrackingPlanExport).mockClear();
+    vi.mocked(trackingPlanCommands.runTrackingPlanImport).mockClear();
     vi.mocked(credentialStore.loadStore).mockReturnValue(
       credentialStore.emptyStore(),
     );
@@ -366,6 +375,69 @@ describe('main routing', () => {
     const parsed = JSON.parse(String(errSpy.mock.calls[0]?.[0]));
     expect(parsed.error.error_code).toBe('usage_error');
     expect(parsed.message).toMatch(/Unknown command: frobnicate/);
+  });
+
+  it('routes `tracking-plan export` to its bespoke handler', async () => {
+    await runWith([
+      'tracking-plan',
+      'export',
+      '--project',
+      '123',
+      '--out',
+      '-',
+    ]);
+
+    expect(process.exitCode).toBeUndefined();
+    expect(trackingPlanCommands.assertTrackingPlanFlags).toHaveBeenCalledWith(
+      'export',
+      expect.objectContaining({
+        project: '123',
+        out: '-',
+      }),
+    );
+    expect(trackingPlanCommands.runTrackingPlanExport).toHaveBeenCalledWith(
+      expect.objectContaining({
+        project: '123',
+        out: '-',
+      }),
+    );
+  });
+
+  it('rejects unknown tracking-plan subcommands', async () => {
+    await runWith(['tracking-plan', 'merge']);
+
+    expect(process.exitCode).toBe(2);
+    const parsed = JSON.parse(String(errSpy.mock.calls[0]?.[0]));
+    expect(parsed.error.error_code).toBe('usage_error');
+    expect(parsed.message).toContain('Unknown tracking-plan command');
+    expect(trackingPlanCommands.runTrackingPlanExport).not.toHaveBeenCalled();
+    expect(trackingPlanCommands.runTrackingPlanImport).not.toHaveBeenCalled();
+  });
+
+  it('routes `tracking-plan import` to its bespoke handler', async () => {
+    await runWith([
+      'tracking-plan',
+      'import',
+      '--project',
+      '123',
+      '--file',
+      'plan.csv',
+    ]);
+
+    expect(process.exitCode).toBeUndefined();
+    expect(trackingPlanCommands.assertTrackingPlanFlags).toHaveBeenCalledWith(
+      'import',
+      expect.objectContaining({
+        project: '123',
+        file: 'plan.csv',
+      }),
+    );
+    expect(trackingPlanCommands.runTrackingPlanImport).toHaveBeenCalledWith(
+      expect.objectContaining({
+        project: '123',
+        file: 'plan.csv',
+      }),
+    );
   });
 
   it('renders a usage_error (exit 2) for an unknown --region on an API command', async () => {

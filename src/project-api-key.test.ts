@@ -474,7 +474,7 @@ describe('project API key command', () => {
       if (failure.code === 'project_selection_required') {
         expect(error.hint).toContain('--project');
       }
-      expect(fetchMock).toHaveBeenCalledOnce();
+      expect(fetchMock).toHaveBeenCalledTimes(1);
     },
   );
 
