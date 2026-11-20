@@ -6,45 +6,15 @@
 ### Features
 
 * **ai-context:** add amp ai-context get and set for organization and project AI context ([2907d13](https://github.com/amplitude/developer-cli/commit/2907d13bdef4d03eb6df06d40c906ddf0321be84))
-* **ai-context:** add amp ai-context get and set for organization and project AI context ([5de6266](https://github.com/amplitude/developer-cli/commit/5de6266390d58fbc0c79d018efbfb7ab29b4d525))
-* **ai-context:** add amp ai-context get and set for organization and project AI context ([0183e89](https://github.com/amplitude/developer-cli/commit/0183e8997f548cb3a4e3769b063d8a2315b346d3))
-* **ai-context:** add amp ai-context get and set for organization and project AI context ([a74be99](https://github.com/amplitude/developer-cli/commit/a74be99d2bd196dd3044a6c34a46f5f1c66eabd4))
-* **ai-context:** add amp ai-context get and set for organization and project AI context ([e784989](https://github.com/amplitude/developer-cli/commit/e7849895e5fa74507b7285f0aa02ad487f0cb7d5))
-* **ai-context:** add amp ai-context get and set for organization and project AI context ([fe9a355](https://github.com/amplitude/developer-cli/commit/fe9a3554c429c71940eb225f45a912c18cd666c6))
 * **guides,surveys:** add --include-translations to reads and accept translations on update ([2907d13](https://github.com/amplitude/developer-cli/commit/2907d13bdef4d03eb6df06d40c906ddf0321be84))
-* **guides,surveys:** add --include-translations to reads and accept translations on update ([5de6266](https://github.com/amplitude/developer-cli/commit/5de6266390d58fbc0c79d018efbfb7ab29b4d525))
-* **guides,surveys:** add --include-translations to reads and accept translations on update ([0183e89](https://github.com/amplitude/developer-cli/commit/0183e8997f548cb3a4e3769b063d8a2315b346d3))
-* **guides,surveys:** add --include-translations to reads and accept translations on update ([a74be99](https://github.com/amplitude/developer-cli/commit/a74be99d2bd196dd3044a6c34a46f5f1c66eabd4))
-* **guides,surveys:** add --include-translations to reads and accept translations on update ([e784989](https://github.com/amplitude/developer-cli/commit/e7849895e5fa74507b7285f0aa02ad487f0cb7d5))
-* **guides,surveys:** add --include-translations to reads and accept translations on update ([fe9a355](https://github.com/amplitude/developer-cli/commit/fe9a3554c429c71940eb225f45a912c18cd666c6))
 * **mcp-analytics:** add amp mcp-analytics calls list to list the tool calls in an MCP episode ([2907d13](https://github.com/amplitude/developer-cli/commit/2907d13bdef4d03eb6df06d40c906ddf0321be84))
-* **mcp-analytics:** add amp mcp-analytics calls list to list the tool calls in an MCP episode ([5de6266](https://github.com/amplitude/developer-cli/commit/5de6266390d58fbc0c79d018efbfb7ab29b4d525))
-* **mcp-analytics:** add amp mcp-analytics calls list to list the tool calls in an MCP episode ([0183e89](https://github.com/amplitude/developer-cli/commit/0183e8997f548cb3a4e3769b063d8a2315b346d3))
-* **mcp-analytics:** add amp mcp-analytics calls list to list the tool calls in an MCP episode ([a74be99](https://github.com/amplitude/developer-cli/commit/a74be99d2bd196dd3044a6c34a46f5f1c66eabd4))
-* **mcp-analytics:** add amp mcp-analytics calls list to list the tool calls in an MCP episode ([e784989](https://github.com/amplitude/developer-cli/commit/e7849895e5fa74507b7285f0aa02ad487f0cb7d5))
-* **mcp-analytics:** add amp mcp-analytics calls list to list the tool calls in an MCP episode ([fe9a355](https://github.com/amplitude/developer-cli/commit/fe9a3554c429c71940eb225f45a912c18cd666c6))
 * **tracking-plan:** add amp tracking-plan export and import for tracking-plan CSV files ([2907d13](https://github.com/amplitude/developer-cli/commit/2907d13bdef4d03eb6df06d40c906ddf0321be84))
-* **tracking-plan:** add amp tracking-plan export and import for tracking-plan CSV files ([5de6266](https://github.com/amplitude/developer-cli/commit/5de6266390d58fbc0c79d018efbfb7ab29b4d525))
-* **tracking-plan:** add amp tracking-plan export and import for tracking-plan CSV files ([0183e89](https://github.com/amplitude/developer-cli/commit/0183e8997f548cb3a4e3769b063d8a2315b346d3))
-* **tracking-plan:** add amp tracking-plan export and import for tracking-plan CSV files ([a74be99](https://github.com/amplitude/developer-cli/commit/a74be99d2bd196dd3044a6c34a46f5f1c66eabd4))
-* **tracking-plan:** add amp tracking-plan export and import for tracking-plan CSV files ([e784989](https://github.com/amplitude/developer-cli/commit/e7849895e5fa74507b7285f0aa02ad487f0cb7d5))
-* **tracking-plan:** add amp tracking-plan export and import for tracking-plan CSV files ([fe9a355](https://github.com/amplitude/developer-cli/commit/fe9a3554c429c71940eb225f45a912c18cd666c6))
 * **tracking-plan:** filter tracking-plan export by event name with --event and --events-file ([2907d13](https://github.com/amplitude/developer-cli/commit/2907d13bdef4d03eb6df06d40c906ddf0321be84))
-* **tracking-plan:** filter tracking-plan export by event name with --event and --events-file ([5de6266](https://github.com/amplitude/developer-cli/commit/5de6266390d58fbc0c79d018efbfb7ab29b4d525))
-* **tracking-plan:** filter tracking-plan export by event name with --event and --events-file ([0183e89](https://github.com/amplitude/developer-cli/commit/0183e8997f548cb3a4e3769b063d8a2315b346d3))
-* **tracking-plan:** filter tracking-plan export by event name with --event and --events-file ([a74be99](https://github.com/amplitude/developer-cli/commit/a74be99d2bd196dd3044a6c34a46f5f1c66eabd4))
-* **tracking-plan:** filter tracking-plan export by event name with --event and --events-file ([e784989](https://github.com/amplitude/developer-cli/commit/e7849895e5fa74507b7285f0aa02ad487f0cb7d5))
-* **tracking-plan:** filter tracking-plan export by event name with --event and --events-file ([fe9a355](https://github.com/amplitude/developer-cli/commit/fe9a3554c429c71940eb225f45a912c18cd666c6))
 
 
 ### Bug Fixes
 
 * **cli:** refuse --dry-run on commands that cannot honor it instead of running the real request ([2907d13](https://github.com/amplitude/developer-cli/commit/2907d13bdef4d03eb6df06d40c906ddf0321be84))
-* **cli:** refuse --dry-run on commands that cannot honor it instead of running the real request ([5de6266](https://github.com/amplitude/developer-cli/commit/5de6266390d58fbc0c79d018efbfb7ab29b4d525))
-* **cli:** refuse --dry-run on commands that cannot honor it instead of running the real request ([0183e89](https://github.com/amplitude/developer-cli/commit/0183e8997f548cb3a4e3769b063d8a2315b346d3))
-* **cli:** refuse --dry-run on commands that cannot honor it instead of running the real request ([a74be99](https://github.com/amplitude/developer-cli/commit/a74be99d2bd196dd3044a6c34a46f5f1c66eabd4))
-* **cli:** refuse --dry-run on commands that cannot honor it instead of running the real request ([e784989](https://github.com/amplitude/developer-cli/commit/e7849895e5fa74507b7285f0aa02ad487f0cb7d5))
-* **cli:** refuse --dry-run on commands that cannot honor it instead of running the real request ([fe9a355](https://github.com/amplitude/developer-cli/commit/fe9a3554c429c71940eb225f45a912c18cd666c6))
 
 ## [0.7.0](https://github.com/amplitude/developer-cli/compare/developer-cli-v0.6.0...developer-cli-v0.7.0) (2026-11-04)
 
