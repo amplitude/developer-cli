@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.8.0](https://github.com/amplitude/developer-cli/compare/developer-cli-v0.7.0...developer-cli-v0.8.0) (2026-11-20)
+
+
+### Features
+
+* **ai-context:** add amp ai-context get and set for organization and project AI context ([2907d13](https://github.com/amplitude/developer-cli/commit/2907d13bdef4d03eb6df06d40c906ddf0321be84))
+* **guides,surveys:** add --include-translations to reads and accept translations on update ([2907d13](https://github.com/amplitude/developer-cli/commit/2907d13bdef4d03eb6df06d40c906ddf0321be84))
+* **mcp-analytics:** add amp mcp-analytics calls list to list the tool calls in an MCP episode ([2907d13](https://github.com/amplitude/developer-cli/commit/2907d13bdef4d03eb6df06d40c906ddf0321be84))
+* **tracking-plan:** add amp tracking-plan export and import for tracking-plan CSV files ([2907d13](https://github.com/amplitude/developer-cli/commit/2907d13bdef4d03eb6df06d40c906ddf0321be84))
+* **tracking-plan:** filter tracking-plan export by event name with --event and --events-file ([2907d13](https://github.com/amplitude/developer-cli/commit/2907d13bdef4d03eb6df06d40c906ddf0321be84))
+
+
+### Bug Fixes
+
+* **cli:** refuse --dry-run on commands that cannot honor it instead of running the real request ([2907d13](https://github.com/amplitude/developer-cli/commit/2907d13bdef4d03eb6df06d40c906ddf0321be84))
+
 ## [0.7.0](https://github.com/amplitude/developer-cli/compare/developer-cli-v0.6.0...developer-cli-v0.7.0) (2026-11-04)
 
 
